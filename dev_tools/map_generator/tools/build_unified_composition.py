@@ -24,7 +24,7 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_13"
+PASS_ID = "recovery_pass_14"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
 ORTHOGONAL_GRID_PX = 192.0
@@ -69,14 +69,15 @@ def authored_block_network():
     roads=[]; rp={}; crossings=[]
     west_x=[640,1408,2240,3008,3904,4608]
     east_x=[10752,11584,12416,13120,14016,14784,15552]
-    ys=[2176,2944,3712,4544,5248,6144,6976,7680,8576,9344,10112]
+    west_ys=[2176,3072,3968,4864,6144,7040,7936,8832,9856]
+    east_ys=[2304,2944,3712,4480,5248,6144,6784,7552,8448,9344,10112]
     def add(rid,points,major=False,bridge=False):
         roads.append({'road_id':rid,'highway':'primary' if major else 'residential',
                       'lanes':'4' if major else '2','width':'160' if major else '96',
                       'sidewalk_width':'52' if major else '38','curb_width':'5',
                       'level':'1' if bridge else '0','bridge':'true' if bridge else 'false'})
         rp[rid]=points
-    for side,xs in (('west',west_x),('east',east_x)):
+    for side,xs,ys in (('west',west_x,west_ys),('east',east_x,east_ys)):
         for idx,x in enumerate(xs):
             y0=2048 if idx%3 else 2944
             y1=10240 if idx%4 else 9344
@@ -84,7 +85,7 @@ def authored_block_network():
         for idx,y in enumerate(ys):
             if side=='west': x0,x1=(0 if idx%3 else 640),(4608 if idx%4 else 3904)
             else: x0,x1=(10752 if idx%4 else 11584),(16384 if idx%3 else 15552)
-            add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in {2,5,8})
+            add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in ({2,4,7} if side=='west' else {2,5,8}))
         for xi,x in enumerate(xs):
             for yi,y in enumerate(ys):
                 if (xi+yi)%2:continue
