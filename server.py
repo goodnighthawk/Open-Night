@@ -76,13 +76,14 @@ from gameplay.settings import load_settings
 from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
+from versioning import GAME_VERSION
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v0.8 / Pass 18"
+SERVER_NAME = "Open Night v0.8 / Pass 19"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
-SERVER_VERSION = "0.8.0"
+SERVER_VERSION = GAME_VERSION
 BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
 BUG_REPORT_COOLDOWN_SECONDS = 45.0
 BUG_REPORT_SOURCE_COOLDOWN_SECONDS = 15.0
@@ -112,6 +113,7 @@ DOUBLE_JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("double_jump
 JUMP_FORWARD_SPEED = max(0.0, float(MOVEMENT_SETTINGS.get("jump_forward_speed_px_per_second", 570.0)))
 DOUBLE_JUMP_FORWARD_SPEED = max(0.0, float(MOVEMENT_SETTINGS.get("double_jump_forward_speed_px_per_second", 940.0)))
 MOVEMENT_STAND_DELAY_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("movement_stand_delay_seconds", 1.0)))
+WATER_WALK_SPEED_MULTIPLIER = max(0.05, min(1.0, float(MOVEMENT_SETTINGS.get("water_walk_speed_multiplier", 0.28))))
 PASSENGER_CAPACITY = max(1, int(VEHICLE_SETTINGS.get("passenger_capacity", 3)))
 PASSENGER_BOARD_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_board_max_speed_px_s", 35.0)))
 PASSENGER_EXIT_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_exit_max_speed_px_s", 70.0)))
@@ -264,6 +266,7 @@ class ClientSession:
     jump_velocity_x: float = 0.0
     jump_velocity_y: float = 0.0
     last_chat_time: float = 0.0
+    last_sms_time: float = 0.0
     last_bug_report_time: float = 0.0
     bug_reports_this_session: int = 0
     bug_rate_key: str = ""
@@ -949,6 +952,21 @@ def _vehicle_hits_bicycle(car: TrafficVehicle, x: float, y: float, angle: float)
     return False
 
 
+def _front_axle_rotated_center(car: TrafficVehicle, proposed_angle: float) -> tuple[float, float]:
+    """Return the body centre after rotating around the configured front axle."""
+    axle_ratio = max(
+        0.05,
+        min(0.49, float(VEHICLE_SETTINGS.get("player_front_axle_offset_ratio", 0.36))),
+    )
+    axle_offset = car.collision_length * axle_ratio
+    axle_x = car.x + math.cos(car.angle) * axle_offset
+    axle_y = car.y + math.sin(car.angle) * axle_offset
+    return (
+        axle_x - math.cos(proposed_angle) * axle_offset,
+        axle_y - math.sin(proposed_angle) * axle_offset,
+    )
+
+
 def _traffic_footprints_conflict(
     car: TrafficVehicle, x: float, y: float, heading: float,
     other: TrafficVehicle, ox: float, oy: float, other_heading: float,
@@ -1291,6 +1309,7 @@ clients_lock = asyncio.Lock()
 trade_offers: dict[str, tuple[str, float]] = {}
 # Development-only fallback when --memory-db is selected.
 memory_accounts: dict[str, dict] = {}
+memory_sms_messages: list[dict] = []
 # Salted, in-memory network-source throttling. Raw addresses are never stored.
 bug_report_source_times: dict[str, float] = {}
 
@@ -1437,6 +1456,10 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
                 npc.pause_timer = 0.25
 
 
+def vehicle_speed_mph(speed_px_s: float) -> float:
+    return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
+
+
 def update_npc_runovers(now: float) -> None:
     """Replace pedestrians struck by a moving vehicle after a short delay."""
     blood_stains[:] = [stain for stain in blood_stains if stain.expires_at > now]
@@ -1463,10 +1486,10 @@ def update_npc_runovers(now: float) -> None:
         ))
         npc_respawns.remove(pending)
 
-    min_speed = max(1.0, float(NPC_AI.get("runover_min_speed_px_s", 45.0)))
+    min_speed_mph = max(1.0, float(NPC_AI.get("runover_min_speed_mph", 30.0)))
     stain_seconds = max(1.0, float(NPC_AI.get("blood_stain_seconds", 12.0)))
     respawn_seconds = max(1.0, float(NPC_AI.get("runover_respawn_seconds", 18.0)))
-    moving_cars = [car for car in traffic_vehicles if abs(car.speed) >= min_speed]
+    moving_cars = [car for car in traffic_vehicles if vehicle_speed_mph(car.speed) >= min_speed_mph]
     victims: list[NPCPedestrian] = []
     for npc in npc_pedestrians:
         for car in moving_cars:
@@ -2044,6 +2067,131 @@ async def process_chat(session: ClientSession, message: dict) -> None:
     )
 
 
+async def sms_history(session: ClientSession) -> list[dict]:
+    if USE_MYSQL:
+        assert DB is not None
+        return await asyncio.to_thread(DB.load_sms_messages, session.phone, 50)
+    rows = []
+    for row in memory_sms_messages[-100:]:
+        if row["sender_phone"] != session.phone and row["recipient_phone"] != session.phone:
+            continue
+        rows.append({
+            "id": int(row["id"]),
+            "sender_name": row["sender_name"],
+            "recipient_name": row["recipient_name"],
+            "text": row["text"],
+            "direction": "out" if row["sender_phone"] == session.phone else "in",
+            "unread": row["recipient_phone"] == session.phone and not bool(row.get("read_by_recipient", False)),
+            "created_at": row.get("created_at", "this session"),
+        })
+    return rows[-50:]
+
+
+async def send_sms_history(session: ClientSession) -> None:
+    try:
+        messages = await sms_history(session)
+    except Exception as exc:
+        await send_json(session.websocket, {
+            "type": "notice", "text": f"Messages could not load: {mysql_error_text(exc)}",
+        })
+        return
+    await send_json(session.websocket, {"type": "sms_sync", "messages": messages})
+
+
+async def mark_sms_read(session: ClientSession) -> None:
+    try:
+        if USE_MYSQL:
+            assert DB is not None
+            await asyncio.to_thread(DB.mark_sms_read, session.phone)
+        else:
+            for row in memory_sms_messages:
+                if row["recipient_phone"] == session.phone:
+                    row["read_by_recipient"] = True
+    except Exception as exc:
+        await send_json(session.websocket, {
+            "type": "notice", "text": f"Message read state could not save: {mysql_error_text(exc)}",
+        })
+
+
+async def process_sms(session: ClientSession, message: dict) -> None:
+    """Store a friend SMS first, then deliver it live when the recipient is online."""
+    now = time.monotonic()
+    if now - session.last_sms_time < 0.65:
+        return
+    text = " ".join(
+        "".join(ch for ch in str(message.get("text", "")) if ch.isprintable()).split()
+    )[:160]
+    target_name = safe_name(message.get("target", ""))
+    if not text or not target_name:
+        await send_json(session.websocket, {"type": "notice", "text": "SMS format: /sms FriendName message"})
+        return
+    session.last_sms_time = now
+
+    async with clients_lock:
+        online = list(clients.values())
+    target_session = next(
+        (other for other in online if other.player.name.casefold() == target_name.casefold()),
+        None,
+    )
+    target_phone = target_session.phone if target_session is not None else ""
+    canonical_target = target_session.player.name if target_session is not None else target_name
+    if not target_phone:
+        if USE_MYSQL:
+            assert DB is not None
+            try:
+                resolved = await asyncio.to_thread(DB.find_account_by_display_name, target_name)
+            except Exception as exc:
+                await send_json(session.websocket, {
+                    "type": "notice", "text": f"SMS directory unavailable: {mysql_error_text(exc)}",
+                })
+                return
+            if resolved is not None:
+                target_phone, canonical_target = resolved
+        else:
+            resolved = next(
+                ((phone, str(account.get("name", target_name))) for phone, account in memory_accounts.items()
+                 if str(account.get("name", "")).casefold() == target_name.casefold()),
+                None,
+            )
+            if resolved is not None:
+                target_phone, canonical_target = resolved
+    if not target_phone:
+        await send_json(session.websocket, {"type": "notice", "text": f"No player account named {target_name}."})
+        return
+    if target_phone == session.phone:
+        await send_json(session.websocket, {"type": "notice", "text": "Choose a friend other than yourself."})
+        return
+
+    try:
+        if USE_MYSQL:
+            assert DB is not None
+            stored = await asyncio.to_thread(
+                DB.create_sms_message,
+                session.phone, target_phone, session.player.name, canonical_target, text,
+            )
+        else:
+            stored = {
+                "id": (int(memory_sms_messages[-1]["id"]) + 1) if memory_sms_messages else 1,
+                "sender_name": session.player.name,
+                "recipient_name": canonical_target,
+                "text": text,
+                "created_at": "this session",
+            }
+            memory_sms_messages.append({
+                **stored, "sender_phone": session.phone, "recipient_phone": target_phone,
+                "read_by_recipient": False,
+            })
+    except Exception as exc:
+        await send_json(session.websocket, {"type": "notice", "text": f"SMS could not save: {mysql_error_text(exc)}"})
+        return
+
+    outgoing = {"type": "sms_sent", **stored, "direction": "out", "unread": False}
+    incoming = {"type": "sms_received", **stored, "direction": "in", "unread": True}
+    await send_json(session.websocket, outgoing)
+    if target_session is not None:
+        await send_json(target_session.websocket, incoming)
+
+
 def _clean_report_text(raw: object, limit: int) -> str:
     text = "".join(ch for ch in str(raw or "") if ch.isprintable())
     return " ".join(text.split())[:limit].strip()
@@ -2320,6 +2468,12 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         await process_interior_action(session, "exit", message)
     elif msg_type == "chat":
         await process_chat(session, message)
+    elif msg_type == "sms_send":
+        await process_sms(session, message)
+    elif msg_type == "sms_request":
+        await send_sms_history(session)
+    elif msg_type == "sms_mark_read":
+        await mark_sms_read(session)
     elif msg_type == "bug_report_submit":
         await process_bug_report(session, message)
     elif msg_type == "inventory_request":
@@ -2445,10 +2599,17 @@ async def client_handler(websocket: ServerConnection) -> None:
 
         client_version = str(hello.get("client_version", "")).strip()
         if client_version != SERVER_VERSION:
-            shown = client_version or "pre-0.8.0"
-            await send_json(websocket, {"type": "login_error", "text":
-                            f"Version mismatch: client {shown}; server {SERVER_VERSION}. Update Open Night and reconnect."})
-            await websocket.close(code=1008, reason="version mismatch")
+            shown = f"v{client_version}" if client_version else "an older build"
+            await send_json(websocket, {
+                "type": "login_error",
+                "text": (
+                    f"Version mismatch: this server requires Open Night v{SERVER_VERSION}, "
+                    f"but your client reported {shown}. Run UPDATE_FRIEND_BUILD.bat and reconnect."
+                ),
+                "required_version": SERVER_VERSION,
+                "client_version": client_version,
+            })
+            await websocket.close(code=1008, reason="client version mismatch")
             return
 
         phone = normalize_phone(hello.get("phone"))
@@ -2519,6 +2680,7 @@ async def client_handler(websocket: ServerConnection) -> None:
                 "I/TAB inventory, E interact, T car/bicycle, M world map."
             ),
         })
+        await send_sms_history(session)
         print(f"+ {player.name} [{player_id}] account {masked_phone(phone)} connected", flush=True)
 
         async for raw in websocket:
@@ -2698,18 +2860,24 @@ async def simulation_loop() -> None:
                             car.speed = min(0.0, car.speed + drag * dt)
 
                     speed_abs = abs(car.speed)
+                    old_angle = car.angle
+                    proposed_angle = old_angle
                     if speed_abs > 3.0 and abs(steer) > 0.02:
                         steering_grip = min(1.0, 0.22 + speed_abs / 95.0)
                         high_speed_reduction = max(0.42, 1.0 - speed_abs / 620.0)
                         direction = 1.0 if car.speed >= 0.0 else -1.0
                         turn_rate = float(VEHICLE_SETTINGS.get("player_turn_rate", 2.75))
-                        car.angle += steer * turn_rate * steering_grip * high_speed_reduction * direction * dt
+                        proposed_angle += steer * turn_rate * steering_grip * high_speed_reduction * direction * dt
 
-                    dx = math.cos(car.angle) * car.speed * dt
-                    dy = math.sin(car.angle) * car.speed * dt
-                    nx, ny = car.x + dx, car.y + dy
-                    if not _vehicle_map_blocked(car, nx, ny, car.angle) and not _vehicle_hits_vehicle(car, nx, ny, car.angle) and not _vehicle_hits_bicycle(car,nx,ny,car.angle):
-                        car.x, car.y = nx, ny
+                    # Steering rotates the body around its front axle rather than
+                    # around the sprite/collision centre. This makes the rear swing
+                    # visibly and produces the requested top-down car handling.
+                    rotated_center_x, rotated_center_y = _front_axle_rotated_center(car, proposed_angle)
+                    dx = math.cos(proposed_angle) * car.speed * dt
+                    dy = math.sin(proposed_angle) * car.speed * dt
+                    nx, ny = rotated_center_x + dx, rotated_center_y + dy
+                    if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):
+                        car.x, car.y, car.angle = nx, ny, proposed_angle
                     else:
                         car.speed = 0.0
                     car.parked = False
@@ -2751,9 +2919,22 @@ async def simulation_loop() -> None:
                 sprint_mult = float(MOVEMENT_SETTINGS.get("sprint_multiplier", 3.0)) if session.boost else 1.0
                 dx = session.input_x * walk_speed * sprint_mult * dt
                 dy = session.input_y * walk_speed * sprint_mult * dt
+            current_level = int(getattr(p, "level", 0))
+            water_probe_x, water_probe_y = p.x + dx, p.y + dy
+            wading = current_level == 0 and (
+                point_in_water(p.x, p.y, ACTIVE_MAP)
+                or point_in_water(water_probe_x, water_probe_y, ACTIVE_MAP)
+            ) and not (
+                point_near_road(p.x, p.y, ACTIVE_MAP, extra=PLAYER_RADIUS, bridge_only=True, level=0)
+                or point_near_road(water_probe_x, water_probe_y, ACTIVE_MAP, extra=PLAYER_RADIUS, bridge_only=True, level=0)
+            )
+            if wading:
+                dx *= WATER_WALK_SPEED_MULTIPLIER
+                dy *= WATER_WALK_SPEED_MULTIPLIER
+                session.boost = False
             movement_start_x, movement_start_y = p.x, p.y
             p.x, p.y = move_with_collisions(
-                p.x, p.y, dx, dy, ACTIVE_MAP, level=int(getattr(p, "level", 0))
+                p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
             )
             previous_level = int(getattr(p, "level", 0))
             next_level = resolve_level_transition(

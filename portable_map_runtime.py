@@ -132,8 +132,9 @@ def _portable_visual_bindings(data: dict, asset_root: Path) -> dict[str, Any]:
         "portable_light_emitters": cosmetics.get("light_emitters", []),
         "portable_cosmetics": cosmetics,
     }
-    composition_archive = asset_root / "composition" / "composition_tiles_v18.zip"
-    if composition_archive.is_file():
+    composition_archives = sorted((asset_root / "composition").glob("composition_tiles_v*.zip"))
+    composition_archive = composition_archives[-1] if composition_archives else None
+    if composition_archive is not None and composition_archive.is_file():
         bindings["baked_composition"] = True
         bindings["baked_composition_archive"] = str(composition_archive)
     return bindings

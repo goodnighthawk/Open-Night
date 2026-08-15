@@ -399,6 +399,21 @@ if exist "%~dp0mysql_schema.sql" (
     >>"%TEMP_SCHEMA%" echo   PRIMARY KEY ^(phone, slot_index^),
     >>"%TEMP_SCHEMA%" echo   CONSTRAINT fk_inventory_phone FOREIGN KEY ^(phone^) REFERENCES player_accounts^(phone^) ON DELETE CASCADE
     >>"%TEMP_SCHEMA%" echo ^) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    >>"%TEMP_SCHEMA%" echo CREATE TABLE IF NOT EXISTS sms_messages ^(
+    >>"%TEMP_SCHEMA%" echo   message_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    >>"%TEMP_SCHEMA%" echo   sender_phone VARCHAR^(20^) NOT NULL,
+    >>"%TEMP_SCHEMA%" echo   recipient_phone VARCHAR^(20^) NOT NULL,
+    >>"%TEMP_SCHEMA%" echo   sender_name VARCHAR^(32^) NOT NULL,
+    >>"%TEMP_SCHEMA%" echo   recipient_name VARCHAR^(32^) NOT NULL,
+    >>"%TEMP_SCHEMA%" echo   body VARCHAR^(160^) NOT NULL,
+    >>"%TEMP_SCHEMA%" echo   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    >>"%TEMP_SCHEMA%" echo   delivered_at TIMESTAMP NULL DEFAULT NULL,
+    >>"%TEMP_SCHEMA%" echo   read_at TIMESTAMP NULL DEFAULT NULL,
+    >>"%TEMP_SCHEMA%" echo   INDEX idx_sms_recipient_created ^(recipient_phone, created_at^),
+    >>"%TEMP_SCHEMA%" echo   INDEX idx_sms_sender_created ^(sender_phone, created_at^),
+    >>"%TEMP_SCHEMA%" echo   CONSTRAINT fk_sms_sender FOREIGN KEY ^(sender_phone^) REFERENCES player_accounts^(phone^) ON DELETE CASCADE,
+    >>"%TEMP_SCHEMA%" echo   CONSTRAINT fk_sms_recipient FOREIGN KEY ^(recipient_phone^) REFERENCES player_accounts^(phone^) ON DELETE CASCADE
+    >>"%TEMP_SCHEMA%" echo ^) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
     "%MYSQL_BIN%\mysql.exe" --protocol=TCP -h %DB_HOST% -P %DB_PORT% -u %DB_USER% -p!GAME_PASS! -D %DB_NAME% < "%TEMP_SCHEMA%" >>"%REPORT%" 2>&1
     if errorlevel 1 (

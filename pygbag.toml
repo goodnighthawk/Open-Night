@@ -1,7 +1,7 @@
 [project]
 name = "open-night"
-version = "0.8.0"
-title = "Open Night v0.8.0"
+version = "0.8.1"
+title = "Open Night v0.8.1"
 
 [build]
 icon = "assets/icon.png"

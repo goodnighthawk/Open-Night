@@ -50,6 +50,23 @@ async def exercise() -> None:
     await server.process_chat(a, {"scope": "whisper", "target": "Bob", "text": "private"})
     assert any(row.get("scope") == "whisper" and row.get("text") == "private" for row in b.websocket.messages)
 
+    server.memory_accounts.clear()
+    server.memory_sms_messages.clear()
+    server.memory_accounts[a.phone] = {"name": "Alice"}
+    server.memory_accounts[b.phone] = {"name": "Bob"}
+    await server.process_sms(a, {"target": "Bob", "text": "saved hello"})
+    assert any(row.get("type") == "sms_received" and row.get("text") == "saved hello" for row in b.websocket.messages)
+    assert any(row.get("type") == "sms_sent" and row.get("recipient_name") == "Bob" for row in a.websocket.messages)
+    server.clients.pop(b_player.player_id)
+    a.last_sms_time = 0.0
+    await server.process_sms(a, {"target": "Bob", "text": "offline hello"})
+    history = await server.sms_history(b)
+    assert any(row.get("direction") == "in" and row.get("text") == "offline hello" and row.get("unread") for row in history)
+    await server.mark_sms_read(b)
+    history = await server.sms_history(b)
+    assert not any(row.get("unread") for row in history if row.get("direction") == "in")
+    server.clients[b_player.player_id] = b
+
     inventory_add(a.inventory, "package", 1)
     await server.process_interaction(a)
     assert b_player.player_id in server.trade_offers
@@ -63,6 +80,8 @@ async def exercise() -> None:
     assert not a_player.interior_id
     server.clients.clear()
     server.trade_offers.clear()
+    server.memory_accounts.clear()
+    server.memory_sms_messages.clear()
 
 
 def main() -> int:
@@ -74,11 +93,13 @@ def main() -> int:
         assert token in client, token
     for token in ("draw_chat_bubble", "/w FriendName message", "handle_chat_key"):
         assert token in client, token
+    for token in ("autocomplete_friend_message", '"type": "sms_send"', "draw_sms_inbox", "pygame.K_F2"):
+        assert token in client, token
     assert "SELL TO" in client and 'self.map_config["customer_pos"]' not in client
     assert "local_ring=None" in interior
     asyncio.run(exercise())
     print("MULTIPLAYER INTERIOR / FRIENDS / CHAT AUDIT: PASS")
-    print("  shared room occupants + local bubbles + friend whisper + minimap friend/filter + scroll settings wired")
+    print("  shared rooms + local bubbles + friend whisper + persistent online/offline SMS + minimap friend/filter verified")
     return 0
 
 

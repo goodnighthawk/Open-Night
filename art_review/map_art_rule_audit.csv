@@ -1,7 +1,11 @@
 ﻿severity,code,subject,chunk_id,local_x,local_y,message
-WARN,signal_far_from_crosswalk,p0323,J8,803,95,traffic signal is 129.0px from the nearest authored zebra
-WARN,signal_far_from_crosswalk,p0325,H9,305,64,traffic signal is 129.0px from the nearest authored zebra
-WARN,signal_far_from_crosswalk,p0345,G9,896,906,traffic signal is 129.0px from the nearest authored zebra
-WARN,signal_far_from_crosswalk,p0353,G8,278,948,traffic signal is 129.0px from the nearest authored zebra
-WARN,signal_far_from_crosswalk,p0363,F9,1005,293,traffic signal is 128.9px from the nearest authored zebra
-WARN,signal_far_from_crosswalk,p0370,D5,642,480,traffic signal is 128.9px from the nearest authored zebra
+WARN,prop_far_from_sidewalk,p0028,O6,762,567,curved_streetlamp is 165.9px from road_238 centerline; sidewalk envelope ends near 137.0px
+WARN,prop_far_from_sidewalk,p0038,M6,10,628,curved_streetlamp is 195.7px from road_007 centerline; sidewalk envelope ends near 175.0px
+WARN,prop_far_from_sidewalk,p0067,G7,387,844,curved_streetlamp is 155.2px from road_094 centerline; sidewalk envelope ends near 137.0px
+WARN,prop_far_from_sidewalk,p0361,E12,518,121,curved_streetlamp is 164.4px from road_066 centerline; sidewalk envelope ends near 137.0px
+WARN,signal_far_from_crosswalk,p0245,J8,803,95,traffic signal is 129.0px from the nearest authored zebra
+WARN,signal_far_from_crosswalk,p0247,H9,305,64,traffic signal is 129.0px from the nearest authored zebra
+WARN,signal_far_from_crosswalk,p0267,G9,896,906,traffic signal is 129.0px from the nearest authored zebra
+WARN,signal_far_from_crosswalk,p0275,G8,278,948,traffic signal is 129.0px from the nearest authored zebra
+WARN,signal_far_from_crosswalk,p0285,F9,1005,293,traffic signal is 128.9px from the nearest authored zebra
+WARN,signal_far_from_crosswalk,p0292,D5,642,480,traffic signal is 128.9px from the nearest authored zebra

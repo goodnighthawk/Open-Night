@@ -6,8 +6,8 @@ truth.
 
 ## Current checkpoint
 
-- Release under development: **Open Night v0.8.0**
-- Working branch: `agent/v0.8.0-pass18-default`
+- Release under development: **Open Night v0.8.1**
+- Working branch: `agent/v0.8.1-pass19-map`
 - Integration base: latest accepted `main` map checkpoint
 - Playable map: `map_001_gwb_corridor` only
 - Map corridor: Fort Lee / GWB approaches / George Washington Bridge /
@@ -52,11 +52,25 @@ truth.
   approves or rejects the exact report ID.
 - Limited screenshots, salted reporter identifiers, rate-limited submissions,
   and made `feedback/approved/` the only agent-actionable player-feedback path.
+- Added stable friend markers, Tab-completed persistent SMS with an F2 inbox,
+  strict client/server release matching, slow water wading, front-axle player-car
+  steering, a 30 mph NPC run-over threshold, and a non-Git friend updater.
+- Added Ctrl+A/C/X/V editing to launcher, chat/SMS, and report fields, with a
+  dedicated highlighted `/bug` instruction above the active chat entry box.
+- Installed the official Pass 19 building-art convergence over the accepted
+  Pass 18 geometry without changing gameplay roads or collision.
+- Assigned 95 buildings across 40 approved top-down styles: maximum style share
+  6.3%, nearest-neighbour repeat share 2.1%, and worst same-sprite scale spread
+  0.0964.
+- Rebuilt the day/night composition as `composition_tiles_v19.zip` and promoted
+  matching runtime CSVs, generator CSVs, and portable-map assets.
+- Kept decorative yellow road lines disabled and retained the authored
+  sidewalk/lighting composition.
 
 ## Current next pass
 
-1. Inspect the latest Fort Lee night preview against the approved art target.
-2. Correct the largest remaining composition/style mismatch only.
+1. Playtest the Pass 19 map in desktop and web multiplayer.
+2. Record the largest remaining composition/style mismatch with `/bug`.
 3. Run `TEST_FAST.bat`.
 4. Render the Fort Lee preview with `BUILD_PREVIEW.bat`.
 5. Update this file and `feedback/next_version/tasks.csv`.

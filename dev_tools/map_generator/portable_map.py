@@ -61,13 +61,15 @@ def _copy_pack_assets(asset_root: Path):
         shutil.copy2(p, asset_root / 'signs' / p.name)
     for p in sorted((PACK_DIR / 'lighting').glob('*.png')):
         shutil.copy2(p, asset_root / 'lighting' / p.name)
+    map_meta={r.get('key',''):r.get('value','') for r in _read_csv(MAP_DIR/'map.csv') if r.get('key')}
+    composition_rel=Path(map_meta.get('baked_composition_archive','assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip'))
+    composition_src=ROOT.parent.parent/composition_rel
     for src, dst in [
         (PACK_DIR / 'sprite_atlas_day.png', asset_root / 'atlases' / 'sprite_atlas_day.png'),
         (PACK_DIR / 'sprite_atlas_night.png', asset_root / 'atlases' / 'sprite_atlas_night.png'),
         (PACK_DIR / 'object_catalog.csv', asset_root / 'catalogs' / 'object_catalog.csv'),
         (PACK_DIR / 'atlas_index.csv', asset_root / 'catalogs' / 'atlas_index.csv'),
-        (ROOT.parent.parent / 'assets' / 'environment' / 'approved' / 'map_001_gwb_corridor' / 'composition_tiles_v18.zip',
-         asset_root / 'composition' / 'composition_tiles_v18.zip'),
+        (composition_src, asset_root / 'composition' / composition_src.name),
     ]:
         if src.exists(): shutil.copy2(src, dst)
 
@@ -79,7 +81,7 @@ def _copy_pack_assets(asset_root: Path):
             r['day_sprite'] = 'textures/objects/' + Path(r['day_sprite']).name
             r['night_sprite'] = 'textures/objects/' + Path(r['night_sprite']).name
         with cat_path.open('w', encoding='utf-8-sig', newline='') as f:
-            w=csv.DictWriter(f,fieldnames=list(rows[0]) if rows else []);w.writeheader();w.writerows(rows)
+            w=csv.DictWriter(f,fieldnames=list(rows[0]) if rows else [],lineterminator='\n');w.writeheader();w.writerows(rows)
 
     manifest=[]
     for p in sorted(x for x in asset_root.rglob('*') if x.is_file()):
@@ -87,7 +89,7 @@ def _copy_pack_assets(asset_root: Path):
         manifest.append({'path':rel.as_posix(),'role':_role(rel),'size_bytes':p.stat().st_size,'sha256':_sha256(p)})
     mf=asset_root/'manifest.csv'
     with mf.open('w',encoding='utf-8-sig',newline='') as f:
-        w=csv.DictWriter(f,fieldnames=['path','role','size_bytes','sha256']);w.writeheader();w.writerows(manifest)
+        w=csv.DictWriter(f,fieldnames=['path','role','size_bytes','sha256'],lineterminator='\n');w.writeheader();w.writerows(manifest)
     return manifest
 
 

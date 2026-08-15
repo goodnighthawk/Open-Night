@@ -20,6 +20,7 @@ TOP_LEVEL_FILES = [
     "bicycle_art.py",
     "portable_paths.py",
     "server_directory.py",
+    "versioning.py",
     "VERSION.txt",
     "pygbag.toml",
 ]

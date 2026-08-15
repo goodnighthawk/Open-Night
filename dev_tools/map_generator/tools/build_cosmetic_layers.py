@@ -233,7 +233,7 @@ def build():
     lights=[]; li=0
     for p in read('street_props.csv'):
         if p.get('kind')!='curved_streetlamp':continue
-        x,y=fval(p,'x'),fval(p,'y'); lights.append({'light_id':f'l{li:04d}','source_type':'streetlamp','source_id':p.get('id'),'x':x,'y':y,'radius_px':150,'intensity':0.72,'color_tag':'warm','height_px':34});li+=1
+        x,y=fval(p,'x'),fval(p,'y'); lights.append({'light_id':f'l{li:04d}','source_type':'streetlamp','source_id':p.get('id'),'x':x,'y':y,'radius_px':108,'intensity':0.66,'color_tag':'warm','height_px':34});li+=1
     for s in signs:
         lights.append({'light_id':f'l{li:04d}','source_type':'road_sign','source_id':s['sign_id'],'x':s['x'],'y':s['y'],'radius_px':125,'intensity':0.38,'color_tag':'cool','height_px':s['height_px']});li+=1
     # Pass 21: bridge-edge lighting is derived from semantic bridge geometry so it
@@ -250,13 +250,7 @@ def build():
             nx,ny=-uy,ux
             for side in (-1.0,1.0):
                 bx=x+nx*half*side; by=y+ny*half*side
-                lights.append({'light_id':f'l{li:04d}','source_type':'bridge_lamp','source_id':f"{r.get('road_id')}_{sample_i}_{'L' if side<0 else 'R'}",'x':round(bx,2),'y':round(by,2),'radius_px':165,'intensity':0.64,'color_tag':'warm','height_px':42});li+=1
-    for b in read('buildings.csv'):
-        bid=b['id']; seed=stable_int(f'window:{bid}')
-        if seed%3: continue
-        x=fval(b,'x')+fval(b,'w')/2; y=fval(b,'y')+fval(b,'h')/2
-        lights.append({'light_id':f'l{li:04d}','source_type':'building_windows','source_id':bid,'x':round(x,2),'y':round(y,2),'radius_px':120+(seed%60),'intensity':0.24+(seed%20)/100,'color_tag':'amber' if seed%2 else 'green','height_px':18});li+=1
-        if li>=450: break
+                lights.append({'light_id':f'l{li:04d}','source_type':'bridge_lamp','source_id':f"{r.get('road_id')}_{sample_i}_{'L' if side<0 else 'R'}",'x':round(bx,2),'y':round(by,2),'radius_px':125,'intensity':0.62,'color_tag':'warm','height_px':42});li+=1
     write(OUT/'light_emitters.csv',lights)
 
     # Stable semantic-to-cosmetic contract for game integration.

@@ -81,7 +81,7 @@ def main() -> int:
         "def _bicycle_map_blocked(",
         "def _bicycle_hits_vehicle(",
         "def _vehicle_hits_bicycle(",
-        "and not _vehicle_hits_bicycle(car,nx,ny,car.angle)",
+        "and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle)",
     )
     for token in required:
         if token not in server_source:

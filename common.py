@@ -529,7 +529,14 @@ def circle_intersects_rect(cx: float, cy: float, radius: float, rect) -> bool:
     return dx * dx + dy * dy < radius * radius
 
 
-def blocked(x: float, y: float, map_config: dict | None = None, *, level: int = 0) -> bool:
+def blocked(
+    x: float,
+    y: float,
+    map_config: dict | None = None,
+    *,
+    level: int = 0,
+    allow_water: bool = False,
+) -> bool:
     cfg = map_config or _DEFAULT_MAP
     level = int(level)
     world_w = float(cfg["world_w"])
@@ -554,7 +561,7 @@ def blocked(x: float, y: float, map_config: dict | None = None, *, level: int = 
         on_level_connector = point_near_level_connector(
             x, y, cfg, level=level, extra=PLAYER_RADIUS
         )
-        if not (on_same_level_bridge or on_level_connector):
+        if not (on_same_level_bridge or on_level_connector or (allow_water and level == 0)):
             return True
 
     # Above/below-ground walkable levels are bounded by their authored roads and
@@ -586,14 +593,15 @@ def move_with_collisions(
     map_config: dict | None = None,
     *,
     level: int = 0,
+    allow_water: bool = False,
 ) -> tuple[float, float]:
     """Resolve one axis at a time so players slide naturally along walls."""
     nx = x + dx
-    if not blocked(nx, y, map_config, level=level):
+    if not blocked(nx, y, map_config, level=level, allow_water=allow_water):
         x = nx
 
     ny = y + dy
-    if not blocked(x, ny, map_config, level=level):
+    if not blocked(x, ny, map_config, level=level, allow_water=allow_water):
         y = ny
 
     return x, y

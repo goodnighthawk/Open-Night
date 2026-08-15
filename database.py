@@ -203,6 +203,31 @@ class InventoryDatabase:
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sms_messages (
+                    message_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    sender_phone VARCHAR(20) NOT NULL,
+                    recipient_phone VARCHAR(20) NOT NULL,
+                    sender_name VARCHAR(32) NOT NULL,
+                    recipient_name VARCHAR(32) NOT NULL,
+                    body VARCHAR(160) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    delivered_at TIMESTAMP NULL DEFAULT NULL,
+                    read_at TIMESTAMP NULL DEFAULT NULL,
+                    INDEX idx_sms_recipient_created (recipient_phone, created_at),
+                    INDEX idx_sms_sender_created (sender_phone, created_at),
+                    CONSTRAINT fk_sms_sender FOREIGN KEY (sender_phone)
+                        REFERENCES player_accounts(phone) ON DELETE CASCADE,
+                    CONSTRAINT fk_sms_recipient FOREIGN KEY (recipient_phone)
+                        REFERENCES player_accounts(phone) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+            cur.execute("SHOW COLUMNS FROM sms_messages")
+            sms_columns = {str(row[0]) for row in cur.fetchall()}
+            if "read_at" not in sms_columns:
+                cur.execute("ALTER TABLE sms_messages ADD COLUMN read_at TIMESTAMP NULL DEFAULT NULL")
             conn.commit()
             cur.close()
         finally:
@@ -226,6 +251,7 @@ class InventoryDatabase:
                 conn.commit();cur.close();return False
             # Child rows are removed first for compatibility with the explicit
             # foreign key, even though account deletion also cascades.
+            cur.execute("DELETE FROM sms_messages")
             cur.execute("DELETE FROM inventory_slots")
             cur.execute("DELETE FROM player_accounts")
             cur.execute(
@@ -333,6 +359,118 @@ class InventoryDatabase:
                     "INSERT INTO inventory_slots (phone, slot_index, item_id, quantity) VALUES (%s, %s, %s, %s)",
                     rows,
                 )
+            conn.commit()
+            cur.close()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def find_account_by_display_name(self, display_name: str) -> tuple[str, str] | None:
+        """Resolve the most recently active account for a case-insensitive name."""
+        clean = str(display_name).strip()[:32]
+        if not clean:
+            return None
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT phone, display_name FROM player_accounts "
+                "WHERE LOWER(display_name)=LOWER(%s) ORDER BY updated_at DESC LIMIT 1",
+                (clean,),
+            )
+            row = cur.fetchone()
+            cur.close()
+            return (str(row[0]), str(row[1])) if row else None
+        finally:
+            conn.close()
+
+    def create_sms_message(
+        self,
+        sender_phone: str,
+        recipient_phone: str,
+        sender_name: str,
+        recipient_name: str,
+        body: str,
+    ) -> dict[str, Any]:
+        clean_body = " ".join(str(body).split())[:160]
+        if not clean_body:
+            raise ValueError("SMS body cannot be empty.")
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """INSERT INTO sms_messages
+                (sender_phone, recipient_phone, sender_name, recipient_name, body)
+                VALUES (%s, %s, %s, %s, %s)""",
+                (sender_phone, recipient_phone, sender_name[:32], recipient_name[:32], clean_body),
+            )
+            message_id = int(cur.lastrowid)
+            conn.commit()
+            cur.close()
+            return {
+                "id": message_id,
+                "sender_name": sender_name[:32],
+                "recipient_name": recipient_name[:32],
+                "text": clean_body,
+                "created_at": "just now",
+            }
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def load_sms_messages(self, phone: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Return a bounded two-way inbox and mark incoming messages delivered."""
+        clean_limit = max(1, min(100, int(limit)))
+        conn = self._connect()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(
+                """SELECT message_id, sender_phone, recipient_phone, sender_name,
+                recipient_name, body, created_at, read_at FROM sms_messages
+                WHERE sender_phone=%s OR recipient_phone=%s
+                ORDER BY message_id DESC LIMIT %s""",
+                (phone, phone, clean_limit),
+            )
+            rows = list(reversed(cur.fetchall()))
+            cur.execute(
+                "UPDATE sms_messages SET delivered_at=COALESCE(delivered_at, CURRENT_TIMESTAMP) "
+                "WHERE recipient_phone=%s AND delivered_at IS NULL",
+                (phone,),
+            )
+            conn.commit()
+            cur.close()
+            return [
+                {
+                    "id": int(row["message_id"]),
+                    "sender_name": str(row["sender_name"]),
+                    "recipient_name": str(row["recipient_name"]),
+                    "text": str(row["body"]),
+                    "direction": "out" if str(row["sender_phone"]) == phone else "in",
+                    "unread": str(row["recipient_phone"]) == phone and row.get("read_at") is None,
+                    "created_at": row["created_at"].isoformat(sep=" ", timespec="minutes")
+                    if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+                }
+                for row in rows
+            ]
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def mark_sms_read(self, phone: str) -> None:
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE sms_messages SET read_at=COALESCE(read_at, CURRENT_TIMESTAMP) "
+                "WHERE recipient_phone=%s AND read_at IS NULL",
+                (phone,),
+            )
             conn.commit()
             cur.close()
         except Exception:

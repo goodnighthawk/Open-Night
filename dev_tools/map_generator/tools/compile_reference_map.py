@@ -571,11 +571,31 @@ def generate_final_frontage_crosswalks(road_defs, buildings, interiors, traffic_
         for road,ops in road_defs:
             if len(ops)<2:continue
             distance=min(seg_point_distance((px,py),a,b) for a,b in zip(ops,ops[1:]))
-            if nearest is None or distance<nearest[0]:nearest=(distance,road)
+            if kind=='curved_streetlamp':
+                sw=float(road.get('sidewalk_width',0) or 0);target=float(road['width'])*.5+float(road.get('curb_width',0) or 0)+(10.0 if sw>=20 else 0.0)+sw*.52
+                score=abs(distance-target) if sw>=12 else float('inf')
+            else:score=distance
+            if nearest is None or score<nearest[0]:nearest=(score,distance,road)
         if nearest is None:continue
-        distance,road=nearest;sidewalk=float(road.get('sidewalk_width',0) or 0);half=float(road['width'])*.5;curb=float(road.get('curb_width',0) or 0)
+        _,distance,road=nearest;sidewalk=float(road.get('sidewalk_width',0) or 0);half=float(road['width'])*.5;curb=float(road.get('curb_width',0) or 0)
         furnishing=10.0 if sidewalk>=20 else 0.0
-        if sidewalk<12 or distance<half+curb-2 or distance>half+curb+furnishing+sidewalk+8:continue
+        if sidewalk<12:continue
+        if kind=='curved_streetlamp':
+            # Lamps belong to the sidewalk furnishing band. A broad permissive
+            # road-distance test made fixtures appear scattered in asphalt,
+            # grass and frontage space after later geometry passes.
+            target=half+curb+furnishing+sidewalk*.52
+            tolerance=max(4.0,min(12.0,sidewalk*.22))
+            if abs(distance-target)>tolerance:continue
+            asphalt_conflict=False
+            for other,other_path in road_defs:
+                if len(other_path)<2:continue
+                other_distance=min(seg_point_distance((px,py),a,b) for a,b in zip(other_path,other_path[1:]))
+                protected=float(other['width'])*.5+float(other.get('curb_width',0) or 0)+2.0
+                if other_distance<protected:
+                    asphalt_conflict=True;break
+            if asphalt_conflict:continue
+        elif distance<half+curb-2 or distance>half+curb+furnishing+sidewalk+8:continue
         crosses=False
         for crossing in cross:
             angle=math.radians(float(crossing['angle']));dx,dy=math.cos(angle),math.sin(angle);rx,ry=px-float(crossing['x']),py-float(crossing['y'])
@@ -1327,6 +1347,28 @@ def compile_stage():
     # graph, buildings, doorway frontages, parking regions and elevation levels are fixed.
     cross,signals,route_signal_rows,props=generate_final_frontage_crosswalks(
         road_defs,buildings,interiors,tp,props,ww,wh,polish_pass)
+    off_sidewalk_lamps=[]
+    for prop in props:
+        if prop.get('kind')!='curved_streetlamp':continue
+        point=(float(prop['x']),float(prop['y']));best=None
+        for road,road_path in road_defs:
+            if len(road_path)<2:continue
+            distance=min(seg_point_distance(point,a,b) for a,b in zip(road_path,road_path[1:]))
+            sidewalk=float(road.get('sidewalk_width',0) or 0)
+            target=float(road['width'])*.5+float(road.get('curb_width',0) or 0)+(10.0 if sidewalk>=20 else 0.0)+sidewalk*.52
+            error=abs(distance-target)
+            if best is None or error<best[0]:best=(error,sidewalk,road['road_id'])
+        asphalt_conflict=False
+        for road,road_path in road_defs:
+            if len(road_path)<2:continue
+            distance=min(seg_point_distance(point,a,b) for a,b in zip(road_path,road_path[1:]))
+            if distance<float(road['width'])*.5+float(road.get('curb_width',0) or 0)+2.0:
+                asphalt_conflict=True;break
+        if best is None or best[1]<12 or best[0]>max(4.0,min(12.0,best[1]*.22)) or asphalt_conflict:
+            off_sidewalk_lamps.append((prop['id'],None if best is None else best[2]))
+    if off_sidewalk_lamps:
+        sample=', '.join(f'{pid}/{rid}' for pid,rid in off_sidewalk_lamps[:12])
+        raise RuntimeError(f'STREET-LIGHT SIDEWALK HARD GATE FAILED: {len(off_sidewalk_lamps)} fixtures. {sample}')
     write(STAGE/'crosswalks.csv',['id','x','y','angle','length','width','stripe_width','stripe_gap','curb_cut_depth','stop_bar_gap','priority'],cross)
     write(STAGE/'traffic_signals.csv',['id','x','y','phase','orientation'],signals)
     write(STAGE/'traffic_route_signals.csv',['route_id','waypoint_index','phase'],route_signal_rows)
@@ -1369,7 +1411,7 @@ def compile_stage():
         {'key':'baked_directional_shadows','value':'false','type':'bool'},
         {'key':'baked_contact_ao','value':'true','type':'bool'},
         {'key':'baked_contact_ao_radius_px','value':'3','type':'int'},
-        {'key':'render_pass','value':'18','type':'int'},
+        {'key':'render_pass','value':'19','type':'int'},
     ])
     write(STAGE/'source_provenance.csv',['key','value'],[
         {'key':'source_mode','value':'reference_image_set'},{'key':'compiler','value':'Open Night deterministic screenshot compiler v2'},

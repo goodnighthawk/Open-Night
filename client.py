@@ -71,6 +71,7 @@ from portable_paths import describe as shared_data_description
 from portable_map_runtime import cached_map_hashes, install_transfer_bundle, load_cached_map
 from mapfiles.grid import chunk_label
 from server_directory import choose_browser_server_uri, load_public_servers, probe_public_servers
+from versioning import GAME_VERSION
 
 SCREEN_W = 1280
 SCREEN_H = 720
@@ -104,6 +105,83 @@ INV_PANEL = (26, 28, 29)
 INV_SLOT = (35, 37, 38)
 INV_SLOT_EDGE = (70, 73, 74)
 INV_SELECTED = (233, 205, 94)
+
+_CLIPBOARD_FALLBACK = ""
+
+
+def normalize_clipboard_text(value: object) -> str:
+    """Return clipboard contents suitable for Open Night's single-line inputs."""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return " ".join(str(value or "").replace("\x00", "").splitlines()).strip()
+
+
+def copy_to_clipboard(text: str) -> None:
+    """Copy text on desktop or browser, retaining a safe in-game fallback."""
+    global _CLIPBOARD_FALLBACK
+    clean = normalize_clipboard_text(text)
+    _CLIPBOARD_FALLBACK = clean
+    if sys.platform == "emscripten":
+        try:
+            import platform
+            write_request = platform.window.navigator.clipboard.writeText(clean)
+        except Exception:
+            return
+
+        async def browser_copy() -> None:
+            try:
+                await write_request
+            except Exception:
+                pass
+
+        try:
+            asyncio.create_task(browser_copy())
+        except Exception:
+            pass
+        return
+    try:
+        if not pygame.scrap.get_init():
+            pygame.scrap.init()
+        pygame.scrap.put(pygame.SCRAP_TEXT, clean.encode("utf-8"))
+    except (AttributeError, pygame.error, OSError):
+        pass
+
+
+def request_clipboard_text(callback) -> None:
+    """Read clipboard text and invoke callback; browser reads complete asynchronously."""
+    if sys.platform == "emscripten":
+        try:
+            import platform
+            read_request = platform.window.navigator.clipboard.readText()
+        except Exception:
+            callback(_CLIPBOARD_FALLBACK)
+            return
+
+        async def browser_paste() -> None:
+            try:
+                value = await read_request
+                callback(normalize_clipboard_text(value))
+            except Exception:
+                callback(_CLIPBOARD_FALLBACK)
+
+        try:
+            asyncio.create_task(browser_paste())
+        except Exception:
+            callback(_CLIPBOARD_FALLBACK)
+        return
+    value: object = _CLIPBOARD_FALLBACK
+    try:
+        if not pygame.scrap.get_init():
+            pygame.scrap.init()
+        value = pygame.scrap.get(pygame.SCRAP_TEXT) or _CLIPBOARD_FALLBACK
+    except (AttributeError, pygame.error, OSError):
+        pass
+    callback(normalize_clipboard_text(value))
+
+
+def shortcut_modifier(event: pygame.event.Event) -> bool:
+    mods = int(getattr(event, "mod", pygame.key.get_mods()))
+    return bool(mods & (pygame.KMOD_CTRL | pygame.KMOD_META))
 
 
 def apply_client_art_style() -> dict:
@@ -319,16 +397,39 @@ class TextField:
         self.placeholder = placeholder
         self.max_length = max_length
         self.active = False
+        self.select_all = False
+
+    def paste(self, value: str) -> None:
+        if not self.active:
+            return
+        prefix = "" if self.select_all else self.text
+        self.text = (prefix + normalize_clipboard_text(value))[:self.max_length]
+        self.select_all = False
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.active = self.rect.collidepoint(event.pos)
+            self.select_all = False
         elif event.type == pygame.KEYDOWN and self.active:
-            if event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+            if shortcut_modifier(event) and event.key == pygame.K_a:
+                self.select_all = True
+            elif shortcut_modifier(event) and event.key == pygame.K_c:
+                copy_to_clipboard(self.text)
+            elif shortcut_modifier(event) and event.key == pygame.K_x:
+                copy_to_clipboard(self.text)
+                self.text = ""
+                self.select_all = False
+            elif shortcut_modifier(event) and event.key == pygame.K_v:
+                request_clipboard_text(self.paste)
+            elif event.key == pygame.K_BACKSPACE:
+                self.text = "" if self.select_all else self.text[:-1]
+                self.select_all = False
             elif event.key not in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_TAB, pygame.K_ESCAPE):
-                if event.unicode and event.unicode.isprintable() and len(self.text) < self.max_length:
+                if event.unicode and event.unicode.isprintable() and (self.select_all or len(self.text) < self.max_length):
+                    if self.select_all:
+                        self.text = ""
                     self.text += event.unicode
+                    self.select_all = False
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         border = (235, 210, 92) if self.active else (105, 108, 112)
@@ -340,6 +441,9 @@ class TextField:
         clip = self.rect.inflate(-18, -8)
         old_clip = surface.get_clip()
         surface.set_clip(clip)
+        if self.active and self.select_all and self.text:
+            selection = pygame.Rect(self.rect.x + 8, self.rect.centery - text_surface.get_height() // 2 - 2, min(text_surface.get_width() + 4, clip.width), text_surface.get_height() + 4)
+            pygame.draw.rect(surface, (54, 82, 105), selection, border_radius=2)
         surface.blit(text_surface, (self.rect.x + 10, self.rect.centery - text_surface.get_height() // 2))
         surface.set_clip(old_clip)
 
@@ -719,8 +823,10 @@ class NetworkClient:
         while not self.stop_event.is_set():
             try:
                 async with connect(self.uri, ping_interval=20, ping_timeout=20) as websocket:
-                    hello = {"type": "hello", "name": self.name, "phone": self.phone,
-                             "client_version": "0.8.0", "map_cache_hashes": cached_map_hashes()}
+                    hello = {
+                        "type": "hello", "name": self.name, "phone": self.phone,
+                        "client_version": GAME_VERSION, "map_cache_hashes": cached_map_hashes(),
+                    }
                     if self.appearance_changed:
                         hello["appearance"] = self.appearance
                         hello["appearance_changed"] = True
@@ -792,8 +898,10 @@ class BrowserNetworkClient:
                 self._connecting = False
                 if self._stopped:
                     return
-                hello = {"type": "hello", "name": self.name, "phone": self.phone,
-                         "client_version": "0.8.0", "map_cache_hashes": cached_map_hashes()}
+                hello = {
+                    "type": "hello", "name": self.name, "phone": self.phone,
+                    "client_version": GAME_VERSION, "map_cache_hashes": cached_map_hashes(),
+                }
                 if self.appearance_changed:
                     hello["appearance"] = self.appearance
                     hello["appearance_changed"] = True
@@ -1113,6 +1221,7 @@ class Game:
         self.issue_report_open = False
         self.issue_report_category = "art"
         self.issue_report_note = ""
+        self.issue_report_select_all = False
         self.issue_report_snapshot = None
         self.interior = IsometricInterior()
         # Cache the expensive static world-map layer. Dynamic player/chunk
@@ -1135,7 +1244,11 @@ class Game:
         self.friend_names = self.load_friend_names()
         self.chat_active = False
         self.chat_text = ""
+        self.chat_select_all = False
         self.chat_bubbles: dict[str, dict] = {}
+        self.sms_open = False
+        self.sms_messages: list[dict] = []
+        self.sms_unread = 0
         self.style_watcher = StyleWatcher()
         self.settings_watcher = StyleWatcher(GAME_SETTINGS_PATH)
         self.art_style = load_art_style()
@@ -1203,10 +1316,56 @@ class Game:
         self.notice = f"{action} {clean} {'to' if action == 'Added' else 'from'} friends"
         self.notice_until = time.monotonic() + 2.0
 
+    def _friend_target_from_text(self, rest: str) -> str | None:
+        folded = rest.casefold()
+        return next(
+            (name for name in sorted(self.friend_names.values(), key=len, reverse=True)
+             if folded == name.casefold() or folded.startswith(name.casefold() + " ")),
+            None,
+        )
+
+    def autocomplete_friend_message(self) -> bool:
+        """Complete a saved friend after /sms or /w when Tab is pressed."""
+        folded = self.chat_text.casefold()
+        command = next((cmd for cmd in ("/sms ", "/w ") if folded.startswith(cmd)), None)
+        if command is None:
+            return False
+        rest = self.chat_text[len(command):]
+        completed_target = self._friend_target_from_text(rest)
+        if completed_target is not None and rest.casefold().startswith(completed_target.casefold() + " "):
+            return True
+        fragment = rest.strip().casefold()
+        matches = [
+            name for name in sorted(self.friend_names.values(), key=str.casefold)
+            if not fragment or name.casefold().startswith(fragment)
+        ]
+        if matches:
+            self.chat_text = command + matches[0] + " "
+        else:
+            self.notice = "No saved friend matches that name. Add them in Esc > Friends."
+            self.notice_until = time.monotonic() + 3.0
+        return True
+
+    def _append_sms(self, row: dict) -> None:
+        message_id = str(row.get("id", ""))
+        if message_id and any(str(existing.get("id", "")) == message_id for existing in self.sms_messages):
+            return
+        self.sms_messages.append({
+            "id": row.get("id", ""),
+            "sender_name": str(row.get("sender_name", "Player"))[:32],
+            "recipient_name": str(row.get("recipient_name", "Player"))[:32],
+            "text": str(row.get("text", ""))[:160],
+            "direction": "out" if str(row.get("direction", "in")) == "out" else "in",
+            "unread": bool(row.get("unread", False)),
+            "created_at": str(row.get("created_at", ""))[:32],
+        })
+        self.sms_messages = self.sms_messages[-50:]
+
     def submit_chat(self) -> None:
         raw = self.chat_text.strip()
         self.chat_active = False
         self.chat_text = ""
+        self.chat_select_all = False
         if not raw:
             return
         command = raw.casefold()
@@ -1228,13 +1387,20 @@ class Game:
             self.issue_report_snapshot = self.screen.copy()
             self.save_current_issue_report(source="chat_/mapfeedback" if is_map_feedback else "chat_/bug")
             return
+        if raw.casefold().startswith("/sms "):
+            rest = raw[5:].strip()
+            target = self._friend_target_from_text(rest)
+            if target is None:
+                self.notice = "SMS format: /sms FriendName message — Tab autocompletes saved friends"
+                self.notice_until = time.monotonic() + 3.5
+                return
+            text = rest[len(target):].strip()
+            if text:
+                self.network.send({"type": "sms_send", "target": target, "text": text[:160]})
+            return
         if raw.casefold().startswith("/w "):
             rest = raw[3:].strip()
-            target = next(
-                (name for name in sorted(self.friend_names.values(), key=len, reverse=True)
-                 if rest.casefold().startswith(name.casefold() + " ")),
-                None,
-            )
+            target = self._friend_target_from_text(rest)
             if target is None:
                 self.notice = "Whisper format: /w FriendName message — add them in Esc > Friends first"
                 self.notice_until = time.monotonic() + 3.5
@@ -1245,18 +1411,53 @@ class Game:
             return
         self.network.send({"type": "chat", "scope": "local", "text": raw[:120]})
 
+    @staticmethod
+    def chat_text_limit(text: str) -> int:
+        folded = str(text).casefold()
+        if folded.startswith(("/bug", "/mapfeedback")):
+            return 400
+        if folded.startswith("/sms"):
+            return 220
+        return 140
+
+    def paste_chat_text(self, value: str) -> None:
+        if not self.chat_active:
+            return
+        prefix = "" if self.chat_select_all else self.chat_text
+        combined = prefix + normalize_clipboard_text(value)
+        self.chat_text = combined[:self.chat_text_limit(combined)]
+        self.chat_select_all = False
+
     def handle_chat_key(self, event: pygame.event.Event) -> bool:
         if not self.chat_active:
             return False
-        if event.key == pygame.K_ESCAPE:
+        if shortcut_modifier(event) and event.key == pygame.K_a:
+            self.chat_select_all = True
+        elif shortcut_modifier(event) and event.key == pygame.K_c:
+            copy_to_clipboard(self.chat_text)
+        elif shortcut_modifier(event) and event.key == pygame.K_x:
+            copy_to_clipboard(self.chat_text)
+            self.chat_text = ""
+            self.chat_select_all = False
+        elif shortcut_modifier(event) and event.key == pygame.K_v:
+            request_clipboard_text(self.paste_chat_text)
+        elif event.key == pygame.K_ESCAPE:
             self.chat_active = False
             self.chat_text = ""
+            self.chat_select_all = False
         elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
             self.submit_chat()
+        elif event.key == pygame.K_TAB:
+            self.autocomplete_friend_message()
+            self.chat_select_all = False
         elif event.key == pygame.K_BACKSPACE:
-            self.chat_text = self.chat_text[:-1]
-        elif event.unicode and event.unicode.isprintable() and len(self.chat_text) < (400 if self.chat_text.casefold().startswith("/bug") else 140):
+            self.chat_text = "" if self.chat_select_all else self.chat_text[:-1]
+            self.chat_select_all = False
+        elif event.unicode and event.unicode.isprintable() and (self.chat_select_all or len(self.chat_text) < self.chat_text_limit(self.chat_text)):
+            if self.chat_select_all:
+                self.chat_text = ""
             self.chat_text += event.unicode
+            self.chat_select_all = False
         return True
 
     def _build_version(self) -> str:
@@ -1266,6 +1467,7 @@ class Game:
         self.issue_report_open = True
         self.issue_report_category = "art"
         self.issue_report_note = ""
+        self.issue_report_select_all = False
         self.issue_report_snapshot = self.screen.copy()
         self.notice = "Issue reporter opened — 1 Art / 2 AI / 3 Collision-Nav / 4 Other"
         self.notice_until = time.monotonic() + 2.0
@@ -1363,16 +1565,25 @@ class Game:
         })
         self.issue_report_open = False
         self.issue_report_note = ""
+        self.issue_report_select_all = False
         self.issue_report_snapshot = None
         label = "Map feedback" if payload["category"] == "map_art" else "Bug"
         self.notice = f"{label} queued for server review — local backup {shot_path.name}"
         self.notice_until = time.monotonic() + 3.0
+
+    def paste_issue_report_text(self, value: str) -> None:
+        if not self.issue_report_open:
+            return
+        prefix = "" if self.issue_report_select_all else self.issue_report_note
+        self.issue_report_note = (prefix + normalize_clipboard_text(value))[:96]
+        self.issue_report_select_all = False
 
     def handle_issue_report_key(self, event: pygame.event.Event) -> bool:
         """Handle F10 report modal keys. Returns True when the event is consumed."""
         if event.key == pygame.K_F10:
             if self.issue_report_open:
                 self.issue_report_open = False
+                self.issue_report_select_all = False
                 self.issue_report_snapshot = None
             else:
                 self.open_issue_reporter()
@@ -1382,6 +1593,7 @@ class Game:
         if event.key == pygame.K_ESCAPE:
             self.issue_report_open = False
             self.issue_report_note = ""
+            self.issue_report_select_all = False
             self.issue_report_snapshot = None
             return True
         if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
@@ -1400,11 +1612,29 @@ class Game:
         if event.key in category_keys:
             self.issue_report_category = category_keys[event.key]
             return True
-        if event.key == pygame.K_BACKSPACE:
-            self.issue_report_note = self.issue_report_note[:-1]
+        if shortcut_modifier(event) and event.key == pygame.K_a:
+            self.issue_report_select_all = True
             return True
-        if event.unicode and event.unicode.isprintable() and len(self.issue_report_note) < 96:
+        if shortcut_modifier(event) and event.key == pygame.K_c:
+            copy_to_clipboard(self.issue_report_note)
+            return True
+        if shortcut_modifier(event) and event.key == pygame.K_x:
+            copy_to_clipboard(self.issue_report_note)
+            self.issue_report_note = ""
+            self.issue_report_select_all = False
+            return True
+        if shortcut_modifier(event) and event.key == pygame.K_v:
+            request_clipboard_text(self.paste_issue_report_text)
+            return True
+        if event.key == pygame.K_BACKSPACE:
+            self.issue_report_note = "" if self.issue_report_select_all else self.issue_report_note[:-1]
+            self.issue_report_select_all = False
+            return True
+        if event.unicode and event.unicode.isprintable() and (self.issue_report_select_all or len(self.issue_report_note) < 96):
+            if self.issue_report_select_all:
+                self.issue_report_note = ""
             self.issue_report_note += event.unicode
+            self.issue_report_select_all = False
             return True
         return True
 
@@ -1449,8 +1679,11 @@ class Game:
         shown = self.issue_report_note or "type a short description..."
         note_color = TEXT_COLOR if self.issue_report_note else MUTED_TEXT
         note_surf = self.small_font.render(shown[-88:], True, note_color)
+        if self.issue_report_select_all and self.issue_report_note:
+            selection = pygame.Rect(note_rect.x + 8, note_rect.y + 7, min(note_surf.get_width() + 5, note_rect.width - 16), note_surf.get_height() + 6)
+            pygame.draw.rect(self.screen, (54, 82, 105), selection, border_radius=2)
         self.screen.blit(note_surf, (note_rect.x + 10, note_rect.y + 11))
-        footer = self.small_font.render("ENTER save report + PNG screenshot    F10/ESC cancel", True, MUTED_TEXT)
+        footer = self.small_font.render("ENTER save + PNG    CTRL+A/C/X/V edit    F10/ESC cancel", True, MUTED_TEXT)
         self.screen.blit(footer, (panel.x + 26, panel.bottom - 48))
 
     def camera(self) -> tuple[float, float]:
@@ -1770,6 +2003,24 @@ class Game:
                         "scope": str(message.get("scope", "local")),
                         "until": time.monotonic() + 5.5,
                     }
+            elif kind == "sms_sync":
+                rows = message.get("messages", [])
+                if isinstance(rows, list):
+                    self.sms_messages = []
+                    for row in rows:
+                        if isinstance(row, dict):
+                            self._append_sms(row)
+                    self.sms_unread = sum(1 for row in self.sms_messages if row.get("unread"))
+            elif kind in {"sms_received", "sms_sent"}:
+                self._append_sms(message)
+                if kind == "sms_received":
+                    self.sms_unread += 1
+                    sender = str(message.get("sender_name", "Friend"))[:24]
+                    self.notice = f"New SMS from {sender} — press F2"
+                else:
+                    target = str(message.get("recipient_name", "friend"))[:24]
+                    self.notice = f"SMS saved for {target}"
+                self.notice_until = time.monotonic() + 4.0
             elif kind == "notice":
                 self.notice = str(message.get("text", ""))
                 self.notice_until = time.monotonic() + 3.0
@@ -1786,7 +2037,7 @@ class Game:
         # camera-forward after the view is rotated. Vehicle input deliberately stays
         # raw so W/S remain throttle/reverse and A/D remain steering.
         blocked_ui = (
-            self.inventory_open or self.map_open or self.chat_active or self.interior.active
+            self.inventory_open or self.map_open or self.chat_active or self.sms_open or self.interior.active
             or self.network.fatal or self.pause_menu_open or self.issue_report_open
         )
         x, y = movement_vector(blocked=blocked_ui)
@@ -2225,7 +2476,7 @@ class Game:
         title_text = str(self.map_config.get("name", "WORLD MAP")).upper()
         title = self.big_font.render(title_text, True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 18, panel.y + 12))
-        subtitle = self.small_font.render("M close | WASD still moves | yellow: you | blue: all online players", True, MUTED_TEXT)
+        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: other online players", True, MUTED_TEXT)
         self.screen.blit(subtitle, (panel.x + 20, panel.y + 46))
 
         available = pygame.Rect(panel.x + 20, panel.y + 72, max(64, panel.width - 40), max(64, panel.height - 102))
@@ -2293,12 +2544,16 @@ class Game:
             py = live.render_y if live is not None else marker.get("y", 0.0)
             p = mp_dynamic(px, py)
             if p is not None and map_rect.collidepoint(p):
-                pygame.draw.circle(self.screen, (12, 13, 13), p, 6)
-                pygame.draw.circle(self.screen, REMOTE_COLOR, p, 4)
                 name = str(marker.get("name", "Player"))[:18]
+                friend = self.is_friend(name)
+                marker_color = (112, 225, 157) if friend else REMOTE_COLOR
+                pygame.draw.circle(self.screen, (12, 13, 13), p, 7 if friend else 6)
+                pygame.draw.circle(self.screen, marker_color, p, 5 if friend else 4)
                 level = int(marker.get("level", 0) or 0)
-                label_text = f"{name} L{level}" if level else name
-                label = self.tiny_font.render(label_text, True, (176, 215, 232))
+                label_text = f"★ {name}" if friend else name
+                if level:
+                    label_text += f" L{level}"
+                label = self.tiny_font.render(label_text, True, marker_color)
                 label_rect = label.get_rect(midleft=(p[0] + 7, p[1]))
                 pygame.draw.rect(self.screen, (18, 21, 22), label_rect.inflate(4, 2), border_radius=2)
                 self.screen.blit(label, label_rect)
@@ -2619,9 +2874,55 @@ class Game:
         pygame.draw.rect(self.screen, REMOTE_COLOR, rect, width=2, border_radius=6)
         prompt = self.chat_text + ("_" if int(time.monotonic() * 2) % 2 == 0 else "")
         shown = self.font.render(prompt[-90:], True, TEXT_COLOR)
+        if self.chat_select_all and self.chat_text:
+            selection = pygame.Rect(rect.x + 10, rect.y + 7, min(shown.get_width() + 7, rect.width - 20), shown.get_height() + 8)
+            pygame.draw.rect(self.screen, (54, 82, 105), selection, border_radius=2)
         self.screen.blit(shown, (rect.x + 14, rect.y + 11))
-        hint = self.tiny_font.render("ENTER send   /bug issue   /mapfeedback map note   /w FriendName message", True, MUTED_TEXT)
-        self.screen.blit(hint, (rect.x + 8, rect.y - 18))
+        bug_hint = self.tiny_font.render("/bug describe what went wrong — saves a screenshot to the human-approval queue", True, INV_SELECTED)
+        command_hint = self.tiny_font.render("/sms FriendName message (TAB completes)   /w whisper   CTRL+A/C/X/V edit", True, MUTED_TEXT)
+        self.screen.blit(bug_hint, (rect.x + 8, rect.y - 34))
+        self.screen.blit(command_hint, (rect.x + 8, rect.y - 18))
+
+    def draw_sms_inbox(self) -> None:
+        if not self.sms_open:
+            return
+        sw, sh = self.screen.get_size()
+        shade = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 205))
+        self.screen.blit(shade, (0, 0))
+        width = min(900, max(620, sw - 100))
+        height = min(650, max(460, sh - 80))
+        panel = pygame.Rect((sw - width) // 2, (sh - height) // 2, width, height)
+        pygame.draw.rect(self.screen, (24, 27, 28), panel, border_radius=8)
+        pygame.draw.rect(self.screen, REMOTE_COLOR, panel, width=3, border_radius=8)
+        self.screen.blit(self.big_font.render("FRIEND SMS / MESSAGES", True, TEXT_COLOR), (panel.x + 28, panel.y + 22))
+        self.screen.blit(
+            self.tiny_font.render("Enter opens chat • /sms FriendName message • Tab completes • F2 or Esc closes", True, MUTED_TEXT),
+            (panel.x + 30, panel.y + 62),
+        )
+        content = pygame.Rect(panel.x + 24, panel.y + 92, panel.width - 48, panel.height - 118)
+        if not self.sms_messages:
+            self.screen.blit(self.font.render("No messages yet.", True, MUTED_TEXT), (content.x + 12, content.y + 18))
+            return
+        rows = self.sms_messages[-10:]
+        row_h = max(43, min(54, content.height // max(1, len(rows))))
+        y = content.bottom - len(rows) * row_h
+        for row in rows:
+            outgoing = row.get("direction") == "out"
+            other = row.get("recipient_name") if outgoing else row.get("sender_name")
+            prefix = f"TO {other}" if outgoing else f"FROM {other}"
+            color = (221, 199, 117) if outgoing else REMOTE_COLOR
+            pygame.draw.rect(self.screen, (31, 35, 36), (content.x, y + 2, content.width, row_h - 5), border_radius=4)
+            self.screen.blit(self.tiny_font.render(prefix[:34], True, color), (content.x + 12, y + 8))
+            body = str(row.get("text", ""))
+            max_chars = max(25, int((content.width - 190) / max(6, self.small_font.size("M")[0])))
+            if len(body) > max_chars:
+                body = body[:max_chars - 1] + "…"
+            self.screen.blit(self.small_font.render(body, True, TEXT_COLOR), (content.x + 170, y + 7))
+            stamp = str(row.get("created_at", ""))[-16:]
+            if stamp:
+                self.screen.blit(self.tiny_font.render(stamp, True, MUTED_TEXT), (content.right - 132, y + row_h - 20))
+            y += row_h
 
     def draw_map_preview_watermark(self) -> None:
         preview = os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()
@@ -2870,7 +3171,7 @@ class Game:
                 rect = pygame.Rect(panel.right - 210, y, 150, 34)
                 self._draw_menu_button(rect, "REMOVE" if state else "ADD FRIEND", active=state)
             self.screen.set_clip(old_clip)
-            self.screen.blit(self.tiny_font.render("Friends appear on the minimap; /w Name message sends a whisper", True, MUTED_TEXT), (panel.x + 190, panel.bottom - 52))
+            self.screen.blit(self.tiny_font.render("Friends stay marked on M/minimap; /sms Name text persists; F2 opens messages", True, MUTED_TEXT), (panel.x + 190, panel.bottom - 52))
             self._draw_menu_button(buttons["back"], "BACK")
             return
 
@@ -2887,6 +3188,7 @@ class Game:
             "E                Interact / enter interior",
             "I or TAB         Inventory",
             "M                World map",
+            "F2               Friend SMS / messages inbox",
             "F5               Reload art style + settings",
             "F6               Rebuild current visual chunk",
             "F7               Rebuild nearby 3x3 visual chunks",
@@ -3170,7 +3472,8 @@ class Game:
         map_name = str(self.map_config.get("name", "Unknown map"))
         local_chunk = self.server_chunk
         online_count = len(self.map_players) if self.map_players else len(self.players)
-        players_text = self.small_font.render(f"{map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}   [SHIFT] run/vehicle boost  [SPACE×2] double jump  [X] prone  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
+        unread = f" SMS:{self.sms_unread}" if self.sms_unread else ""
+        players_text = self.small_font.render(f"{map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}{unread}   [F2] messages  [SHIFT] run/boost  [SPACE×2] double jump  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
         self.screen.blit(players_text, (w - players_text.get_width() - 20, 20))
         self.draw_vehicle_status()
         self.draw_local_minimap()
@@ -3201,9 +3504,31 @@ class Game:
                             continue
                         if self.handle_chat_key(event):
                             continue
+                        if event.key == pygame.K_F2:
+                            self.sms_open = not self.sms_open
+                            if self.sms_open:
+                                self.sms_unread = 0
+                                self.inventory_open = False
+                                self.map_open = False
+                                self.pause_menu_open = False
+                                self.network.send({"type": "sms_mark_read"})
+                                self.network.send({"type": "sms_request"})
+                                for row in self.sms_messages:
+                                    row["unread"] = False
+                            continue
+                        if self.sms_open:
+                            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                                self.sms_open = False
+                                self.chat_active = True
+                                self.chat_text = "/sms "
+                                self.chat_select_all = False
+                            elif event.key == pygame.K_ESCAPE:
+                                self.sms_open = False
+                            continue
                         if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and not self.pause_menu_open and not self.inventory_open and not self.map_open:
                             self.chat_active = True
                             self.chat_text = ""
+                            self.chat_select_all = False
                             continue
                         if self.pause_menu_open and self.pause_page in {"settings", "friends"}:
                             if event.key in (pygame.K_UP, pygame.K_PAGEUP, pygame.K_HOME):
@@ -3460,6 +3785,7 @@ class Game:
                     self.screen.blit(rot_text, (self.screen.get_width()-rot_text.get_width()-18, 64))
                     self.draw_world_map()
                     self.draw_inventory()
+                self.draw_sms_inbox()
                 self.draw_chat_input()
                 self.draw_pause_menu()
                 self.draw_issue_reporter()

@@ -37,7 +37,7 @@ def main() -> int:
     railway = RAILWAY.read_text(encoding="utf-8", errors="strict").lower()
     railway_required = (
         "pymmo_reset_db_on_patch=true",
-        "pymmo_patch_id=open-night-v0.8.0",
+        "pymmo_patch_id=open-night-v0.8.1",
         "--no-discovery",
     )
     railway_missing = [token for token in railway_required if token not in railway]

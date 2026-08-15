@@ -51,6 +51,7 @@ DEFAULTS = {
         "double_jump_forward_speed_px_per_second": 940.0,
         "double_jump_duration_seconds": 0.95,
         "movement_stand_delay_seconds": 1.0,
+        "water_walk_speed_multiplier": 0.28,
     },
     "vehicle": {
         "mph_per_px_s": 0.18,
@@ -63,6 +64,7 @@ DEFAULTS = {
         "player_brake_px_s2": 390.0,
         "player_drag_px_s2": 92.0,
         "player_turn_rate": 2.75,
+        "player_front_axle_offset_ratio": 0.36,
     },
     "engine": {"ai_profile_version": 2},
     "debug": {"show_camera_lookahead": False},
@@ -91,6 +93,7 @@ DEFAULTS = {
         "personal_space_px": 22.0,
         "active_radius_px": 1800.0,
         "far_update_hz": 5.0,
+        "runover_min_speed_mph": 30.0,
     },
     "bicycle": {
         "ai_cyclists_per_route": 3,

@@ -8,7 +8,7 @@ from prepare_web_stage import prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = {
-    "main.py", "client.py", "common.py", "server_directory.py", "assets", "config", "gameplay", "mapfiles", "VERSION.txt"
+    "main.py", "client.py", "common.py", "server_directory.py", "versioning.py", "assets", "config", "gameplay", "mapfiles", "VERSION.txt"
 }
 FORBIDDEN_AUDIO = {".wav", ".mp3", ".aiff", ".aif", ".au"}
 
@@ -38,7 +38,7 @@ def main() -> int:
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8", errors="replace")
         if "pygbag==0.9.2" not in requirements:
             problems.append("Pygbag is not pinned to the known-working 0.9.2 browser runtime")
-        for token in ('"pygbag==0.9.2"', "--version 0.9.2", "--package open-night-v0-8-0", '--title "Open Night v0.8.0"'):
+        for token in ('"pygbag==0.9.2"', "--version 0.9.2", "--package open-night-v0-8-1", '--title "Open Night v0.8.1"'):
             if token not in run_web:
                 problems.append(f"RUN_WEB_CLIENT.bat missing grey-screen/cache guard: {token}")
         staged_client = (stage / "client.py").read_text(encoding="utf-8", errors="replace")

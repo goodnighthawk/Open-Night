@@ -63,6 +63,51 @@ def _nearest_drivable_road(cfg: dict, x: float, y: float):
     return best
 
 
+def _best_sidewalk_band_road(cfg: dict, x: float, y: float):
+    """Choose the road whose furnishing-band radius best matches the point."""
+    best = None
+    pedestrian = {"footway", "path", "cycleway", "steps", "pedestrian"}
+    for road in cfg.get("roads", []) or []:
+        if str(road.get("highway", "")) in pedestrian:
+            continue
+        pts = road.get("points", []) or []
+        if len(pts) < 2:
+            continue
+        distance = min(
+            _point_segment_distance(x, y, float(a[0]), float(a[1]), float(b[0]), float(b[1]))
+            for a, b in zip(pts, pts[1:])
+        )
+        sidewalk = float(road.get("sidewalk_width", 0.0))
+        target = (
+            float(road.get("width", 0.0)) * 0.5
+            + float(road.get("curb_width", 0.0))
+            + (10.0 if sidewalk >= 20.0 else 0.0)
+            + sidewalk * 0.52
+        )
+        score = abs(distance - target) if sidewalk >= 12.0 else float("inf")
+        if best is None or score < best[0]:
+            best = (score, distance, road)
+    return best
+
+
+def _protected_asphalt_conflict(cfg: dict, x: float, y: float) -> dict | None:
+    pedestrian = {"footway", "path", "cycleway", "steps", "pedestrian"}
+    for road in cfg.get("roads", []) or []:
+        if str(road.get("highway", "")) in pedestrian:
+            continue
+        pts = road.get("points", []) or []
+        if len(pts) < 2:
+            continue
+        distance = min(
+            _point_segment_distance(x, y, float(a[0]), float(a[1]), float(b[0]), float(b[1]))
+            for a, b in zip(pts, pts[1:])
+        )
+        protected = float(road.get("width", 0.0)) * 0.5 + float(road.get("curb_width", 0.0)) + 2.0
+        if distance < protected:
+            return road
+    return None
+
+
 
 def _nearest_road_tangent_deg(road: dict, x: float, y: float) -> float | None:
     best = None
@@ -116,11 +161,15 @@ def audit_art_rules(cfg: dict) -> list[ArtRuleIssue]:
             issues.append(ArtRuleIssue("ERROR", "prop_hits_building", subject, f"{kind} is within {clearance:g}px of a building footprint"))
 
         if kind in sidewalk_kinds:
-            nearest = _nearest_drivable_road(cfg, x, y)
+            nearest = _best_sidewalk_band_road(cfg, x, y) if kind == "curved_streetlamp" else _nearest_drivable_road(cfg, x, y)
             if nearest is None:
                 issues.append(ArtRuleIssue("ERROR", "prop_no_road", subject, f"{kind} has no nearby drivable street"))
             else:
-                d, road = nearest
+                if kind == "curved_streetlamp":
+                    score, d, road = nearest
+                else:
+                    d, road = nearest
+                    score = None
                 half = float(road.get("width", 0.0)) * 0.5
                 curb = float(road.get("curb_width", 0.0))
                 sidewalk = float(road.get("sidewalk_width", 0.0))
@@ -129,6 +178,11 @@ def audit_art_rules(cfg: dict) -> list[ArtRuleIssue]:
                 outer = half + curb + furnishing + sidewalk + 8.0
                 if sidewalk < 12.0:
                     issues.append(ArtRuleIssue("ERROR", "prop_no_sidewalk", subject, f"{kind} is nearest {road.get('id','road')}, which has no usable sidewalk"))
+                elif kind == "curved_streetlamp" and _protected_asphalt_conflict(cfg, x, y) is not None:
+                    conflict = _protected_asphalt_conflict(cfg, x, y)
+                    issues.append(ArtRuleIssue("ERROR", "prop_on_asphalt", subject, f"{kind} overlaps protected asphalt for {conflict.get('id','road')}"))
+                elif kind == "curved_streetlamp" and score is not None and score > max(4.0, min(12.0, sidewalk * 0.22)):
+                    issues.append(ArtRuleIssue("ERROR", "prop_far_from_sidewalk", subject, f"{kind} misses {road.get('id','road')} furnishing band by {score:.1f}px"))
                 elif d < inner:
                     issues.append(ArtRuleIssue("ERROR", "prop_on_asphalt", subject, f"{kind} is {d:.1f}px from {road.get('id','road')} centerline; protected asphalt/curb starts at {inner:.1f}px"))
                 elif d > outer:

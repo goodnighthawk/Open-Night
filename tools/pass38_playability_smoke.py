@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from mapfiles.loader import load_map_folder
+from versioning import GAME_VERSION
 
 MAP_DIR = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor"
 PORTABLE = ROOT / "dev_tools" / "map_generator" / "exports" / "Map_001_GWB.map"
@@ -58,7 +59,7 @@ async def hello_probe(port: int, portable: bool = False) -> tuple[list[str], dic
     async with connect(uri, ping_interval=None, max_size=8 * 1024 * 1024) as ws:
         await ws.send(json.dumps({
             "type": "hello", "name": "Pass38", "phone": f"+1555000{port}",
-            "client_version": "0.8.0",
+            "client_version": GAME_VERSION,
             "map_cache_hashes": [],
         }))
         deadline = time.monotonic() + 8.0

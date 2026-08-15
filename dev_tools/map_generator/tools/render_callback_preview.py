@@ -771,7 +771,7 @@ def draw_authored_gwb_structure(d, roads, rp, cx, cy, W, H, night):
         d.line((p1,p2),fill=tower_col,width=max(3,sc(8)))
         d.line((p1,p2),fill=tower_hi,width=max(1,sc(2)))
 
-def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
+def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=False,
            additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0,
            orthogonal_grid_px=0.0, render_existing_buildings=True,roads_override=None,rp_override=None,
            draw_source_crosswalks=True,crosswalks_override=None,surface_polygons_override=None,

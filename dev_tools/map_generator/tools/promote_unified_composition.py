@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-"""Promote the reviewed unified composition into the sole runtime map.
+"""Promote the reviewed Pass 19 unified composition into the sole runtime map.
 
 The composition PNGs are the visual authority.  Runtime CSVs are regenerated
-from the exact same Pass 18 authored geometry so rendering, collision and map
-navigation cannot drift apart again.
+from the frozen Pass 18 geometry plus the accepted Pass 19 building-art
+assignment so rendering, collision and map navigation cannot drift apart again.
 """
 
 import csv
@@ -20,7 +20,7 @@ MAP_DIRS = (
     ROOT / "dev_tools" / "map_generator" / "mapfiles" / "data" / "map_001_gwb_corridor",
 )
 SEMANTIC = composition.SEMANTIC
-ART_ARCHIVE = ROOT / "assets" / "environment" / "approved" / "map_001_gwb_corridor" / "composition_tiles_v18.zip"
+ART_ARCHIVE = ROOT / "assets" / "environment" / "approved" / "map_001_gwb_corridor" / "composition_tiles_v19.zip"
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -42,7 +42,7 @@ def map_rows() -> list[dict[str, str]]:
     return [
         {"key": "id", "value": "map_001_gwb_corridor", "type": "str"},
         {"key": "name", "value": "Open Night — Fort Lee / GWB / Washington Heights", "type": "str"},
-        {"key": "description", "value": "Pass 18 reviewed unified corridor composition; the default and only playable map.", "type": "str"},
+        {"key": "description", "value": "Pass 19 reviewed unified corridor composition with converged non-repeating building art; the default and only playable map.", "type": "str"},
         {"key": "chunked", "value": "true", "type": "bool"},
         {"key": "chunk_size", "value": "1024", "type": "int"},
         {"key": "chunk_cols", "value": "16", "type": "int"},
@@ -67,20 +67,20 @@ def map_rows() -> list[dict[str, str]]:
         {"key": "default_lighting_profile", "value": "night_callback", "type": "str"},
         {"key": "street_lamps_enabled", "value": "true", "type": "bool"},
         {"key": "baked_composition", "value": "true", "type": "bool"},
-        {"key": "baked_composition_archive", "value": "assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip", "type": "str"},
+        {"key": "baked_composition_archive", "value": "assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip", "type": "str"},
         {"key": "baked_composition_world_y", "value": "2048", "type": "int"},
         {"key": "baked_composition_source_scale", "value": "0.5", "type": "float"},
-        {"key": "map_build_id", "value": "open_night_v0_8_0_pass18_default_only", "type": "str"},
+        {"key": "map_build_id", "value": "open_night_v0_8_1_pass19_default_only", "type": "str"},
         {"key": "grid_enabled", "value": "true", "type": "bool"},
         {"key": "grid_cell_size", "value": "32", "type": "int"},
         {"key": "grid_chunk_cache_limit", "value": "30", "type": "int"},
         {"key": "server_region_chunk_cols", "value": "8", "type": "int"},
         {"key": "server_region_chunk_rows", "value": "4", "type": "int"},
         {"key": "scalability_target_players", "value": "1000", "type": "int"},
-        {"key": "render_pass", "value": "18", "type": "int"},
+        {"key": "render_pass", "value": "19", "type": "int"},
         {"key": "road_network_rule", "value": "terrain_aware_hierarchy_with_staggered_locals_v2", "type": "str"},
         {"key": "surface_preservation_rule", "value": "filtered_reference_polygons_with_district_caps_v1", "type": "str"},
-        {"key": "building_cosmetic_rule", "value": "district_and_native_footprint_match_v2", "type": "str"},
+        {"key": "building_cosmetic_rule", "value": "district_native_scale_anti_repetition_v3", "type": "str"},
         {"key": "building_sprite_scale_band", "value": "0.72..1.12", "type": "str"},
         {"key": "building_layer_model", "value": "ground_upper_roof_v1", "type": "str"},
         {"key": "outdoor_level_count", "value": "3", "type": "int"},
@@ -172,7 +172,7 @@ def promote_folder(folder: Path, roads: list[dict], crossings: list[dict], surfa
         {"key": "camera_projection", "value": "orthographic_topdown", "type": "str"},
         {"key": "outdoor_perspective_skew", "value": "0", "type": "float"},
         {"key": "baked_composition", "value": "true", "type": "bool"},
-        {"key": "render_pass", "value": "18", "type": "int"},
+        {"key": "render_pass", "value": "19", "type": "int"},
     ])
 
     road_rows, road_points = runtime_roads(roads)
@@ -325,12 +325,12 @@ def main() -> None:
     roads, ROAD_POINTS, crossings = composition.authored_block_network()
     buildings = read_csv(SEMANTIC / "iterated_buildings.csv")
     if len(buildings) != 95:
-        raise RuntimeError("Pass 18 semantic output is missing; rebuild the unified composition first")
+        raise RuntimeError("Pass 19 semantic output is missing; run build_pass19_art_convergence.py first")
     surfaces = composition.authored_surfaces()
     build_archive()
     for folder in MAP_DIRS:
         promote_folder(folder, roads, crossings, surfaces, buildings)
-    print(f"PROMOTED release=0.8.0 maps={len(MAP_DIRS)} roads={len(roads)} crossings={len(crossings)} buildings={len(buildings)} archive={ART_ARCHIVE.stat().st_size}")
+    print(f"PROMOTED release=0.8.1 pass=19 maps={len(MAP_DIRS)} roads={len(roads)} crossings={len(crossings)} buildings={len(buildings)} archive={ART_ARCHIVE.stat().st_size}")
 
 
 ROAD_POINTS: dict[str, list[tuple[float, float]]] = {}

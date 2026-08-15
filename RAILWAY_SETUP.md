@@ -1,4 +1,4 @@
-# Open Night v0.8.0 — Railway internet server with MySQL
+# Open Night v0.8.1 — Railway internet server with MySQL
 
 The desktop client automatically checks the configured Open Night Railway server when it starts. If the server answers the real game-protocol probe, it appears at the top of `AVAILABLE SERVERS`, is selected automatically, and can be joined with one click.
 
@@ -72,6 +72,8 @@ LAN discovery and Direct Connect remain available as fallbacks. Use made-up acco
 The Pygbag web client also reads the same public-server CSV and connects to this Railway address automatically. Each browser launch receives a synthetic prototype account identifier so multiple web players do not collide on one fixed login.
 
 Run `DEPLOY_OPEN_NIGHT_SERVER.bat` from this version before testing it with friends so the existing `open-night` service serves the same map and database policy as every client.
+
+v0.8.1 retains the `sms_messages` table for online and offline delivery. The strict version gate means friends must run `UPDATE_FRIEND_BUILD.bat` before reconnecting after the Railway service is upgraded.
 
 ## Prototype patch-reset policy
 

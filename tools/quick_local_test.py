@@ -10,6 +10,9 @@ import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from versioning import GAME_VERSION
 HOST = "127.0.0.1"
 PORT = 8765
 URI = f"ws://{HOST}:{PORT}"
@@ -29,7 +32,10 @@ async def websocket_probe(timeout: float = 1.5) -> tuple[bool, str]:
     try:
         async with asyncio.timeout(timeout):
             async with connect(URI, ping_interval=None) as ws:
-                await ws.send(json.dumps({"type": "hello", "name": "QuickProbe", "phone": "+15550000023", "client_version": "0.8.0"}))
+                await ws.send(json.dumps({
+                    "type": "hello", "name": "QuickProbe", "phone": "+15550000023",
+                    "client_version": GAME_VERSION,
+                }))
                 while True:
                     raw = await ws.recv()
                     msg = json.loads(raw)

@@ -186,6 +186,9 @@ server_crash.log
 *.bak
 *.tmp
 *.zip
+!assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip
+!dev_tools/map_generator/exports/Map_001_GWB_assets/composition/composition_tiles_v19.zip
 bug_reports/*/screenshot*.png
 map_generator_backups/
 dev_tools/map_generator/working_reference/pre_reference_install_backup/
+dev_tools/map_generator/profiles/

@@ -889,23 +889,13 @@ class EnvironmentRenderer:
             if lanes >= 2 and width >= 48:
                 lane_width = float(width) / float(lanes)
                 boundaries = [(-width * 0.5) + lane_width * i for i in range(1, lanes)]
-                center_drawn = False
                 for off in boundaries:
                     if abs(off) <= lane_width * 0.18:
-                        for yellow_off in (off - 3.0, off + 3.0):
-                            line_pts = _parallel_points(points, yellow_off)
-                            for a, b in zip(line_pts, line_pts[1:]):
-                                self._dashed_line(surface, LANE_COLOR, a, b, dash=100000, gap=1, width=3, exclude_circles=local_junctions)
-                        center_drawn = True
+                        continue
                     else:
                         line_pts = _parallel_points(points, off)
                         for a, b in zip(line_pts, line_pts[1:]):
                             self._dashed_line(surface, CROSSWALK_COLOR, a, b, dash=54, gap=48, width=3, exclude_circles=local_junctions)
-                if lanes % 2 == 1 and not center_drawn:
-                    for yellow_off in (-3.0, 3.0):
-                        line_pts = _parallel_points(points, yellow_off)
-                        for a, b in zip(line_pts, line_pts[1:]):
-                            self._dashed_line(surface, LANE_COLOR, a, b, dash=100000, gap=1, width=3, exclude_circles=local_junctions)
 
             if not road.get("bridge") and width >= 50:
                 bay_off = max(14.0, width * 0.5 - 10.0)

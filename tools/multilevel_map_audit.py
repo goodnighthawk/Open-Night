@@ -126,7 +126,7 @@ if p.public_dict().get("level") != max(walkable_levels):
 server_src = (ROOT / "server.py").read_text(encoding="utf-8")
 client_src = (ROOT / "client.py").read_text(encoding="utf-8")
 viewer_src = (ROOT / "map_viewer.py").read_text(encoding="utf-8")
-for token in ("resolve_level_transition", "previous_x=movement_start_x", "previous_y=movement_start_y", "level=int(getattr(p", "move_with_collisions"):
+for token in ("resolve_level_transition", "previous_x=movement_start_x", "previous_y=movement_start_y", "level=current_level", "move_with_collisions"):
     if token not in server_src:
         raise SystemExit(f"Server multi-level integration missing token: {token}")
 for token in ("next_level != previous_level", "LAYER_TRANSITION_JUMP_SECONDS", "session.jump_until = max"):

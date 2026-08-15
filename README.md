@@ -1,4 +1,4 @@
-# Open Night — v0.8.0 unified corridor preview
+# Open Night — v0.8.1
 
 ## Start
 
@@ -6,7 +6,7 @@
 2. Run **`START_OPEN_NIGHT.bat`**.
 3. Use the Open Night launcher for map generation, map viewing, quick test, server, desktop client, web client, or movement preview.
 
-When this folder is a GitHub clone on the `main` branch, the launcher checks GitHub before setup and applies only a safe fast-forward update. It continues normally when offline, when Git is unavailable, or when local tracked edits would be affected. Set `OPEN_NIGHT_SKIP_UPDATE=1` to disable the check. ZIP copies continue to launch without auto-update.
+When this folder is a GitHub clone on the `main` branch, the launcher checks GitHub before setup and applies only a safe fast-forward update. It continues normally when offline, when Git is unavailable, or when local tracked edits would be affected. Set `OPEN_NIGHT_SKIP_UPDATE=1` to disable the check. Friends using extracted ZIP copies can run `UPDATE_FRIEND_BUILD.bat` to download GitHub `main` or import a ZIP without deleting their local environment, logs, or Friends list.
 
 The default playable world is now the accepted screenshot-derived full-region map. Night with authored street lamps is the default visual mode; the outdoor projection remains strict GTA2-style top-down while the 10 enterable rooms/stores retain the isometric interior system.
 
@@ -26,15 +26,19 @@ v0.7.2 integrates the movement-preview controls into the authoritative multiplay
 
 v0.7.3 replaces direct Git feedback writes with a moderated Railway queue. `/bug description`, `/mapfeedback description`, and F10 captures keep a private local backup and upload bounded report data plus a PNG to MySQL as `pending`. Reports are rate-limited, account identifiers are salted, and player text is treated as untrusted evidence. Only a token-authenticated human using `REVIEW_BUG_REPORTS.bat` can approve a report and export it into `feedback/approved/` for ChatGPT or another development agent.
 
-v0.8.0 promotes the reviewed Pass 18 Fort Lee → GWB → Washington Heights composition as the default and only playable map. The game renders the approved day/night composition directly from chunked packaged art while collision, routing and navigation use CSV geometry produced by that same pass. The release has 38 terrain-aware roads, 242 road-tangent zebras, 95 scale-audited district buildings, a continuous Hudson crossed only by the GWB, and filtered source-derived parks/green space.
+v0.7.4 stabilizes friend multiplayer. Saved friends remain highlighted on the M map and compact minimap, `/sms FriendName message` supports Tab completion, and F2 opens a Railway-backed inbox that receives online or offline messages. Clients and servers must report the exact same release version before login. Pedestrians can wade slowly in water while vehicles remain blocked, player cars rotate around a front-axle pivot, and NPC run-over blood requires an impact of at least 30 mph.
 
-Every building retains ground/upper/roof metadata and an exterior stairwell record. The GWB deck has playable ramps at both ends. v0.8.0 clients and servers exchange an exact version string at login, preventing older packaged maps from silently joining the new world.
+v0.7.5 adds clipboard editing to launcher fields, chat, SMS composition, and the F10 report note. Use Ctrl+A, Ctrl+C, Ctrl+X, and Ctrl+V. Opening chat now shows `/bug describe what went wrong` on its own highlighted line above the entry box, including the screenshot and human-approval behavior.
+
+v0.8.0 establishes the accepted Pass 18 full-region composition as the default map: clear top-down roads, sidewalks, crossings, authored lighting, and baked day/night tiles share one semantic geometry contract.
+
+v0.8.1 installs Pass 19 over that frozen gameplay geometry. Its building-art convergence assigns 95 placements across 40 approved top-down styles, limits any one atlas cell to 6.3% of the map, holds nearest-neighbour exact repeats to 2.1%, and keeps repeated-sprite scale spread below 0.10. The runtime map, generator mirror, baked `composition_tiles_v19.zip`, and portable `.map` are synchronized. Decorative yellow center lines remain disabled.
 
 Bicycles now use compact **0.72×**, strict top-down body art. The map compiler rejects bicycle loops that touch exposed water, while bridge-deck cycling remains valid. Bicycles may share the road surface and do not hard-block one another; cars and bicycles use full rotated body boundaries and cannot occupy the same space.
 
 Movement transitions now trigger an automatic jump that renders at 1.35× scale with a small lift. Vehicle/world and car-to-car contacts use rotated body boundaries. Moving vehicles can run over NPC pedestrians, leaving a temporary stylized red stain before a replacement NPC respawns on the route. Point-based selling is removed: sell directly to nearby NPCs, or make a player offer that the buyer accepts with E.
 
-`LOCAL_QA.bat` runs 24 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social, moderated-feedback, collision, traffic, multi-level, launcher, internet-discovery and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate, and `tools\render_default_map_preview.py` verifies packaged composition art against the approved master.
+`LOCAL_QA.bat` runs 28 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social/SMS, version, moderated-feedback, collision, traffic, multi-level, launcher, internet-discovery, Pass 19 art and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate.
 
 ## v2.5 changes
 
@@ -52,12 +56,13 @@ Movement transitions now trigger an automatic jump that renders at 1.35× scale 
 
 Map 001 is a 16×12 grid of 1024px chunks (192 chunks, preserving the prior total area while fitting the globally orthogonalized reference extent). The screenshot-derived world is release-authoritative. Geometry is authored from the five bundled reference-image layers and explicit trace CSVs; no live map service is queried.
 
-On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relative. Space jumps, C crouches, T enters/drives/rides/exits vehicles, E interacts/trades/enters rooms, Enter chats, `/bug description` submits a pending human-review report, the mouse provides bounded camera look-ahead, middle-mouse rotates the camera, and the mouse wheel zooms. Esc opens the scrollable Settings and Friends pages.
+On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relative. Space jumps, C crouches, T enters/drives/rides/exits vehicles, E interacts/trades/enters rooms, Enter chats, `/sms FriendName message` sends persistent friend SMS, F2 opens Messages, `/bug description` submits a pending human-review report, Ctrl+A/C/X/V edits text, middle-mouse rotates the camera, and the mouse wheel zooms. Esc opens the scrollable Settings and Friends pages.
 
 ## Useful launchers
 
 - `START_OPEN_NIGHT.bat` — Open Night development launcher
 - `UPDATE_OPEN_NIGHT.bat` — safe GitHub `main` fast-forward used automatically by the launcher
+- `UPDATE_FRIEND_BUILD.bat` — update an extracted friend copy from GitHub or a shared ZIP
 - `RUN_MAP_GENERATOR.bat` — screenshot-reference map generator
 - `QUICK_LOCAL_TEST.bat` — memory server + desktop client
 - `RUN_CLIENT.bat` — desktop client

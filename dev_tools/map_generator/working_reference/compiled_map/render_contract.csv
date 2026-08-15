@@ -8,4 +8,4 @@ level_shadow_projection,true,bool
 baked_directional_shadows,false,bool
 baked_contact_ao,true,bool
 baked_contact_ao_radius_px,3,int
-render_pass,18,int
+render_pass,19,int
