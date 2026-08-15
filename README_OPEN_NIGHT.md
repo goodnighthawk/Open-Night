@@ -1,6 +1,8 @@
-# OPEN NIGHT — map scale branch v0.7.0
+# OPEN NIGHT — v0.7.1
 
 Double-click **`START_OPEN_NIGHT.bat`**. The launcher remains open while each subsystem runs in its own process.
+
+GitHub clones on `main` automatically check `origin/main` first and apply only safe fast-forward updates. Offline play and ZIP copies still work; local tracked edits cause the updater to skip rather than overwrite anything.
 
 ## Launcher
 
@@ -31,6 +33,13 @@ The former GIS/Overpass migration path has been removed after the screenshot-der
 - Compact strict-top-down bicycles use water-safe generated routes, can use road space, and do not hard-block other bicycles.
 - Rotated car and bicycle body boundaries prevent cars from sharing physical space with bicycles.
 
+## v0.7.1 feedback and facing update
+
+- Type `/bug description` in local chat to capture the current game frame and structured map/player context.
+- GitHub-ready reports are saved under `feedback\next_version\` as CSV plus PNG; use GitHub Desktop to commit and push reports you want reviewed.
+- F10 area reports also mirror into that feedback folder while retaining their persistent shared-data copy.
+- Player heads now use the same heading as their bodies. Mouse movement controls bounded camera look-ahead only.
+
 ## Portable `.map` workflow
 
 The generator defaults remain:
@@ -51,6 +60,7 @@ The game and movement preview use `assets/characters/master_dual_camera` from th
 
 ## Direct shortcuts
 
+- `UPDATE_OPEN_NIGHT.bat`
 - `RUN_MAP_GENERATOR.bat`
 - `RUN_CHARACTER_PREVIEW.bat`
 - `LOCAL_QA.bat`
@@ -66,6 +76,7 @@ The web client reads the same CSV and uses the Railway endpoint by default. If t
 - Friends: Esc > Friends, then add/remove an online name. Friends alone appear on the compact minimap.
 - Local chat: press Enter, type, and press Enter again. Nearby outdoor players—or everyone in the same interior—see a speech bubble.
 - Whisper: `/w FriendName message`; the name must already be on your Friends list.
+- Bug feedback: `/bug describe what went wrong`; a screenshot and CSV row are saved locally for the next version.
 - Passenger: press T beside a slow player-driven car. The driver controls it; press T again to leave once it is slow enough.
 - Player sale: stand near another player with a package and press E. The buyer presses E nearby to accept the $40 offer.
 - NPC sale: stand near a pedestrian with a package and press E. The obsolete fixed customer point no longer buys packages.
