@@ -24,12 +24,12 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_09"
+PASS_ID = "recovery_pass_10"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
 ORTHOGONAL_GRID_PX = 192.0
-HUDSON_WEST_X = 4608.0
-HUDSON_EAST_X = 10752.0
+HUDSON_WEST_X = 4864.0
+HUDSON_EAST_X = 10496.0
 
 SEMANTIC_FILES = (
     "buildings.csv",
@@ -67,9 +67,9 @@ def selected_gameplay_roads():
 
 def authored_block_network():
     roads=[]; rp={}; crossings=[]
-    west_x=[768,1536,2304,3072,3840,4608]
-    east_x=[10752,11520,12288,13056,13824,14592,15360]
-    ys=[2304,3072,3840,4608,5376,6144,6912,7680,8448,9216,9984]
+    west_x=[640,1408,2240,3008,3904,4608]
+    east_x=[10752,11584,12416,13120,14016,14784,15552]
+    ys=[2176,2944,3712,4544,5248,6144,6976,7680,8576,9344,10112]
     def add(rid,points,major=False,bridge=False):
         roads.append({'road_id':rid,'highway':'primary' if major else 'residential',
                       'lanes':'4' if major else '2','width':'160' if major else '96',
@@ -77,9 +77,14 @@ def authored_block_network():
                       'level':'1' if bridge else '0','bridge':'true' if bridge else 'false'})
         rp[rid]=points
     for side,xs in (('west',west_x),('east',east_x)):
-        for idx,x in enumerate(xs):add(f'block_{side}_v_{idx:02d}',[(x,2048),(x,10240)],major=idx in {2,5,8})
-        x0,x1=(0,4608) if side=='west' else (10752,16384)
-        for idx,y in enumerate(ys):add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in {2,5,8})
+        for idx,x in enumerate(xs):
+            y0=2048 if idx%3 else 2944
+            y1=10240 if idx%4 else 9344
+            add(f'block_{side}_v_{idx:02d}',[(x,y0),(x,y1)],major=idx in {2,5})
+        for idx,y in enumerate(ys):
+            if side=='west': x0,x1=(0 if idx%3 else 640),(4608 if idx%4 else 3904)
+            else: x0,x1=(10752 if idx%4 else 11584),(16384 if idx%3 else 15552)
+            add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in {2,5,8})
         for xi,x in enumerate(xs):
             for yi,y in enumerate(ys):
                 if (xi+yi)%2:continue
@@ -87,6 +92,17 @@ def authored_block_network():
                                   'length':'92','width':'34','stripe_width':'5','stripe_gap':'6','stop_bar_gap':'12'})
     add('gwb_authored',[(4608,6144),(10752,6144)],major=True,bridge=True)
     return roads,rp,crossings
+
+
+def authored_surfaces():
+    """One continuous Hudson plus a few compact, intentional neighborhood parks."""
+    water=[[(4864,2048),(5120,2944),(4928,3712),(5184,4544),(4992,5248),(5056,6144),
+            (4928,6976),(5184,7680),(4992,8576),(5120,9344),(4864,10240),
+            (10240,10240),(10496,9344),(10240,8576),(10432,7680),(10240,6976),
+            (10368,6144),(10176,5248),(10432,4544),(10240,3712),(10496,2944),(10240,2048)]]
+    green=[[(1536,7680),(2048,7680),(2048,8320),(1536,8320)],
+           [(13248,2944),(13760,2944),(13760,3456),(13248,3456)]]
+    return {'water':water,'green':green}
 
 
 def read_csv(path: Path):
@@ -144,7 +160,12 @@ def export_semantics(roads_override,rp_override,crossings_override):
         entrances.append({"interior_id": row.get("id", ""), "x": x, "y": y, "kind": row.get("kind", "")})
     write_csv(SEMANTIC / "building_entrances.csv", ("interior_id", "x", "y", "kind"), entrances)
 
-    export_polygons("water_polygons.csv", "water_boundaries.csv")
+    water_rows=[]
+    for polygon_index,polygon in enumerate(authored_surfaces()['water'],1):
+        for order,(wx,wy) in enumerate(polygon):
+            x,y=world_to_master(wx,wy)
+            water_rows.append({'polygon_id':f'hudson_{polygon_index:02d}','point_order':order,'x':x,'y':y})
+    write_csv(SEMANTIC/'water_boundaries.csv',('polygon_id','point_order','x','y'),water_rows)
     connectors = []
     for row in read_csv(SOURCE / "level_connectors.csv"):
         converted = dict(row)
@@ -170,7 +191,7 @@ def export_polygons(source_name, target_name):
 def derive_urban_blocks(roads_override,rp_override):
     old_scale = callback.VIEW_SCALE
     callback.VIEW_SCALE = 0.0625; callback.ORTHOGONAL_GRID_PX = ORTHOGONAL_GRID_PX
-    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,roads_override=roads_override,rp_override=rp_override)
+    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,roads_override=roads_override,rp_override=rp_override,surface_polygons_override=authored_surfaces())
     callback.VIEW_SCALE = old_scale
     blocked = masks["road"].resize((256, 128), Image.Resampling.NEAREST)
     water = masks["water"].resize((256, 128), Image.Resampling.NEAREST)
@@ -259,12 +280,12 @@ def render_masters(additional_buildings, roads_override, rp_override, crossings_
                           yellow_center_lines=False, additional_buildings=additional_buildings,
                           road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,
                           render_existing_buildings=False,roads_override=roads_override,rp_override=rp_override,
-                          draw_source_crosswalks=False,crosswalks_override=crossings_override)
+                          draw_source_crosswalks=False,crosswalks_override=crossings_override,surface_polygons_override=authored_surfaces())
     night = callback.render("unified_master", True, annotate=False, output_dir=OUT,
                             yellow_center_lines=False, additional_buildings=additional_buildings,
                             road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,
                             render_existing_buildings=False,roads_override=roads_override,rp_override=rp_override,
-                            draw_source_crosswalks=False,crosswalks_override=crossings_override)
+                            draw_source_crosswalks=False,crosswalks_override=crossings_override,surface_polygons_override=authored_surfaces())
     targets = []
     for source, final in ((day, OUT / "unified_composition_day.png"),
                           (night, OUT / "unified_composition_night.png")):
