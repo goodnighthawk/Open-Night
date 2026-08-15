@@ -24,10 +24,12 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_08"
+PASS_ID = "recovery_pass_09"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
 ORTHOGONAL_GRID_PX = 192.0
+HUDSON_WEST_X = 4608.0
+HUDSON_EAST_X = 10752.0
 
 SEMANTIC_FILES = (
     "buildings.csv",
@@ -65,8 +67,8 @@ def selected_gameplay_roads():
 
 def authored_block_network():
     roads=[]; rp={}; crossings=[]
-    west_x=[768,1536,2304,3072,3840,4608,5376,6144,6912]
-    east_x=[9472,10240,11008,11776,12544,13312,14080,14848,15616]
+    west_x=[768,1536,2304,3072,3840,4608]
+    east_x=[10752,11520,12288,13056,13824,14592,15360]
     ys=[2304,3072,3840,4608,5376,6144,6912,7680,8448,9216,9984]
     def add(rid,points,major=False,bridge=False):
         roads.append({'road_id':rid,'highway':'primary' if major else 'residential',
@@ -76,16 +78,14 @@ def authored_block_network():
         rp[rid]=points
     for side,xs in (('west',west_x),('east',east_x)):
         for idx,x in enumerate(xs):add(f'block_{side}_v_{idx:02d}',[(x,2048),(x,10240)],major=idx in {2,5,8})
-        x0,x1=(0,7488) if side=='west' else (8896,16384)
+        x0,x1=(0,4608) if side=='west' else (10752,16384)
         for idx,y in enumerate(ys):add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in {2,5,8})
         for xi,x in enumerate(xs):
             for yi,y in enumerate(ys):
                 if (xi+yi)%2:continue
                 crossings.append({'id':f'cross_{side}_{xi:02d}_{yi:02d}','x':x,'y':y,'angle':'0',
                                   'length':'92','width':'34','stripe_width':'5','stripe_gap':'6','stop_bar_gap':'12'})
-    add('gwb_authored',[(6912,6144),(9472,6144)],major=True,bridge=True)
-    add('hudson_west_arterial',[(7488,2048),(7488,10240)],major=True)
-    add('hudson_east_arterial',[(8896,2048),(8896,10240)],major=True)
+    add('gwb_authored',[(4608,6144),(10752,6144)],major=True,bridge=True)
     return roads,rp,crossings
 
 
@@ -215,8 +215,12 @@ def generate_iterated_buildings(roads_override,rp_override):
         margin=max(28,min(52,min(w,h)*.16))
         bw=w-2*margin;bh=h-2*margin
         if bw<80 or bh<80:continue
+        building_left=(x+margin)*2
+        building_right=building_left+bw*2
+        if building_left < HUDSON_EAST_X and building_right > HUDSON_WEST_X:
+            continue
         additions.append({'id':f'block_building_{len(additions)+1:04d}',
-                          'x':round((x+margin)*2,2),'y':round((y+margin)*2+2048,2),
+                          'x':round(building_left,2),'y':round((y+margin)*2+2048,2),
                           'w':round(bw*2,2),'h':round(bh*2,2),
                           'archetype_id':families[idx%len(families)],
                           'height_scale':round(.62+(idx%5)*.08,2),
@@ -229,6 +233,26 @@ def generate_iterated_buildings(roads_override,rp_override):
         collision.append({'building_id':row['id'],'x':x,'y':y,'w':round(float(row['w'])*.5,2),'h':round(float(row['h'])*.5,2)})
     write_csv(SEMANTIC/'buildings.csv',('building_id','x','y','w','h'),collision)
     return additions
+
+
+def validate_hudson_exclusion(roads, road_points, buildings):
+    """Fail generation if anything except the authored bridge enters the river."""
+    violations=[]
+    for road in roads:
+        road_id=road['road_id']
+        if road.get('bridge','false').lower() == 'true':
+            continue
+        for x,_ in road_points[road_id]:
+            if HUDSON_WEST_X < float(x) < HUDSON_EAST_X:
+                violations.append(f'road:{road_id}')
+                break
+    for building in buildings:
+        left=float(building['x']); right=left+float(building['w'])
+        if left < HUDSON_EAST_X and right > HUDSON_WEST_X:
+            violations.append(f"building:{building['id']}")
+    if violations:
+        raise RuntimeError('Hudson exclusion audit failed: '+', '.join(violations[:12]))
+    return len(violations)
 
 def render_masters(additional_buildings, roads_override, rp_override, crossings_override):
     day = callback.render("unified_master", False, annotate=False, output_dir=OUT,
@@ -279,7 +303,7 @@ def git_source():
         return "unknown"
 
 
-def write_manifest(masters, block_count, tile_count, infill_count, road_count):
+def write_manifest(masters, block_count, tile_count, infill_count, road_count, hudson_violations):
     rows = [
         {"key": "pass_id", "value": PASS_ID},
         {"key": "generator_architecture", "value": "block_first_unified_composition_v1"},
@@ -292,6 +316,9 @@ def write_manifest(masters, block_count, tile_count, infill_count, road_count):
         {"key": "iterated_infill_buildings", "value": str(infill_count)},
         {"key": "selected_gameplay_roads", "value": str(road_count)},
         {"key": "road_selection_rule", "value": "authored_reference_anchor_block_grid_v1"},
+        {"key": "hudson_exclusion_band_world", "value": f"{HUDSON_WEST_X:g}..{HUDSON_EAST_X:g}"},
+        {"key": "hudson_allowed_crossing", "value": "gwb_authored"},
+        {"key": "non_bridge_hudson_violations", "value": str(hudson_violations)},
         {"key": "road_width_scale", "value": str(ROAD_WIDTH_SCALE)},
         {"key": "sidewalk_scale", "value": str(SIDEWALK_SCALE)},
         {"key": "orthogonal_grid_px", "value": str(ORTHOGONAL_GRID_PX)},
@@ -315,9 +342,10 @@ def main():
     export_semantics(roads,rp,crossings)
     block_count = derive_urban_blocks(roads,rp)
     infill = generate_iterated_buildings(roads,rp)
+    hudson_violations = validate_hudson_exclusion(roads,rp,infill)
     masters = render_masters(infill,roads,rp,crossings)
     tile_count = tile_masters(masters)
-    write_manifest(masters, block_count, tile_count, len(infill), len(roads))
+    write_manifest(masters, block_count, tile_count, len(infill), len(roads), hudson_violations)
     print(f"PASS={PASS_ID} masters=2 tiles={tile_count} roads={len(roads)} blocks={block_count} infill={len(infill)} semantic_csvs={len(SEMANTIC_FILES)}")
 
 
