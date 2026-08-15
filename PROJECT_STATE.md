@@ -6,8 +6,8 @@ truth.
 
 ## Current checkpoint
 
-- Release under development: **Open Night v0.7.2**
-- Working branch: `agent/v0.7.2-unified-movement-sync`
+- Release under development: **Open Night v0.7.3**
+- Working branch: `agent/v0.7.3-moderated-bug-reports`
 - Integration base: latest accepted `main` map checkpoint
 - Playable map: `map_001_gwb_corridor` only
 - Map corridor: Fort Lee / GWB approaches / George Washington Bridge /
@@ -47,6 +47,11 @@ truth.
   crouch/prone stand transitions, and broadcasts every pose to nearby players.
 - Made double jump visibly larger than single jump in both the movement preview
   and multiplayer rendering.
+- Added the v0.7.3 Railway-backed player-report queue. Reports remain pending
+  until a token-authenticated human reviews the text/screenshot and explicitly
+  approves or rejects the exact report ID.
+- Limited screenshots, salted reporter identifiers, rate-limited submissions,
+  and made `feedback/approved/` the only agent-actionable player-feedback path.
 
 ## Current next pass
 
@@ -68,6 +73,7 @@ truth.
 - Open the authoritative default playable map: `RUN_MAP_VIEWER.bat` (pass
   `--choose` only when intentionally browsing another portable map)
 - Deploy server: `DEPLOY_OPEN_NIGHT_SERVER.bat`
+- Review pending bug reports: `REVIEW_BUG_REPORTS.bat`
 
 ## Session rules that reduce work usage
 

@@ -12,7 +12,7 @@ if not exist ".venv\Scripts\python.exe" (
 set "WEB_STAGE=%TEMP%\python_mmo_v22_web_%RANDOM%_%RANDOM%"
 echo.
 echo ==============================================================
-echo   Open Night v0.7.2 - full Pygame browser client
+echo   Open Night v0.7.3 - full Pygame browser client
 echo ==============================================================
 echo Preparing a clean browser build without the desktop .venv...
 
@@ -33,7 +33,7 @@ echo The browser game automatically connects to the configured Railway server:
 echo   wss://open-night-production.up.railway.app
 echo Use ?server=host:port in the browser URL only to override it.
 echo.
-".venv\Scripts\python.exe" -m pygbag --app_name open-night --package open-night-v0-7-2 --title "Open Night v0.7.2" --version 0.9.2 --port 8000 --ume_block 0 --disable-sound-format-error "%WEB_STAGE%"
+".venv\Scripts\python.exe" -m pygbag --app_name open-night --package open-night-v0-7-3 --title "Open Night v0.7.3" --version 0.9.2 --port 8000 --ume_block 0 --disable-sound-format-error "%WEB_STAGE%"
 set "RC=%ERRORLEVEL%"
 
 if exist "%WEB_STAGE%" rmdir /s /q "%WEB_STAGE%" >nul 2>nul

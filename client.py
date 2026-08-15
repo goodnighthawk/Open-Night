@@ -1295,16 +1295,19 @@ class Game:
         local_x = x - cx * chunk_size
         local_y = y - cy * chunk_size
         ai_kind, ai_id, ai_distance = self._nearest_ai_context(x, y)
+        description = self.issue_report_note.strip()
+        if not description:
+            description = f"{self.issue_report_category.replace('_', ' ')} issue reported with F10 in {chunk_label(cx, cy)}"
         payload = {
             "source": source,
             "reporter": str(getattr(self.network, "name", ""))[:24],
-            "description": self.issue_report_note.strip(),
+            "description": description,
             "target_version": "next",
             "duplicate_of": "",
             "build_version": self._build_version(),
-            "status": "open",
+            "status": "pending_server_review",
             "category": self.issue_report_category,
-            "note": self.issue_report_note.strip(),
+            "note": description,
             "map_id": str(self.map_config.get("id", "")),
             "map_name": str(self.map_config.get("name", "")),
             "chunk_id": chunk_label(cx, cy),
@@ -1324,19 +1327,43 @@ class Game:
         }
         try:
             capture = self.issue_report_snapshot if self.issue_report_snapshot is not None else self.screen
-            _, shot_path, feedback_csv, feedback_shot = save_issue_report(capture, payload)
+            _, shot_path = save_issue_report(capture, payload)
         except Exception as exc:
             self.notice = f"Issue report failed: {exc}"
             self.notice_until = time.monotonic() + 3.0
             return
+
+        # The server owns the moderation queue. The local PNG/CSV above is only
+        # a recovery copy; it is never placed in ChatGPT-readable Git feedback
+        # until a human reviewer explicitly approves the server report.
+        screenshot_base64 = ""
+        try:
+            screenshot_bytes = shot_path.read_bytes()
+            if len(screenshot_bytes) <= 1_500_000:
+                screenshot_base64 = base64.b64encode(screenshot_bytes).decode("ascii")
+        except OSError:
+            pass
+        self.network.send({
+            "type": "bug_report_submit",
+            "source": source,
+            "category": str(payload["category"]),
+            "description": str(payload["description"])[:400],
+            "build_version": str(payload["build_version"])[:160],
+            "screenshot_base64": screenshot_base64,
+            "context": {
+                key: payload.get(key, "")
+                for key in (
+                    "camera_rotation_deg", "camera_zoom", "chunk_id", "chunk_x", "chunk_y",
+                    "local_x", "local_y", "nearest_ai_distance", "nearest_ai_id",
+                    "nearest_ai_kind",
+                )
+            },
+        })
         self.issue_report_open = False
         self.issue_report_note = ""
         self.issue_report_snapshot = None
-        if feedback_csv is not None and feedback_shot is not None:
-            label = "Map feedback" if payload["category"] == "map_art" else "Bug"
-            self.notice = f"{label} saved — {feedback_shot.parent}\\{feedback_shot.name}"
-        else:
-            self.notice = f"Flagged {payload['category'].upper()} issue in {payload['chunk_id']} — {shot_path.name}"
+        label = "Map feedback" if payload["category"] == "map_art" else "Bug"
+        self.notice = f"{label} queued for server review — local backup {shot_path.name}"
         self.notice_until = time.monotonic() + 3.0
 
     def handle_issue_report_key(self, event: pygame.event.Event) -> bool:
@@ -1744,6 +1771,13 @@ class Game:
             elif kind == "notice":
                 self.notice = str(message.get("text", ""))
                 self.notice_until = time.monotonic() + 3.0
+            elif kind == "bug_report_receipt":
+                report_id = int(message.get("report_id", 0) or 0)
+                self.notice = f"Bug report #{report_id} saved — pending human approval"
+                self.notice_until = time.monotonic() + 5.0
+            elif kind == "bug_report_error":
+                self.notice = "Bug report kept locally — " + str(message.get("text", "server upload failed"))
+                self.notice_until = time.monotonic() + 5.0
 
     def input_vector(self) -> tuple[float, float]:
         # v2.4.1: on-foot WASD is camera-relative again: W is always screen-up /

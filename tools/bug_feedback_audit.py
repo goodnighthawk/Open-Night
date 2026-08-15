@@ -18,7 +18,6 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="open_night_bug_audit_") as raw_root:
         temp_root = Path(raw_root)
         os.environ["PYMMO_SHARED_DATA"] = str(temp_root / "shared")
-        os.environ["OPEN_NIGHT_FEEDBACK_ROOT"] = str(temp_root / "feedback")
 
         try:
             import pygame
@@ -54,7 +53,7 @@ def main() -> int:
             "description": "Bicycle spawned in water beside the west bridge",
             "note": "Bicycle spawned in water beside the west bridge",
             "build_version": "Open Night audit",
-            "status": "open",
+            "status": "pending_server_review",
             "target_version": "next",
             "duplicate_of": "",
             "map_id": "audit_map",
@@ -65,15 +64,13 @@ def main() -> int:
             "world_x": 120.0,
             "world_y": 240.0,
         }
-        shared_csv, shared_shot, feedback_csv, feedback_shot = save_issue_report(frame, payload)
+        shared_csv, shared_shot = save_issue_report(frame, payload)
         assert shared_csv.is_file() and shared_shot.is_file()
-        assert feedback_csv is not None and feedback_csv.is_file()
-        assert feedback_shot is not None and feedback_shot.is_file()
         from PIL import Image
-        with Image.open(feedback_shot) as captured:
+        with Image.open(shared_shot) as captured:
             assert captured.size == (96, 64)
 
-        with feedback_csv.open("r", encoding="utf-8-sig", newline="") as handle:
+        with shared_csv.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = list(csv.DictReader(handle))
         assert len(rows) == 1
         row = rows[0]
@@ -81,7 +78,7 @@ def main() -> int:
         assert row["reporter"] == "AuditPlayer"
         assert row["description"].startswith("Bicycle spawned")
         assert row["screenshot"].startswith("screenshots/")
-        assert row["status"] == "open" and row["target_version"] == "next"
+        assert row["status"] == "pending_server_review"
 
     client = (ROOT / "client.py").read_text(encoding="utf-8")
     reporter = (ROOT / "gameplay" / "issue_reporter.py").read_text(encoding="utf-8")
@@ -90,13 +87,16 @@ def main() -> int:
     assert 'command == "/bug"' in client and '"chat_/bug"' in client
     assert 'command == "/mapfeedback"' in client and '"chat_/mapfeedback"' in client
     assert '"map_art" if is_map_feedback else "bug"' in client
-    assert "OPEN_NIGHT_FEEDBACK_ROOT" in reporter and '"feedback" / "next_version"' in reporter
+    assert "pending_server_review" in reporter
+    assert '"feedback" / "next_version"' not in reporter
+    assert '"type": "bug_report_submit"' in client
+    assert 'kind == "bug_report_receipt"' in client
     for removed in ("head_tracks_mouse", "head_aim_radians", "compute_aim_angle", "def aim_angle"):
         assert removed not in client, removed
     assert "head_direction = direction" in character
     assert "head_tracks_mouse" not in character and "head_tracks_mouse" not in settings
     print("BUG FEEDBACK / BODY-FACING AUDIT: PASS")
-    print("  /bug + /mapfeedback CSV/PNG capture and mouse-head removal verified")
+    print("  /bug + /mapfeedback local recovery capture and moderated upload verified")
     return 0
 
 

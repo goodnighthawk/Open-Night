@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
 from typing import Any
 
@@ -173,6 +174,35 @@ class InventoryDatabase:
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bug_reports (
+                    report_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                    reporter_account_hash CHAR(64) NOT NULL,
+                    reporter_name VARCHAR(32) NOT NULL,
+                    source VARCHAR(32) NOT NULL,
+                    category VARCHAR(32) NOT NULL,
+                    description VARCHAR(500) NOT NULL,
+                    build_version VARCHAR(160) NOT NULL,
+                    map_id VARCHAR(96) NOT NULL,
+                    map_name VARCHAR(160) NOT NULL,
+                    world_x DOUBLE NOT NULL,
+                    world_y DOUBLE NOT NULL,
+                    level SMALLINT NOT NULL DEFAULT 0,
+                    in_vehicle BOOLEAN NOT NULL DEFAULT FALSE,
+                    vehicle_id VARCHAR(96) NOT NULL DEFAULT '',
+                    context_json MEDIUMTEXT NOT NULL,
+                    screenshot MEDIUMBLOB NULL,
+                    screenshot_sha256 CHAR(64) NOT NULL DEFAULT '',
+                    reviewed_at TIMESTAMP NULL DEFAULT NULL,
+                    reviewed_by VARCHAR(64) NOT NULL DEFAULT '',
+                    review_note VARCHAR(500) NOT NULL DEFAULT '',
+                    INDEX idx_bug_reports_status_created (status, created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
             conn.commit()
             cur.close()
         finally:
@@ -305,6 +335,114 @@ class InventoryDatabase:
                 )
             conn.commit()
             cur.close()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def create_bug_report(
+        self,
+        *,
+        reporter_account_hash: str,
+        reporter_name: str,
+        source: str,
+        category: str,
+        description: str,
+        build_version: str,
+        map_id: str,
+        map_name: str,
+        world_x: float,
+        world_y: float,
+        level: int,
+        in_vehicle: bool,
+        vehicle_id: str,
+        context: dict[str, Any],
+        screenshot: bytes | None,
+        screenshot_sha256: str,
+    ) -> int:
+        """Store an untrusted player report in the human-moderation queue."""
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """INSERT INTO bug_reports
+                (status, reporter_account_hash, reporter_name, source, category, description,
+                 build_version, map_id, map_name, world_x, world_y, level, in_vehicle,
+                 vehicle_id, context_json, screenshot, screenshot_sha256)
+                VALUES ('pending', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    reporter_account_hash, reporter_name, source, category, description,
+                    build_version, map_id, map_name, float(world_x), float(world_y),
+                    int(level), bool(in_vehicle), vehicle_id,
+                    json.dumps(context, ensure_ascii=False, separators=(",", ":")),
+                    screenshot, screenshot_sha256,
+                ),
+            )
+            report_id = int(cur.lastrowid)
+            conn.commit()
+            cur.close()
+            return report_id
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def list_bug_reports(self, status: str = "pending", limit: int = 100) -> list[dict[str, Any]]:
+        allowed = {"pending", "approved", "rejected"}
+        clean_status = status if status in allowed else "pending"
+        clean_limit = max(1, min(250, int(limit)))
+        conn = self._connect()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(
+                """SELECT report_id, created_at, status, reporter_name, source, category,
+                description, build_version, map_id, map_name, world_x, world_y, level,
+                in_vehicle, vehicle_id, screenshot_sha256, reviewed_at, reviewed_by, review_note
+                FROM bug_reports WHERE status=%s ORDER BY created_at ASC LIMIT %s""",
+                (clean_status, clean_limit),
+            )
+            rows = list(cur.fetchall())
+            cur.close()
+            return rows
+        finally:
+            conn.close()
+
+    def get_bug_report(self, report_id: int) -> dict[str, Any] | None:
+        conn = self._connect()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT * FROM bug_reports WHERE report_id=%s", (int(report_id),))
+            row = cur.fetchone()
+            cur.close()
+            return row
+        finally:
+            conn.close()
+
+    def moderate_bug_report(
+        self,
+        report_id: int,
+        decision: str,
+        reviewed_by: str,
+        review_note: str,
+    ) -> bool:
+        """Approve/reject a pending report exactly once; return whether it changed."""
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("Decision must be approved or rejected.")
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """UPDATE bug_reports SET status=%s, reviewed_at=CURRENT_TIMESTAMP,
+                reviewed_by=%s, review_note=%s
+                WHERE report_id=%s AND status='pending'""",
+                (decision, reviewed_by, review_note, int(report_id)),
+            )
+            changed = cur.rowcount == 1
+            conn.commit()
+            cur.close()
+            return changed
         except Exception:
             conn.rollback()
             raise

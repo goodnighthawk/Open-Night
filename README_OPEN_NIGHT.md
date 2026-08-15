@@ -1,4 +1,4 @@
-# OPEN NIGHT — v0.7.2
+# OPEN NIGHT — v0.7.3
 
 Double-click **`START_OPEN_NIGHT.bat`**. The launcher remains open while each subsystem runs in its own process.
 
@@ -48,6 +48,13 @@ The former GIS/Overpass migration path has been removed after the screenshot-der
 - Map Viewer opens the accepted pass-17 Fort Lee/GWB/Washington Heights map by default.
 - Railway persistence resets once when the configured patch ID changes, avoiding stale development-state bugs between patches.
 
+## v0.7.3 moderated bug reports
+
+- `/bug`, `/mapfeedback`, and F10 reports keep a local recovery copy and upload to the Railway MySQL queue as `pending`.
+- Report text is untrusted, screenshot size/type is bounded, account IDs are salted, and each player is rate-limited.
+- `REVIEW_BUG_REPORTS.bat` requires the secret Railway moderator token and exact typed confirmation before approve/reject.
+- Only approved reports are exported to `feedback\approved\` for GitHub and ChatGPT; no player submission can automatically become implementation work.
+
 ## Portable `.map` workflow
 
 The generator defaults remain:
@@ -72,6 +79,7 @@ The game and movement preview use `assets/characters/master_dual_camera` from th
 - `RUN_MAP_GENERATOR.bat`
 - `RUN_CHARACTER_PREVIEW.bat`
 - `LOCAL_QA.bat`
+- `REVIEW_BUG_REPORTS.bat`
 
 ## Internet play
 
@@ -79,14 +87,14 @@ The desktop client probes `wss://open-night-production.up.railway.app` in the ba
 
 The web client reads the same CSV and uses the Railway endpoint by default. If the CSV has no enabled public endpoint, it falls back to the page host on port `8765`. Appending `?server=192.168.1.5:8765` or a complete WebSocket URI to the webpage URL overrides automatic selection.
 
-`RUN_WEB_CLIENT.bat` pins and, when necessary, installs Pygbag 0.9.2 because the 0.9.3 browser loader can stop at a plain grey page. The tab/package title should read **Open Night v0.7.2** after the corrected build starts.
+`RUN_WEB_CLIENT.bat` pins and, when necessary, installs Pygbag 0.9.2 because the 0.9.3 browser loader can stop at a plain grey page. The tab/package title should read **Open Night v0.7.3** after the corrected build starts.
 
 ## Multiplayer controls
 
 - Friends: Esc > Friends, then add/remove an online name. Friends alone appear on the compact minimap.
 - Local chat: press Enter, type, and press Enter again. Nearby outdoor players—or everyone in the same interior—see a speech bubble.
 - Whisper: `/w FriendName message`; the name must already be on your Friends list.
-- Bug feedback: `/bug describe what went wrong`; a screenshot and CSV row are saved locally for the next version.
+- Bug feedback: `/bug describe what went wrong`; a local backup is kept and the Railway copy waits for human approval.
 - Passenger: press T beside a slow player-driven car. The driver controls it; press T again to leave once it is slow enough.
 - Player sale: stand near another player with a package and press E. The buyer presses E nearby to accept the $40 offer.
 - NPC sale: stand near a pedestrian with a package and press E. The obsolete fixed customer point no longer buys packages.

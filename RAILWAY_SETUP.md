@@ -1,4 +1,4 @@
-# Open Night v0.7.2 — Railway internet server with MySQL
+# Open Night v0.7.3 — Railway internet server with MySQL
 
 The desktop client automatically checks the configured Open Night Railway server when it starts. If the server answers the real game-protocol probe, it appears at the top of `AVAILABLE SERVERS`, is selected automatically, and can be joined with one click.
 
@@ -39,6 +39,27 @@ MYSQLDATABASE=${{MySQL.MYSQLDATABASE}}
 
 The server uses Railway's private service variables; do not paste database passwords into the repository.
 
+## One-time human bug-review setup
+
+1. Generate a private moderator token in PowerShell:
+
+```powershell
+[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+2. In the Railway `open-night` service, add `PYMMO_BUG_ADMIN_TOKEN` with that
+   generated value. Keep it secret and do not commit it to GitHub.
+3. Deploy the staged change.
+4. On your desktop, run `REVIEW_BUG_REPORTS.bat`. Paste the same token into its
+   hidden prompt.
+
+Player `/bug`, `/mapfeedback`, and F10 submissions are stored in MySQL as
+`pending`. The review tool displays the report and opens its screenshot. It
+requires you to type `APPROVE <report-id>` or `REJECT <report-id>` exactly.
+Only approval exports a sanitized row/PNG into `feedback\approved\`, where it
+can be committed and made available to ChatGPT. Player text never triggers code
+changes automatically.
+
 ## Joining
 
 1. Double-click `START_OPEN_NIGHT.bat`.
@@ -54,6 +75,6 @@ Run `DEPLOY_OPEN_NIGHT_SERVER.bat` from this version before testing it with frie
 
 ## Prototype patch-reset policy
 
-Accounts and inventory persist across ordinary Railway restarts. The server stores the active patch ID in MySQL. When `PYMMO_PATCH_ID` changes, it clears prototype accounts and inventories once, then records the new ID. Restarting or redeploying the same patch does not clear data again.
+Accounts and inventory persist across ordinary Railway restarts. The server stores the active patch ID in MySQL. When `PYMMO_PATCH_ID` changes, it clears prototype accounts and inventories once, then records the new ID. Restarting or redeploying the same patch does not clear data again. The moderation queue is intentionally not cleared by a gameplay patch reset.
 
 For every future patch, update `PYMMO_PATCH_ID` in `railway.toml`. Remove `PYMMO_RESET_DB_ON_PATCH=true` only when permanent persistence is ready.

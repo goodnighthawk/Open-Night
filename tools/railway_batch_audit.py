@@ -35,15 +35,28 @@ def main() -> int:
         raise SystemExit("Railway command would terminate parent batch:\n" + "\n".join(bare_calls))
 
     railway = RAILWAY.read_text(encoding="utf-8", errors="strict").lower()
-    railway_required = ("pymmo_reset_db_on_patch=true", "pymmo_patch_id=", "--no-discovery")
+    railway_required = (
+        "pymmo_reset_db_on_patch=true",
+        "pymmo_patch_id=open-night-v0.7.3",
+        "--no-discovery",
+    )
     railway_missing = [token for token in railway_required if token not in railway]
     if "--memory-db" in railway:
         raise SystemExit("Railway still uses --memory-db; MySQL persistence would be disabled.")
     if railway_missing:
         raise SystemExit("Railway MySQL patch-reset config missing: " + ", ".join(railway_missing))
 
+    server = (ROOT / "server.py").read_text(encoding="utf-8", errors="strict").lower()
+    database = (ROOT / "database.py").read_text(encoding="utf-8", errors="strict").lower()
+    setup = (ROOT / "RAILWAY_SETUP.md").read_text(encoding="utf-8", errors="strict").lower()
+    if "create table if not exists bug_reports" not in database:
+        raise SystemExit("Railway MySQL schema is missing the moderated bug-report queue.")
+    for token in ("pymmo_bug_admin_token", "bug_admin_hello", "bug_report_submit"):
+        if token not in server and token not in setup:
+            raise SystemExit(f"Railway bug moderation setup missing: {token}")
+
     print("RAILWAY BATCH AUDIT: PASS")
-    print("All railway.cmd calls return safely; Railway MySQL patch-reset mode is enabled.")
+    print("All railway.cmd calls return safely; MySQL patch reset and moderated reports are enabled.")
     return 0
 
 

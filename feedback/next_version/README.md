@@ -1,11 +1,13 @@
-# Next-version player feedback
+# Next-version development tasks
 
-While playing, press Enter and submit:
+This folder contains developer-authored planning only. Internet player reports
+no longer write here directly.
 
-`/bug describe what went wrong and where`
+While playing, `/bug description`, `/mapfeedback description`, and F10 keep a
+private local recovery copy and submit to the Railway MySQL queue as `pending`.
+Run `REVIEW_BUG_REPORTS.bat` to inspect and explicitly approve or reject each
+report. Only approved reports are exported to `feedback/approved/`, which is the
+sole player-feedback location development agents may use.
 
-Open Night creates/appends the description and gameplay context in `next_version_feedback.csv` and saves a PNG in `screenshots/`. F10 reports are mirrored here too. The generated CSV and PNG files are intentionally not part of a clean checkout, so they do not prevent the launcher from fast-forwarding to a new game version.
-
-These files stay on the player's computer. When this game is running from a cloned GitHub repository, GitHub Desktop will show new feedback rows and screenshots as local changes. Review them before committing and pushing; that deliberate push is what makes the reports available for the next development pass.
-
-Do not record passwords, phone numbers, private chat, or other sensitive information in a bug description or screenshot.
+Do not record passwords, phone numbers, private chat, or other sensitive
+information in a bug description or screenshot.

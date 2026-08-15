@@ -1,4 +1,4 @@
-# Open Night — v0.7.2
+# Open Night — v0.7.3
 
 ## Start
 
@@ -24,11 +24,13 @@ v0.7.1 adds an in-game next-version feedback path. Type `/bug description` in ch
 
 v0.7.2 integrates the movement-preview controls into the authoritative multiplayer game. Hold Shift with WASD to run at **3x** speed. Space jumps forward; pressing Space again performs a larger double jump and lands prone. C crouches, X toggles prone/standing, and the one-second stand transition is synchronized for nearby players. The accepted pass-17 Fort Lee/GWB/Washington Heights map remains the default, and Railway persistence resets once per patch ID while this development policy is active.
 
+v0.7.3 replaces direct Git feedback writes with a moderated Railway queue. `/bug description`, `/mapfeedback description`, and F10 captures keep a private local backup and upload bounded report data plus a PNG to MySQL as `pending`. Reports are rate-limited, account identifiers are salted, and player text is treated as untrusted evidence. Only a token-authenticated human using `REVIEW_BUG_REPORTS.bat` can approve a report and export it into `feedback/approved/` for ChatGPT or another development agent.
+
 Bicycles now use compact **0.72×**, strict top-down body art. The map compiler rejects bicycle loops that touch exposed water, while bridge-deck cycling remains valid. Bicycles may share the road surface and do not hard-block one another; cars and bicycles use full rotated body boundaries and cannot occupy the same space.
 
 Movement transitions now trigger an automatic jump that renders at 1.35× scale with a small lift. Vehicle/world and car-to-car contacts use rotated body boundaries. Moving vehicles can run over NPC pedestrians, leaving a temporary stylized red stain before a replacement NPC respawns on the route. Point-based selling is removed: sell directly to nearby NPCs, or make a player offer that the buyer accepts with E.
 
-`LOCAL_QA.bat` runs 23 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social, feedback-capture, collision, traffic, multi-level, launcher, internet-discovery and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate.
+`LOCAL_QA.bat` runs 24 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social, moderated-feedback, collision, traffic, multi-level, launcher, internet-discovery and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate.
 
 ## v2.5 changes
 
@@ -46,7 +48,7 @@ Movement transitions now trigger an automatic jump that renders at 1.35× scale 
 
 Map 001 is a 16×12 grid of 1024px chunks (192 chunks, preserving the prior total area while fitting the globally orthogonalized reference extent). The screenshot-derived world is release-authoritative. Geometry is authored from the five bundled reference-image layers and explicit trace CSVs; no live map service is queried.
 
-On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relative. Space jumps, C crouches, T enters/drives/rides/exits vehicles, E interacts/trades/enters rooms, Enter chats, `/bug description` captures feedback, the mouse provides bounded camera look-ahead, middle-mouse rotates the camera, and the mouse wheel zooms. Esc opens the scrollable Settings and Friends pages.
+On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relative. Space jumps, C crouches, T enters/drives/rides/exits vehicles, E interacts/trades/enters rooms, Enter chats, `/bug description` submits a pending human-review report, the mouse provides bounded camera look-ahead, middle-mouse rotates the camera, and the mouse wheel zooms. Esc opens the scrollable Settings and Friends pages.
 
 ## Useful launchers
 
@@ -60,6 +62,7 @@ On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relat
 - `RUN_CHARACTER_PREVIEW.bat` — movement/sprite tester
 - `RUN_MAP_VIEWER.bat` — portable `.map` viewer with dynamic level filtering
 - `DEPLOY_OPEN_NIGHT_SERVER.bat` — update the existing Railway internet service
+- `REVIEW_BUG_REPORTS.bat` — inspect, approve/reject, and export Railway reports
 - `LOCAL_QA.bat` — non-destructive validation suite
 
 The obsolete GIS/Overpass importer, settings, scripts and dependencies have been removed from this branch.

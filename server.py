@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 import base64
 import asyncio
+import binascii
 import getpass
+import hashlib
+import hmac
+from io import BytesIO
 import json
 import math
 import os
@@ -78,7 +82,13 @@ PORT = 8765
 SERVER_NAME = "Map 001 / Compact 2x"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
-SERVER_VERSION = "0.7.2"
+SERVER_VERSION = "0.7.3"
+BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
+BUG_REPORT_COOLDOWN_SECONDS = 45.0
+BUG_REPORT_SOURCE_COOLDOWN_SECONDS = 15.0
+BUG_REPORT_SESSION_LIMIT = 10
+BUG_ADMIN_TOKEN = os.getenv("PYMMO_BUG_ADMIN_TOKEN", "").strip()
+BUG_REPORT_SALT = os.getenv("PYMMO_BUG_REPORT_SALT", BUG_ADMIN_TOKEN or "open-night-local").strip()
 
 ACTIVE_MAP_ID = DEFAULT_MAP_ID
 ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
@@ -254,6 +264,9 @@ class ClientSession:
     jump_velocity_x: float = 0.0
     jump_velocity_y: float = 0.0
     last_chat_time: float = 0.0
+    last_bug_report_time: float = 0.0
+    bug_reports_this_session: int = 0
+    bug_rate_key: str = ""
 
 
 def reset_on_foot_actions(session: ClientSession) -> None:
@@ -1278,6 +1291,8 @@ clients_lock = asyncio.Lock()
 trade_offers: dict[str, tuple[str, float]] = {}
 # Development-only fallback when --memory-db is selected.
 memory_accounts: dict[str, dict] = {}
+# Salted, in-memory network-source throttling. Raw addresses are never stored.
+bug_report_source_times: dict[str, float] = {}
 
 
 def print_machine_status() -> None:
@@ -2029,6 +2044,231 @@ async def process_chat(session: ClientSession, message: dict) -> None:
     )
 
 
+def _clean_report_text(raw: object, limit: int) -> str:
+    text = "".join(ch for ch in str(raw or "") if ch.isprintable())
+    return " ".join(text.split())[:limit].strip()
+
+
+def _sanitize_bug_screenshot(raw: bytes) -> bytes:
+    """Decode and re-encode a bounded PNG, stripping metadata and payloads."""
+    if len(raw) > BUG_REPORT_MAX_SCREENSHOT_BYTES or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("screenshot is not a supported PNG")
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:
+        raise ValueError("server screenshot validation is unavailable") from exc
+    try:
+        Image.MAX_IMAGE_PIXELS = 4_000_000
+        with Image.open(BytesIO(raw)) as opened:
+            if opened.format != "PNG":
+                raise ValueError("screenshot is not a supported PNG")
+            width, height = opened.size
+            if width < 1 or height < 1 or width * height > 4_000_000:
+                raise ValueError("screenshot dimensions are unsupported")
+            opened.load()
+            clean = opened.convert("RGB")
+            clean.thumbnail((1280, 720))
+            output = BytesIO()
+            clean.save(output, format="PNG", optimize=True)
+            data = output.getvalue()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+        raise ValueError("screenshot could not be decoded") from exc
+    if len(data) > BUG_REPORT_MAX_SCREENSHOT_BYTES:
+        raise ValueError("sanitized screenshot is too large")
+    return data
+
+
+def _bug_report_json(row: dict, *, include_screenshot: bool = False) -> dict:
+    """Return moderator-safe JSON without the private account hash."""
+    result: dict = {}
+    for key, value in row.items():
+        if key == "reporter_account_hash":
+            continue
+        if key == "screenshot":
+            if include_screenshot and value:
+                result["screenshot_base64"] = base64.b64encode(bytes(value)).decode("ascii")
+            continue
+        if key == "context_json":
+            try:
+                result["context"] = json.loads(str(value or "{}"))
+            except json.JSONDecodeError:
+                result["context"] = {}
+            continue
+        if hasattr(value, "isoformat"):
+            result[key] = value.isoformat()
+        else:
+            result[key] = value
+    return result
+
+
+async def process_bug_report(session: ClientSession, message: dict) -> None:
+    """Validate and enqueue an untrusted player report for human moderation."""
+    now = time.monotonic()
+    if session.bug_reports_this_session >= BUG_REPORT_SESSION_LIMIT:
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": "session report limit reached; keep the local backup",
+        })
+        return
+    remaining = BUG_REPORT_COOLDOWN_SECONDS - (now - session.last_bug_report_time)
+    if remaining > 0.0:
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": f"please wait {max(1, int(math.ceil(remaining)))} seconds before another report",
+        })
+        return
+    source_last = bug_report_source_times.get(session.bug_rate_key, -10_000.0)
+    source_remaining = BUG_REPORT_SOURCE_COOLDOWN_SECONDS - (now - source_last)
+    if session.bug_rate_key and source_remaining > 0.0:
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": f"network report limit: wait {max(1, int(math.ceil(source_remaining)))} seconds",
+        })
+        return
+    if not USE_MYSQL or DB is None:
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": "the server review queue is unavailable",
+        })
+        return
+
+    description = _clean_report_text(message.get("description"), 400)
+    if len(description) < 5:
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": "describe the problem with at least 5 characters",
+        })
+        return
+    category = _clean_report_text(message.get("category"), 32).lower()
+    allowed_categories = {"bug", "map_art", "art", "ai", "collision_nav", "other"}
+    if category not in allowed_categories:
+        category = "other"
+    source = _clean_report_text(message.get("source"), 32) or "chat_/bug"
+    build_version = _clean_report_text(message.get("build_version"), 160) or "unknown"
+    raw_context = message.get("context")
+    context = raw_context if isinstance(raw_context, dict) else {}
+    context = {
+        str(key)[:48]: _clean_report_text(value, 160)
+        for key, value in list(context.items())[:24]
+    }
+
+    screenshot: bytes | None = None
+    screenshot_sha256 = ""
+    screenshot_text = str(message.get("screenshot_base64", ""))
+    if screenshot_text:
+        try:
+            screenshot = base64.b64decode(screenshot_text, validate=True)
+        except (binascii.Error, ValueError):
+            await send_json(session.websocket, {"type": "bug_report_error", "text": "invalid screenshot data"})
+            return
+        try:
+            screenshot = _sanitize_bug_screenshot(screenshot)
+        except ValueError as exc:
+            await send_json(session.websocket, {"type": "bug_report_error", "text": str(exc)})
+            return
+        screenshot_sha256 = hashlib.sha256(screenshot).hexdigest()
+
+    player = session.player
+    reporter_hash = hashlib.sha256(f"{BUG_REPORT_SALT}:{session.phone}".encode("utf-8")).hexdigest()
+    try:
+        report_id = await asyncio.to_thread(
+            DB.create_bug_report,
+            reporter_account_hash=reporter_hash,
+            reporter_name=player.name,
+            source=source,
+            category=category,
+            description=description,
+            build_version=build_version,
+            map_id=str(ACTIVE_MAP.get("id", ACTIVE_MAP_ID))[:96],
+            map_name=str(ACTIVE_MAP.get("name", "Open Night"))[:160],
+            world_x=float(player.x),
+            world_y=float(player.y),
+            level=int(player.level),
+            in_vehicle=bool(player.in_vehicle),
+            vehicle_id=str(player.vehicle_id)[:96],
+            context=context,
+            screenshot=screenshot,
+            screenshot_sha256=screenshot_sha256,
+        )
+    except Exception as exc:
+        print(f"Bug report storage failed: {mysql_error_text(exc)}", flush=True)
+        await send_json(session.websocket, {
+            "type": "bug_report_error",
+            "text": "server storage failed; keep the local backup",
+        })
+        return
+    session.last_bug_report_time = now
+    session.bug_reports_this_session += 1
+    if session.bug_rate_key:
+        bug_report_source_times[session.bug_rate_key] = now
+    await send_json(session.websocket, {
+        "type": "bug_report_receipt",
+        "report_id": int(report_id),
+        "status": "pending",
+    })
+
+
+async def handle_bug_admin_session(websocket: ServerConnection, hello: dict) -> None:
+    """Serve a token-authenticated, human-only moderation connection."""
+    supplied = str(hello.get("token", ""))
+    if not BUG_ADMIN_TOKEN or not hmac.compare_digest(supplied, BUG_ADMIN_TOKEN):
+        await send_json(websocket, {"type": "bug_admin_error", "text": "moderator authentication failed"})
+        await websocket.close(code=1008, reason="moderator authentication failed")
+        return
+    if not USE_MYSQL or DB is None:
+        await send_json(websocket, {"type": "bug_admin_error", "text": "MySQL moderation queue unavailable"})
+        await websocket.close(code=1011, reason="moderation queue unavailable")
+        return
+    await send_json(websocket, {"type": "bug_admin_ready"})
+    async for raw in websocket:
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        action = str(message.get("type", ""))
+        try:
+            if action == "bug_admin_list":
+                status = str(message.get("status", "pending"))
+                rows = await asyncio.to_thread(DB.list_bug_reports, status, int(message.get("limit", 100)))
+                await send_json(websocket, {
+                    "type": "bug_admin_list",
+                    "status": status,
+                    "reports": [_bug_report_json(row) for row in rows],
+                })
+            elif action == "bug_admin_detail":
+                report_id = int(message.get("report_id", 0))
+                row = await asyncio.to_thread(DB.get_bug_report, report_id)
+                await send_json(websocket, {
+                    "type": "bug_admin_detail",
+                    "report": _bug_report_json(row, include_screenshot=True) if row else None,
+                })
+            elif action == "bug_admin_moderate":
+                report_id = int(message.get("report_id", 0))
+                decision = str(message.get("decision", ""))
+                # A separate explicit confirmation value prevents accidental or
+                # scripted approval from a malformed reviewer command.
+                if str(message.get("confirm", "")) != str(report_id):
+                    raise ValueError("explicit report confirmation is required")
+                reviewed_by = _clean_report_text(message.get("reviewed_by"), 64) or "human-reviewer"
+                review_note = _clean_report_text(message.get("review_note"), 500)
+                changed = await asyncio.to_thread(
+                    DB.moderate_bug_report, report_id, decision, reviewed_by, review_note,
+                )
+                row = await asyncio.to_thread(DB.get_bug_report, report_id)
+                await send_json(websocket, {
+                    "type": "bug_admin_moderated",
+                    "changed": bool(changed),
+                    "report": _bug_report_json(row, include_screenshot=decision == "approved") if row else None,
+                })
+            else:
+                await send_json(websocket, {"type": "bug_admin_error", "text": "unknown moderator command"})
+        except (TypeError, ValueError) as exc:
+            await send_json(websocket, {"type": "bug_admin_error", "text": str(exc)[:200]})
+        except Exception as exc:
+            print(f"Bug moderation failed: {mysql_error_text(exc)}", flush=True)
+            await send_json(websocket, {"type": "bug_admin_error", "text": "moderation storage operation failed"})
+
+
 async def handle_message(session: ClientSession, raw: str) -> None:
     try:
         message = json.loads(raw)
@@ -2080,6 +2320,8 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         await process_interior_action(session, "exit", message)
     elif msg_type == "chat":
         await process_chat(session, message)
+    elif msg_type == "bug_report_submit":
+        await process_bug_report(session, message)
     elif msg_type == "inventory_request":
         await send_json(session.websocket, inventory_payload(session))
     elif msg_type == "inventory_move":
@@ -2194,6 +2436,9 @@ async def client_handler(websocket: ServerConnection) -> None:
             await send_json(websocket, server_info_payload(SERVER_NAME, ACTIVE_PORT, MAX_PLAYERS, ACTIVE_MAP))
             await websocket.close(code=1000, reason="probe complete")
             return
+        if hello.get("type") == "bug_admin_hello":
+            await handle_bug_admin_session(websocket, hello)
+            return
         if hello.get("type") != "hello":
             await websocket.close(code=1008, reason="hello required")
             return
@@ -2234,7 +2479,16 @@ async def client_handler(websocket: ServerConnection) -> None:
             packages=inventory_count(inventory, "package"),
             appearance=normalize_character(appearance),
         )
-        session = ClientSession(websocket=websocket, player=player, phone=phone, inventory=inventory)
+        remote_address = getattr(websocket, "remote_address", None)
+        remote_host = str(remote_address[0]) if isinstance(remote_address, tuple) and remote_address else "unknown"
+        rate_key = hashlib.sha256(f"{BUG_REPORT_SALT}:{remote_host}".encode("utf-8")).hexdigest()
+        session = ClientSession(
+            websocket=websocket,
+            player=player,
+            phone=phone,
+            inventory=inventory,
+            bug_rate_key=rate_key,
+        )
 
         async with clients_lock:
             clients[player_id] = session
@@ -2656,7 +2910,14 @@ async def main(host: str, port: int, server_name: str, discovery: bool = True) -
     print_machine_status()
 
     try:
-        async with serve(client_handler, host, port, ping_interval=20, ping_timeout=20):
+        async with serve(
+            client_handler,
+            host,
+            port,
+            ping_interval=20,
+            ping_timeout=20,
+            max_size=3 * 1024 * 1024,
+        ):
             await asyncio.gather(simulation_loop(), snapshot_loop())
     finally:
         if discovery_transport is not None:
@@ -2844,6 +3105,10 @@ def cli_main() -> None:
             print("Check the MySQL service, host/port, username/password, and CREATE DATABASE permissions.")
             raise SystemExit(2)
         print("MySQL persistence ready.")
+        if BUG_ADMIN_TOKEN:
+            print("Human-moderated bug-report queue ready.")
+        else:
+            print("WARNING: bug reports can be stored, but PYMMO_BUG_ADMIN_TOKEN is not configured for review.")
 
     initialize_traffic(TRAFFIC_COUNT)
     initialize_parked_vehicles()
