@@ -579,7 +579,8 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
             d.line(edge,fill=base,width=max(2,sc(7)),joint='curve')
             d.line(edge,fill=hi,width=max(1,sc(2)),joint='curve')
 
-def render(view, night=False):
+def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
+           additional_buildings=None):
     global VIEW_SCALE
     views={r['view_id']:r for r in read(ROOT/'config'/'preview_views.csv')}
     v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); P=NIGHT if night else DAY
@@ -611,7 +612,7 @@ def render(view, night=False):
         q=visual_road_points(r,rp,cx,cy,W,H)
         if len(q)<2: continue
         n=lanes(r); lw=38
-        if n>=2:
+        if n>=2 and yellow_center_lines:
             for off0 in (-3,3):
                 qq=parallel_polyline(q,off0); d.line(qq,fill=P['yellow'],width=max(1,sc(2)),joint='curve')
         for k in range(1,n):
@@ -626,6 +627,10 @@ def render(view, night=False):
         volumes=mass.get(bid) or [dict(b, massing_id=f'm_{bid}_0',height_scale=1)]
         for m in volumes:
             draw_building_volume(im,ImageDraw.Draw(im),b,m,cos.get(f'building:{bid}',{}),cx,cy,W,H,P,night)
+    for b in additional_buildings or []:
+        draw_building_volume(im, ImageDraw.Draw(im), b,
+                             dict(b, massing_id=f"iterated_{b['id']}", height_scale=b.get('height_scale', 1)),
+                             {'archetype_id': b.get('archetype_id', '')}, cx, cy, W, H, P, night)
 
     # GTA2-style top-down readability gate: 2.5D facade/shadow extrusion is cosmetic
     # and must never paint over a traversable street. Re-apply the authoritative
@@ -640,7 +645,7 @@ def render(view, night=False):
         q=visual_road_points(r,rp,cx,cy,W,H)
         if len(q)<2: continue
         n=lanes(r); lw=38
-        if n>=2:
+        if n>=2 and yellow_center_lines:
             for off0 in (-3,3):
                 qq=parallel_polyline(q,off0); d.line(qq,fill=P['yellow'],width=max(1,sc(2)),joint='curve')
         for k in range(1,n):
@@ -734,7 +739,11 @@ def render(view, night=False):
             if x+rad<0 or y+rad<0 or x-rad>W or y-rad>H:continue
             col=colors.get(l.get('color_tag'),(235,176,90));alpha=int(72*min(1.25,max(.1,f(l,'intensity',.5))));ld.ellipse((x-rad,y-rad,x+rad,y+rad),fill=(*col,alpha))
         lights=lights.filter(ImageFilter.GaussianBlur(max(12,sc(34))));im=Image.alpha_composite(im,lights).convert('RGB')
-    dd=ImageDraw.Draw(im);dd.rectangle((12,12,520,54),fill=(10,13,14));dd.text((23,20),f'{view.upper()} — {"NIGHT" if night else "DAY"} — APPROVED NYC / GTA2 CALLBACK',font=font(15),fill=(244,242,228));OUT.mkdir(exist_ok=True);p=OUT/f'{view}_callback_{"night" if night else "day"}.png';im.save(p);return p
+    if annotate:
+        dd=ImageDraw.Draw(im);dd.rectangle((12,12,520,54),fill=(10,13,14));dd.text((23,20),f'{view.upper()} — {"NIGHT" if night else "DAY"} — APPROVED NYC / GTA2 CALLBACK',font=font(15),fill=(244,242,228))
+    target = Path(output_dir) if output_dir else OUT
+    target.mkdir(parents=True, exist_ok=True)
+    p=target/f'{view}_callback_{"night" if night else "day"}.png';im.save(p);return p
 
 
 def sheet(view):
