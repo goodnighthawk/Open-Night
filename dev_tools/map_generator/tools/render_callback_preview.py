@@ -403,11 +403,14 @@ def draw_arrow(d, a, b, P):
 
 
 def surface_masks(W,H,cx,cy,P,night,road_ids=None,road_width_scale=1.0,sidewalk_scale=1.0,
-                  roads_override=None,rp_override=None):
+                  roads_override=None,rp_override=None,surface_polygons_override=None):
     masks = {k: Image.new('L',(W,H),0) for k in ('water','green','sidewalk','curb','road','alley')}
     for fn,key in [('water_polygons.csv','water'),('green_polygons.csv','green')]:
         md=ImageDraw.Draw(masks[key])
-        for poly in pts(fn,'polygon_id').values():
+        polygons=(surface_polygons_override or {}).get(key)
+        if polygons is None:
+            polygons=pts(fn,'polygon_id').values()
+        for poly in polygons:
             q=[tf(z,cx,cy,W,H) for z in poly]
             if len(q)>=3: md.polygon(q,fill=255)
     roads=list(roads_override) if roads_override is not None else read('roads.csv')
@@ -606,12 +609,12 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
 def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
            additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0,
            orthogonal_grid_px=0.0, render_existing_buildings=True,roads_override=None,rp_override=None,
-           draw_source_crosswalks=True,crosswalks_override=None):
+           draw_source_crosswalks=True,crosswalks_override=None,surface_polygons_override=None):
     global VIEW_SCALE, ORTHOGONAL_GRID_PX
     views={r['view_id']:r for r in read(ROOT/'config'/'preview_views.csv')}
     v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); ORTHOGONAL_GRID_PX=float(orthogonal_grid_px or 0); P=NIGHT if night else DAY
     im=tiled_texture('land_night.png' if night else 'land_day.png',(W,H),P['land'])
-    masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale,roads_override=roads_override,rp_override=rp_override)
+    masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale,roads_override=roads_override,rp_override=rp_override,surface_polygons_override=surface_polygons_override)
     apply_mask(im,masks['water'],'water_night.png' if night else 'water_day.png',P['water'])
     apply_mask(im,masks['green'],'grass_night.png' if night else 'grass_day.png',P['green'])
     apply_mask(im,masks['sidewalk'],'sidewalk_night.png' if night else 'sidewalk_day.png',P['sidewalk'])
