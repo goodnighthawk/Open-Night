@@ -24,7 +24,7 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_10"
+PASS_ID = "recovery_pass_13"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
 ORTHOGONAL_GRID_PX = 192.0
@@ -236,16 +236,31 @@ def generate_iterated_buildings(roads_override,rp_override):
         margin=max(28,min(52,min(w,h)*.16))
         bw=w-2*margin;bh=h-2*margin
         if bw<80 or bh<80:continue
-        building_left=(x+margin)*2
-        building_right=building_left+bw*2
-        if building_left < HUDSON_EAST_X and building_right > HUDSON_WEST_X:
-            continue
-        additions.append({'id':f'block_building_{len(additions)+1:04d}',
-                          'x':round(building_left,2),'y':round((y+margin)*2+2048,2),
-                          'w':round(bw*2,2),'h':round(bh*2,2),
-                          'archetype_id':families[idx%len(families)],
-                          'height_scale':round(.62+(idx%5)*.08,2),
-                          'generation_rule':'block_polygon_street_wall_v2'})
+        base_x=x+margin;base_y=y+margin
+        long=max(bw,bh)
+        part_count=3 if long>=500 else (2 if long>=300 else 1)
+        split_x=bw>=bh
+        gap=20
+        span=(bw if split_x else bh)-gap*(part_count-1)
+        part_span=span/part_count
+        for part in range(part_count):
+            px=base_x+(part_span+gap)*part if split_x else base_x
+            py=base_y if split_x else base_y+(part_span+gap)*part
+            pw=part_span if split_x else bw
+            ph=bh if split_x else part_span
+            # Alternating shallow setbacks break the repeated roof-line silhouette.
+            setback=12 if (idx+part)%3==1 else 0
+            if split_x: py+=setback;ph-=setback
+            else: px+=setback;pw-=setback
+            building_left=px*2;building_right=(px+pw)*2
+            if building_left < HUDSON_EAST_X and building_right > HUDSON_WEST_X:
+                continue
+            additions.append({'id':f'block_building_{len(additions)+1:04d}',
+                              'x':round(building_left,2),'y':round(py*2+2048,2),
+                              'w':round(pw*2,2),'h':round(ph*2,2),
+                              'archetype_id':families[(idx+part*2)%len(families)],
+                              'height_scale':round(.58+((idx*2+part)%6)*.08,2),
+                              'generation_rule':'block_polygon_street_wall_subdivision_v3'})
     write_csv(SEMANTIC/'iterated_buildings.csv',
               ('id','x','y','w','h','archetype_id','height_scale','generation_rule'),additions)
     collision=[]
