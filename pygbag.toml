@@ -1,7 +1,7 @@
 [project]
-name = "Python MMO v2.2"
-version = "2.2"
-title = "Fort Lee / GWB MMO v2.2"
+name = "open-night"
+version = "0.7.1"
+title = "Open Night v0.7.1"
 
 [build]
 icon = "assets/icon.png"
