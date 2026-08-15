@@ -1,5 +1,4 @@
 ﻿id,name,kind,x,y
-gwb,George Washington Bridge,bridge,8776.5,6612.7
-fort_lee,Fort Lee,district,7547.8,7104.1
-bridge_plaza,GWB Plaza,district,7740.9,6823.3
-little_red,Little Red Lighthouse,landmark,9090.7,6507.4
+gwb,George Washington Bridge,bridge,7680,6144
+fort_lee,Fort Lee,district,2400,5600
+washington_heights,Washington Heights,district,13200,5600

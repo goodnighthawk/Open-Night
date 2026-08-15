@@ -1,4 +1,4 @@
-# Open Night v0.7.3 — Railway internet server with MySQL
+# Open Night v0.8.0 — Railway internet server with MySQL
 
 The desktop client automatically checks the configured Open Night Railway server when it starts. If the server answers the real game-protocol probe, it appears at the top of `AVAILABLE SERVERS`, is selected automatically, and can be joined with one click.
 

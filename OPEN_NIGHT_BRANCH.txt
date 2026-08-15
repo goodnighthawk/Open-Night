@@ -1,4 +1,4 @@
-Open Night v0.7.3 - moderated player bug-report queue
+Open Night v0.8.0 - Pass 18 unified corridor default-only build
 Default: screenshot-derived polished map
 Projection: orthographic top-down outdoors; isometric interiors
 Legacy GIS/Overpass path: removed

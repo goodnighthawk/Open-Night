@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 import os
 import random
+import io
+import zipfile
 from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
@@ -284,6 +286,9 @@ class EnvironmentRenderer:
         self._junction_cores: list[tuple[float, float, float]] = []
         self._junction_exclusions: dict[str, list[tuple[float, float, float]]] = {}
         self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}
+        self._composition_tile_cache: OrderedDict[tuple[str, int, int], pygame.Surface] = OrderedDict()
+        self._composition_zip: zipfile.ZipFile | None = None
+        self._composition_zip_path = ""
         self.set_map(map_config)
 
     @staticmethod
@@ -664,6 +669,71 @@ class EnvironmentRenderer:
     def _map_material(self, key: str, fallback: pygame.Surface | None = None) -> pygame.Surface | None:
         path=str((self.map_config.get("portable_materials",{}) or {}).get(key,""))
         return self._portable_image(path) if path else fallback
+
+    def _composition_archive_path(self) -> Path | None:
+        raw = str(self.map_config.get("baked_composition_archive", "")).strip()
+        if not raw:
+            return None
+        requested = Path(raw)
+        candidates = [requested] if requested.is_absolute() else [Path(__file__).resolve().parent / requested]
+        if not requested.is_absolute():
+            parts = requested.parts[1:] if requested.parts and requested.parts[0] == "assets" else requested.parts
+            candidates.append(shared_assets_root().joinpath(*parts))
+        return next((path for path in candidates if path.is_file()), None)
+
+    def _composition_tile(self, mode: str, tile_x: int, tile_y: int) -> pygame.Surface | None:
+        key = (mode, int(tile_x), int(tile_y))
+        cached = self._composition_tile_cache.get(key)
+        if cached is not None:
+            self._composition_tile_cache.move_to_end(key)
+            return cached
+        archive_path = self._composition_archive_path()
+        if archive_path is None:
+            return None
+        try:
+            if self._composition_zip is None or self._composition_zip_path != str(archive_path):
+                if self._composition_zip is not None:
+                    self._composition_zip.close()
+                self._composition_zip = zipfile.ZipFile(archive_path, "r")
+                self._composition_zip_path = str(archive_path)
+            name = f"{mode}/tile_{tile_x:02d}_{tile_y:02d}.png"
+            payload = self._composition_zip.read(name)
+            tile = pygame.image.load(io.BytesIO(payload), name).convert()
+        except (OSError, KeyError, zipfile.BadZipFile, pygame.error):
+            return None
+        self._composition_tile_cache[key] = tile
+        self._composition_tile_cache.move_to_end(key)
+        while len(self._composition_tile_cache) > 8:
+            self._composition_tile_cache.popitem(last=False)
+        return tile
+
+    def _draw_baked_composition(self, surface: pygame.Surface, cx: int, cy: int) -> bool:
+        """Draw the reviewed master art without reinterpreting its geometry."""
+        if not bool(self.map_config.get("baked_composition", False)):
+            return False
+        scale = max(0.01, float(self.map_config.get("baked_composition_source_scale", 0.5)))
+        world_y0 = float(self.map_config.get("baked_composition_world_y", 2048.0))
+        source_x = cx * self.chunk_size * scale
+        source_y = (cy * self.chunk_size - world_y0) * scale
+        source_span = int(round(self.chunk_size * scale))
+        if source_x < 0 or source_y < 0:
+            return True
+        tile_size = 1024
+        tile_x = int(source_x // tile_size)
+        tile_y = int(source_y // tile_size)
+        tile = self._composition_tile(str(self.map_config.get("default_render_mode", "night")).lower(), tile_x, tile_y)
+        if tile is None:
+            return True
+        local_x = int(round(source_x - tile_x * tile_size))
+        local_y = int(round(source_y - tile_y * tile_size))
+        crop = pygame.Rect(local_x, local_y, source_span, source_span)
+        if not tile.get_rect().contains(crop):
+            return True
+        source = tile.subsurface(crop)
+        if source.get_size() != surface.get_size():
+            source = pygame.transform.smoothscale(source, surface.get_size())
+        surface.blit(source, (0, 0))
+        return True
 
     def _draw_asphalt(self, surface: pygame.Surface, rng: random.Random) -> None:
         surface.fill(ROAD_COLOR)
@@ -1169,9 +1239,8 @@ class EnvironmentRenderer:
     def _draw_chunk_crosswalks(self, surface: pygame.Surface, cx: int, cy: int, ox: int, oy: int) -> None:
         """Draw authored curb-to-curb zebras and stop bars.
 
-        ``angle`` is the pedestrian crossing direction in world degrees: 0 is
-        east-west, 90 is north-south. Zebra bars run perpendicular to that
-        direction and are repeated curb-to-curb.
+        ``angle`` is the lane/zebra-bar direction in world degrees. Individual
+        bars run parallel to lane lines and repeat along the curb-to-curb normal.
         """
         for crossing in self._crosswalk_index.get((cx, cy), ()):
             try:
@@ -1192,17 +1261,17 @@ class EnvironmentRenderer:
             used=(count-1)*pitch
             for idx in range(count):
                 along=-used*0.5 + idx*pitch
-                c=(center[0]+dx*along, center[1]+dy*along)
-                poly=self._oriented_rect(c,(dx,dy),stripe*0.5,zwidth*0.5)
+                c=(center[0]+nx*along, center[1]+ny*along)
+                poly=self._oriented_rect(c,(dx,dy),zwidth*0.5,stripe*0.5)
                 pygame.draw.polygon(surface,CROSSWALK_COLOR,poly)
             # Two stop bars sit just outside the zebra in the vehicle-flow
             # direction. They are thinner/dimmer than the zebra itself.
             stop_color=tuple(max(0,int(v*0.82)) for v in CROSSWALK_COLOR)
             for sign in (-1.0,1.0):
                 off=zwidth*0.5 + stop_gap
-                c=(center[0]+nx*sign*off, center[1]+ny*sign*off)
-                p1=(int(c[0]-dx*length*0.46),int(c[1]-dy*length*0.46))
-                p2=(int(c[0]+dx*length*0.46),int(c[1]+dy*length*0.46))
+                c=(center[0]+dx*sign*off, center[1]+dy*sign*off)
+                p1=(int(c[0]-nx*length*0.46),int(c[1]-ny*length*0.46))
+                p2=(int(c[0]+nx*length*0.46),int(c[1]+ny*length*0.46))
                 pygame.draw.line(surface,stop_color,p1,p2,3)
 
 
@@ -1292,6 +1361,12 @@ class EnvironmentRenderer:
         rng = random.Random(f"pymmo-v010-art:{self.map_id}:{cx}:{cy}")
         self._draw_land_base(surf, rng)
         ox, oy = cx * size, cy * size
+        if self._draw_baked_composition(surf, cx, cy):
+            self.chunk_cache[key] = surf
+            self.chunk_cache.move_to_end(key)
+            while len(self.chunk_cache) > self.chunk_cache_limit:
+                self.chunk_cache.popitem(last=False)
+            return surf
         self._draw_chunk_green(surf, cx, cy, ox, oy)
         self._draw_chunk_water(surf, cx, cy, ox, oy)
         self._draw_chunk_roads(surf, cx, cy, ox, oy)
@@ -1409,6 +1484,11 @@ class EnvironmentRenderer:
         self.chunk_cache_limit = int(map_config.get("chunk_cache_limit", CHUNK_CACHE_LIMIT))
         self.chunk_cache.clear()
         self._portable_image_cache.clear()
+        self._composition_tile_cache.clear()
+        if self._composition_zip is not None:
+            self._composition_zip.close()
+        self._composition_zip = None
+        self._composition_zip_path = ""
         self.world = None
         self._build_feature_indices()
         self._rebuild_junction_cores()

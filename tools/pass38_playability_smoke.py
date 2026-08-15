@@ -58,6 +58,7 @@ async def hello_probe(port: int, portable: bool = False) -> tuple[list[str], dic
     async with connect(uri, ping_interval=None, max_size=8 * 1024 * 1024) as ws:
         await ws.send(json.dumps({
             "type": "hello", "name": "Pass38", "phone": f"+1555000{port}",
+            "client_version": "0.8.0",
             "map_cache_hashes": [],
         }))
         deadline = time.monotonic() + 8.0

@@ -1,290 +1,39 @@
 ﻿road_id,name,base_width,width,lanes,sidewalk_width,curb_width,building_setback,bridge,map_label,highway,level,walkable
-road_001,Road 001,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_002,Road 002,160,320.0,4,56,5,9,false,false,primary,0,true
-road_003,Road 003,80,160.0,2,34,5,4,false,false,residential,0,true
-road_004,Road 004,160,320.0,4,56,5,9,false,false,primary,0,true
-road_005,Road 005,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_006,Road 006,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_007,Road 007,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_008,Road 008,160,320.0,4,56,5,9,false,false,primary,0,true
-road_009,Road 009,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_010,Road 010,160,320.0,4,56,5,9,false,false,primary,0,true
-road_011,Road 011,160,320.0,4,56,5,9,false,false,primary,0,true
-road_012,Road 012,160,320.0,4,56,5,9,false,false,primary,0,true
-road_013,Road 013,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_014,Road 014,160,320.0,4,56,5,9,false,false,primary,0,true
-road_015,Road 015,160,320.0,4,56,5,9,false,false,primary,0,true
-road_016,Road 016,80,160.0,2,34,5,4,false,false,residential,0,true
-road_017,Road 017,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_018,Road 018,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_019,Road 019,80,160.0,2,34,5,4,false,false,residential,0,true
-road_020,Road 020,160,320.0,4,56,5,9,false,false,primary,0,true
-road_021,Road 021,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_022,Road 022,80,160.0,2,34,5,4,false,false,residential,0,true
-road_023,Road 023,160,320.0,4,56,5,9,false,false,primary,0,true
-road_024,Road 024,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_025,Road 025,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_026,Road 026,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_027,Road 027,80,160.0,2,34,5,4,false,false,residential,0,true
-road_028,Road 028,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_029,Road 029,240,480.0,6,0,0,9,false,false,motorway,0,true
-road_030,Road 030,80,160.0,2,34,5,4,false,false,residential,0,true
-road_031,Road 031,80,160.0,2,34,5,4,false,false,residential,0,true
-road_032,Road 032,160,320.0,4,56,5,9,false,false,primary,0,true
-road_033,Road 033,80,160.0,2,34,5,4,false,false,residential,0,true
-road_034,Road 034,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_035,Road 035,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_036,Road 036,80,160.0,2,34,5,4,false,false,residential,0,true
-road_037,Road 037,160,320.0,4,56,5,9,false,false,primary,0,true
-road_038,Road 038,160,320.0,4,56,5,9,false,false,primary,0,true
-road_039,Road 039,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_040,Road 040,160,320.0,4,56,5,9,false,false,primary,0,true
-road_041,Road 041,160,320.0,4,56,5,9,false,false,primary,0,true
-road_042,Road 042,160,320.0,4,56,5,9,false,false,primary,0,true
-road_043,Road 043,160,320.0,4,56,5,9,false,false,primary,0,true
-road_044,Road 044,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_045,Road 045,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_046,Road 046,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_047,Road 047,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_048,Road 048,160,320.0,4,56,5,9,false,false,primary,0,true
-road_049,Road 049,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_050,Road 050,160,320.0,4,56,5,9,false,false,primary,0,true
-road_051,Road 051,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_053,Road 053,240,480.0,6,0,0,9,false,false,motorway,0,true
-road_054,Road 054,240,480.0,6,0,0,9,false,false,motorway,0,true
-road_055,Road 055,160,320.0,4,56,5,9,false,false,primary,0,true
-road_056,Road 056,240,480.0,6,0,0,9,false,false,motorway,0,true
-road_057,Road 057,160,320.0,4,56,5,9,false,false,primary,0,true
-road_058,Road 058,160,320.0,4,56,5,9,false,false,primary,0,true
-road_059,Road 059,160,320.0,4,56,5,9,false,false,primary,0,true
-road_060,Road 060,80,160.0,2,34,5,4,false,false,residential,0,true
-road_061,Road 061,80,160.0,2,34,5,4,false,false,residential,0,true
-road_062,Road 062,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_063,Road 063,80,160.0,2,34,5,4,false,false,residential,0,true
-road_064,Road 064,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_065,Road 065,160,320.0,4,56,5,9,false,false,primary,0,true
-road_066,Road 066,80,160.0,2,34,5,4,false,false,residential,0,true
-road_067,Road 067,108,216.0,2,44,5,6,false,false,secondary,0,true
-road_068,Road 068,160,320.0,4,56,5,9,false,false,primary,0,true
-road_069,Road 069,80,160.0,2,34,5,4,false,false,residential,0,true
-road_070,Road 070,80,160.0,2,34,5,4,false,false,residential,0,true
-road_071,Road 071,80,160.0,2,34,5,4,false,false,residential,0,true
-road_072,Road 072,176,352.0,4,14,5,4,false,false,trunk,0,true
-road_073,Road 073,80,160.0,2,34,5,4,false,false,residential,0,true
-road_074,Road 074,80,160.0,2,34,5,4,false,false,residential,0,true
-road_075,Road 075,80,160.0,2,34,5,4,false,false,residential,0,true
-road_076,Road 076,80,160.0,2,34,5,4,false,false,residential,0,true
-road_078,Road 078,80,160.0,2,34,5,4,false,false,residential,0,true
-road_079,Road 079,80,160.0,2,34,5,4,false,false,residential,0,true
-road_081,Road 081,80,160.0,2,34,5,4,false,false,residential,0,true
-road_082,Road 082,80,160.0,2,34,5,4,false,false,residential,0,true
-road_083,Road 083,80,160.0,2,34,5,4,false,false,residential,0,true
-road_084,Road 084,80,160.0,2,34,5,4,false,false,residential,0,true
-road_085,Road 085,80,160.0,2,34,5,4,false,false,residential,0,true
-road_086,Road 086,80,160.0,2,34,5,4,false,false,residential,0,true
-road_087,Road 087,80,160.0,2,34,5,4,false,false,residential,0,true
-road_088,Road 088,80,160.0,2,34,5,4,false,false,residential,0,true
-road_089,Road 089,80,160.0,2,34,5,4,false,false,residential,0,true
-road_090,Road 090,80,160.0,2,34,5,4,false,false,residential,0,true
-road_091,Road 091,80,160.0,2,34,5,4,false,false,residential,0,true
-road_092,Road 092,80,160.0,2,34,5,4,false,false,residential,0,true
-road_093,Road 093,80,160.0,2,34,5,4,false,false,residential,0,true
-road_094,Road 094,80,160.0,2,34,5,4,false,false,residential,0,true
-road_095,Road 095,80,160.0,2,34,5,4,false,false,residential,0,true
-road_096,Road 096,80,160.0,2,34,5,4,false,false,residential,0,true
-road_097,Road 097,80,160.0,2,34,5,4,false,false,residential,0,true
-road_098,Road 098,80,160.0,2,34,5,4,false,false,residential,0,true
-road_099,Road 099,80,160.0,2,34,5,4,false,false,residential,0,true
-road_100,Road 100,80,160.0,2,34,5,4,false,false,residential,0,true
-road_101,Road 101,80,160.0,2,34,5,4,false,false,residential,0,true
-road_102,Road 102,80,160.0,2,34,5,4,false,false,residential,0,true
-road_103,Road 103,80,160.0,2,34,5,4,false,false,residential,0,true
-road_104,Road 104,80,160.0,2,34,5,4,false,false,residential,0,true
-road_105,Road 105,80,160.0,2,34,5,4,false,false,residential,0,true
-road_107,Road 107,80,160.0,2,34,5,4,false,false,residential,0,true
-road_108,Road 108,80,160.0,2,34,5,4,false,false,residential,0,true
-road_109,Road 109,80,160.0,2,34,5,4,false,false,residential,0,true
-road_110,Road 110,80,160.0,2,34,5,4,false,false,residential,0,true
-road_111,Road 111,80,160.0,2,34,5,4,false,false,residential,0,true
-road_112,Road 112,80,160.0,2,34,5,4,false,false,residential,0,true
-road_114,Road 114,80,160.0,2,34,5,4,false,false,residential,0,true
-road_115,Road 115,80,160.0,2,34,5,4,false,false,residential,0,true
-road_116,Road 116,80,160.0,2,34,5,4,false,false,residential,0,true
-road_117,Road 117,80,160.0,2,34,5,4,false,false,residential,0,true
-road_118,Road 118,80,160.0,2,34,5,4,false,false,residential,0,true
-road_119,Road 119,80,160.0,2,34,5,4,false,false,residential,0,true
-road_120,Road 120,80,160.0,2,34,5,4,false,false,residential,0,true
-road_121,Road 121,80,160.0,2,34,5,4,false,false,residential,0,true
-road_122,Road 122,80,160.0,2,34,5,4,false,false,residential,0,true
-road_123,Road 123,80,160.0,2,34,5,4,false,false,residential,0,true
-road_124,Road 124,80,160.0,2,34,5,4,false,false,residential,0,true
-road_125,Road 125,80,160.0,2,34,5,4,false,false,residential,0,true
-road_127,Road 127,80,160.0,2,34,5,4,false,false,residential,0,true
-road_128,Road 128,80,160.0,2,34,5,4,false,false,residential,0,true
-road_129,Road 129,80,160.0,2,34,5,4,false,false,residential,0,true
-road_130,Road 130,80,160.0,2,34,5,4,false,false,residential,0,true
-road_131,Road 131,80,160.0,2,34,5,4,false,false,residential,0,true
-road_132,Road 132,80,160.0,2,34,5,4,false,false,residential,0,true
-road_133,Road 133,80,160.0,2,34,5,4,false,false,residential,0,true
-road_134,Road 134,80,160.0,2,34,5,4,false,false,residential,0,true
-road_135,Road 135,80,160.0,2,34,5,4,false,false,residential,0,true
-road_136,Road 136,80,160.0,2,34,5,4,false,false,residential,0,true
-road_137,Road 137,80,160.0,2,34,5,4,false,false,residential,0,true
-road_138,Road 138,80,160.0,2,34,5,4,false,false,residential,0,true
-road_139,Road 139,80,160.0,2,34,5,4,false,false,residential,0,true
-road_140,Road 140,80,160.0,2,34,5,4,false,false,residential,0,true
-road_141,Road 141,80,160.0,2,34,5,4,false,false,residential,0,true
-road_142,Road 142,80,160.0,2,34,5,4,false,false,residential,0,true
-road_143,Road 143,80,160.0,2,34,5,4,false,false,residential,0,true
-road_144,Road 144,80,160.0,2,34,5,4,false,false,residential,0,true
-road_145,Road 145,80,160.0,2,34,5,4,false,false,residential,0,true
-road_146,Road 146,80,160.0,2,34,5,4,false,false,residential,0,true
-road_147,Road 147,80,160.0,2,34,5,4,false,false,residential,0,true
-road_148,Road 148,80,160.0,2,34,5,4,false,false,residential,0,true
-road_149,Road 149,80,160.0,2,34,5,4,false,false,residential,0,true
-road_150,Road 150,80,160.0,2,34,5,4,false,false,residential,0,true
-road_151,Road 151,80,160.0,2,34,5,4,false,false,residential,0,true
-road_153,Road 153,80,160.0,2,34,5,4,false,false,residential,0,true
-road_154,Road 154,80,160.0,2,34,5,4,false,false,residential,0,true
-road_155,Road 155,80,160.0,2,34,5,4,false,false,residential,0,true
-road_156,Road 156,80,160.0,2,34,5,4,false,false,residential,0,true
-road_157,Road 157,80,160.0,2,34,5,4,false,false,residential,0,true
-road_158,Road 158,80,160.0,2,34,5,4,false,false,residential,0,true
-road_159,Road 159,80,160.0,2,34,5,4,false,false,residential,0,true
-road_160,Road 160,80,160.0,2,34,5,4,false,false,residential,0,true
-road_161,Road 161,80,160.0,2,34,5,4,false,false,residential,0,true
-road_162,Road 162,80,160.0,2,34,5,4,false,false,residential,0,true
-road_163,Road 163,80,160.0,2,34,5,4,false,false,residential,0,true
-road_164,Road 164,80,160.0,2,34,5,4,false,false,residential,0,true
-road_165,Road 165,80,160.0,2,34,5,4,false,false,residential,0,true
-road_166,Road 166,80,160.0,2,34,5,4,false,false,residential,0,true
-road_167,Road 167,80,160.0,2,34,5,4,false,false,residential,0,true
-road_168,Road 168,80,160.0,2,34,5,4,false,false,residential,0,true
-road_169,Road 169,80,160.0,2,34,5,4,false,false,residential,0,true
-road_170,Road 170,80,160.0,2,34,5,4,false,false,residential,0,true
-road_171,Road 171,80,160.0,2,34,5,4,false,false,residential,0,true
-road_172,Road 172,80,160.0,2,34,5,4,false,false,residential,0,true
-road_173,Road 173,80,160.0,2,34,5,4,false,false,residential,0,true
-road_174,Road 174,80,160.0,2,34,5,4,false,false,residential,0,true
-road_175,Road 175,80,160.0,2,34,5,4,false,false,residential,0,true
-road_176,Road 176,80,160.0,2,34,5,4,false,false,residential,0,true
-road_177,Road 177,80,160.0,2,34,5,4,false,false,residential,0,true
-road_178,Road 178,80,160.0,2,34,5,4,false,false,residential,0,true
-road_179,Road 179,80,160.0,2,34,5,4,false,false,residential,0,true
-road_180,Road 180,80,160.0,2,34,5,4,false,false,residential,0,true
-road_181,Road 181,80,160.0,2,34,5,4,false,false,residential,0,true
-road_182,Road 182,80,160.0,2,34,5,4,false,false,residential,0,true
-road_183,Road 183,80,160.0,2,34,5,4,false,false,residential,0,true
-road_184,Road 184,80,160.0,2,34,5,4,false,false,residential,0,true
-road_185,Road 185,80,160.0,2,34,5,4,false,false,residential,0,true
-road_186,Road 186,80,160.0,2,34,5,4,false,false,residential,0,true
-road_187,Road 187,80,160.0,2,34,5,4,false,false,residential,0,true
-road_188,Road 188,80,160.0,2,34,5,4,false,false,residential,0,true
-road_189,Road 189,80,160.0,2,34,5,4,false,false,residential,0,true
-road_190,Road 190,80,160.0,2,34,5,4,false,false,residential,0,true
-road_191,Road 191,80,160.0,2,34,5,4,false,false,residential,0,true
-road_192,Road 192,80,160.0,2,34,5,4,false,false,residential,0,true
-road_194,Road 194,80,160.0,2,34,5,4,false,false,residential,0,true
-road_195,Road 195,80,160.0,2,34,5,4,false,false,residential,0,true
-road_196,Road 196,80,160.0,2,34,5,4,false,false,residential,0,true
-road_197,Road 197,80,160.0,2,34,5,4,false,false,residential,0,true
-road_198,Road 198,80,160.0,2,34,5,4,false,false,residential,0,true
-road_199,Road 199,80,160.0,2,34,5,4,false,false,residential,0,true
-road_200,Road 200,80,160.0,2,34,5,4,false,false,residential,0,true
-road_201,Road 201,80,160.0,2,34,5,4,false,false,residential,0,true
-road_203,Road 203,80,160.0,2,34,5,4,false,false,residential,0,true
-road_204,Road 204,80,160.0,2,34,5,4,false,false,residential,0,true
-road_205,Road 205,80,160.0,2,34,5,4,false,false,residential,0,true
-road_206,Road 206,80,160.0,2,34,5,4,false,false,residential,0,true
-road_207,Road 207,80,160.0,2,34,5,4,false,false,residential,0,true
-road_208,Road 208,80,160.0,2,34,5,4,false,false,residential,0,true
-road_209,Road 209,80,160.0,2,34,5,4,false,false,residential,0,true
-road_210,Road 210,80,160.0,2,34,5,4,false,false,residential,0,true
-road_211,Road 211,80,160.0,2,34,5,4,false,false,residential,0,true
-road_212,Road 212,80,160.0,2,34,5,4,false,false,residential,0,true
-road_213,Road 213,80,160.0,2,34,5,4,false,false,residential,0,true
-road_214,Road 214,80,160.0,2,34,5,4,false,false,residential,0,true
-road_215,Road 215,80,160.0,2,34,5,4,false,false,residential,0,true
-road_216,Road 216,80,160.0,2,34,5,4,false,false,residential,0,true
-road_217,Road 217,80,160.0,2,34,5,4,false,false,residential,0,true
-road_218,Road 218,80,160.0,2,34,5,4,false,false,residential,0,true
-road_219,Road 219,80,160.0,2,34,5,4,false,false,residential,0,true
-road_220,Road 220,80,160.0,2,34,5,4,false,false,residential,0,true
-road_221,Road 221,80,160.0,2,34,5,4,false,false,residential,0,true
-road_222,Road 222,80,160.0,2,34,5,4,false,false,residential,0,true
-road_223,Road 223,80,160.0,2,34,5,4,false,false,residential,0,true
-road_224,Road 224,80,160.0,2,34,5,4,false,false,residential,0,true
-road_225,Road 225,80,160.0,2,34,5,4,false,false,residential,0,true
-road_226,Road 226,80,160.0,2,34,5,4,false,false,residential,0,true
-road_227,Road 227,80,160.0,2,34,5,4,false,false,residential,0,true
-road_228,Road 228,80,160.0,2,34,5,4,false,false,residential,0,true
-road_229,Road 229,80,160.0,2,34,5,4,false,false,residential,0,true
-road_230,Road 230,80,160.0,2,34,5,4,false,false,residential,0,true
-road_231,Road 231,80,160.0,2,34,5,4,false,false,residential,0,true
-road_232,Road 232,80,160.0,2,34,5,4,false,false,residential,0,true
-road_233,Road 233,80,160.0,2,34,5,4,false,false,residential,0,true
-road_234,Road 234,80,160.0,2,34,5,4,false,false,residential,0,true
-road_236,Road 236,80,160.0,2,34,5,4,false,false,residential,0,true
-road_237,Road 237,80,160.0,2,34,5,4,false,false,residential,0,true
-road_238,Road 238,80,160.0,2,34,5,4,false,false,residential,0,true
-road_239,Road 239,80,160.0,2,34,5,4,false,false,residential,0,true
-road_240,Road 240,80,160.0,2,34,5,4,false,false,residential,0,true
-road_241,Road 241,80,160.0,2,34,5,4,false,false,residential,0,true
-road_242,Road 242,80,160.0,2,34,5,4,false,false,residential,0,true
-road_243,Road 243,80,160.0,2,34,5,4,false,false,residential,0,true
-road_244,Road 244,80,160.0,2,34,5,4,false,false,residential,0,true
-road_245,Road 245,80,160.0,2,34,5,4,false,false,residential,0,true
-road_246,Road 246,80,160.0,2,34,5,4,false,false,residential,0,true
-road_247,Road 247,80,160.0,2,34,5,4,false,false,residential,0,true
-road_248,Road 248,80,160.0,2,34,5,4,false,false,residential,0,true
-road_249,Road 249,80,160.0,2,34,5,4,false,false,residential,0,true
-road_250,Road 250,80,160.0,2,34,5,4,false,false,residential,0,true
-road_251,Road 251,80,160.0,2,34,5,4,false,false,residential,0,true
-road_252,Road 252,80,160.0,2,34,5,4,false,false,residential,0,true
-road_253,Road 253,80,160.0,2,34,5,4,false,false,residential,0,true
-road_254,Road 254,80,160.0,2,34,5,4,false,false,residential,0,true
-road_255,Road 255,80,160.0,2,34,5,4,false,false,residential,0,true
-road_256,Road 256,80,160.0,2,34,5,4,false,false,residential,0,true
-road_257,Road 257,80,160.0,2,34,5,4,false,false,residential,0,true
-road_258,Road 258,80,160.0,2,34,5,4,false,false,residential,0,true
-road_259,Road 259,80,160.0,2,34,5,4,false,false,residential,0,true
-road_260,Road 260,80,160.0,2,34,5,4,false,false,residential,0,true
-road_261,Road 261,80,160.0,2,34,5,4,false,false,residential,0,true
-road_262,Road 262,80,160.0,2,34,5,4,false,false,residential,0,true
-road_263,Road 263,80,160.0,2,34,5,4,false,false,residential,0,true
-road_264,Road 264,80,160.0,2,34,5,4,false,false,residential,0,true
-road_266,Road 266,80,160.0,2,34,5,4,false,false,residential,0,true
-road_267,Road 267,80,160.0,2,34,5,4,false,false,residential,0,true
-road_268,Road 268,80,160.0,2,34,5,4,false,false,residential,0,true
-road_269,Road 269,80,160.0,2,34,5,4,false,false,residential,0,true
-road_270,Road 270,80,160.0,2,34,5,4,false,false,residential,0,true
-road_271,Road 271,80,160.0,2,34,5,4,false,false,residential,0,true
-road_272,Road 272,80,160.0,2,34,5,4,false,false,residential,0,true
-road_273,Road 273,80,160.0,2,34,5,4,false,false,residential,0,true
-road_274,Road 274,80,160.0,2,34,5,4,false,false,residential,0,true
-road_275,Road 275,80,160.0,2,34,5,4,false,false,residential,0,true
-road_276,Road 276,80,160.0,2,34,5,4,false,false,residential,0,true
-road_277,Road 277,80,160.0,2,34,5,4,false,false,residential,0,true
-road_278,Road 278,80,160.0,2,34,5,4,false,false,residential,0,true
-gwb_upper_level,Gwb Upper Level,240,480.0,6,0,0,9,true,false,motorway,1,true
-traffic_support_002,Traffic Support 3,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_005,Traffic Support 6,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_006,Traffic Support 7,160,320.0,4,44,5,6,false,false,primary,0,true
-traffic_support_010,Traffic Support 11,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_012,Traffic Support 13,160,320.0,4,44,5,6,false,false,primary,0,true
-traffic_support_013,Traffic Support 14,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_015,Traffic Support 16,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_016,Traffic Support 17,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_019,Traffic Support 20,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_020,Traffic Support 21,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_021,Traffic Support 22,160,320.0,4,44,5,6,false,false,primary,0,true
-traffic_support_025,Traffic Support 26,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_027,Traffic Support 28,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_028,Traffic Support 29,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_029,Traffic Support 30,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_030,Traffic Support 31,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_033,Traffic Support 34,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_034,Traffic Support 35,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_039,Traffic Support 40,108,216.0,2,44,5,6,false,false,secondary,0,true
-traffic_support_040,Traffic Support 41,160,320.0,4,44,5,6,false,false,primary,0,true
-traffic_support_043,Traffic Support 44,160,320.0,4,44,5,6,false,false,primary,0,true
+fl_west_avenue,Fl West Avenue,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+fl_center_avenue,Fl Center Avenue,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+fl_sylvan_road,Fl Sylvan Road,67.08,67.08,1,34.0,5,0,false,false,tertiary,0,true
+fl_hudson_terrace,Fl Hudson Terrace,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+fl_north_boulevard,Fl North Boulevard,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+fl_gwb_approach,Fl Gwb Approach,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+fl_south_boulevard,Fl South Boulevard,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+fl_northwest_local,Fl Northwest Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_northeast_local,Fl Northeast Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_bluff_lane,Fl Bluff Lane,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_terrace_lane,Fl Terrace Lane,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_southwest_local,Fl Southwest Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_southeast_local,Fl Southeast Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_park_lane,Fl Park Lane,67.08,67.08,1,34.0,5,0,false,false,tertiary,0,true
+fl_ridge_connector,Fl Ridge Connector,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+fl_south_connector,Fl South Connector,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_riverside_drive,Wh Riverside Drive,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+wh_broadway,Wh Broadway,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+wh_amsterdam_avenue,Wh Amsterdam Avenue,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+wh_east_avenue,Wh East Avenue,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+wh_north_crosstown,Wh North Crosstown,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+wh_181st_street,Wh 181St Street,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+wh_gwb_crosstown,Wh Gwb Crosstown,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+wh_168th_street,Wh 168Th Street,96.72,96.72,2,37.4,5,0,false,true,secondary,0,true
+wh_south_crosstown,Wh South Crosstown,126.36,126.36,3,44.2,5,0,false,true,primary,0,true
+wh_northwest_local,Wh Northwest Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_northeast_local,Wh Northeast Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_midtown_local,Wh Midtown Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_southwest_local,Wh Southwest Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_southeast_local,Wh Southeast Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_lower_local,Wh Lower Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_lower_east_local,Wh Lower East Local,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_pinehurst_avenue,Wh Pinehurst Avenue,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_north_connector,Wh North Connector,67.08,67.08,1,34.0,5,0,false,false,tertiary,0,true
+wh_south_connector,Wh South Connector,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_east_connector,Wh East Connector,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+wh_lower_connector,Wh Lower Connector,67.08,67.08,1,30.6,5,0,false,false,residential,0,true
+gwb_authored,Gwb Authored,126.36,126.36,3,44.2,5,0,true,true,primary,1,true

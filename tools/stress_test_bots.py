@@ -91,7 +91,7 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
     phone = f"555{rng.randint(1000000, 9999999):07d}"[-10:]
     try:
         async with connect(uri, ping_interval=20, ping_timeout=20, open_timeout=8) as ws:
-            await ws.send(json.dumps({"type":"hello", "name":f"StressBot{index:03d}", "phone":phone}))
+            await ws.send(json.dumps({"type":"hello", "name":f"StressBot{index:03d}", "phone":phone, "client_version":"0.8.0"}))
             stats.sent += 1
             if not await drain_until_welcome(ws, stats):
                 stats.errors += 1; return stats

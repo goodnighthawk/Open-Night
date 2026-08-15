@@ -52,7 +52,7 @@ WARN = "#d6a84d"
 
 def _load_config() -> dict:
     defaults = {
-        "server_name": "Map 001 / Compact 2x",
+        "server_name": "Open Night v0.8 / Pass 18",
         "port": 8765,
         "max_players": 128,
         "traffic_cars": TRAFFIC_DEFAULT_COUNT,

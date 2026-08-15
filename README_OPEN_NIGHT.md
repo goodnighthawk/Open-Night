@@ -1,4 +1,4 @@
-# OPEN NIGHT — v0.7.3
+# OPEN NIGHT — v0.8.0
 
 Double-click **`START_OPEN_NIGHT.bat`**. The launcher remains open while each subsystem runs in its own process.
 
@@ -55,6 +55,14 @@ The former GIS/Overpass migration path has been removed after the screenshot-der
 - `REVIEW_BUG_REPORTS.bat` requires the secret Railway moderator token and exact typed confirmation before approve/reject.
 - Only approved reports are exported to `feedback\approved\` for GitHub and ChatGPT; no player submission can automatically become implementation work.
 
+## v0.8.0 approved-map promotion
+
+- Pass 18 Fort Lee → GWB → Washington Heights is the default and only playable map.
+- Runtime chunks render the reviewed day/night composition while collision, routes and navigation come from the matching semantic build.
+- The map includes 38 terrain-aware roads, 242 road-tangent zebra crossings, 95 scale-audited buildings, a continuous Hudson crossed only by the GWB, and preserved source-derived green space.
+- Buildings carry ground, upper and roof layers plus exterior stairwell records; the GWB deck has playable ramps at both ends.
+- Client/server login requires the exact `0.8.0` version so an older map package cannot silently join this world.
+
 ## Portable `.map` workflow
 
 The generator defaults remain:
@@ -87,7 +95,7 @@ The desktop client probes `wss://open-night-production.up.railway.app` in the ba
 
 The web client reads the same CSV and uses the Railway endpoint by default. If the CSV has no enabled public endpoint, it falls back to the page host on port `8765`. Appending `?server=192.168.1.5:8765` or a complete WebSocket URI to the webpage URL overrides automatic selection.
 
-`RUN_WEB_CLIENT.bat` pins and, when necessary, installs Pygbag 0.9.2 because the 0.9.3 browser loader can stop at a plain grey page. The tab/package title should read **Open Night v0.7.3** after the corrected build starts.
+`RUN_WEB_CLIENT.bat` pins and, when necessary, installs Pygbag 0.9.2 because the 0.9.3 browser loader can stop at a plain grey page. The tab/package title should read **Open Night v0.8.0** after the corrected build starts.
 
 ## Multiplayer controls
 

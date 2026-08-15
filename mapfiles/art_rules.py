@@ -183,7 +183,9 @@ def audit_art_rules(cfg: dict) -> list[ArtRuleIssue]:
     for crossing in cfg.get("crosswalks", []) or []:
         cid = str(crossing.get("id", "crosswalk"))
         x, y = map(float, crossing.get("pos", [0, 0]))
-        nearest = _nearest_drivable_road(cfg, x, y)
+        road_id = str(crossing.get("road_id", "")).strip()
+        authored_road = next((r for r in cfg.get("roads", []) if str(r.get("id", "")) == road_id), None)
+        nearest = (0.0, authored_road) if authored_road is not None else _nearest_drivable_road(cfg, x, y)
         if nearest is None:
             continue
         _, road = nearest
@@ -198,9 +200,9 @@ def audit_art_rules(cfg: dict) -> list[ArtRuleIssue]:
             issues.append(ArtRuleIssue("WARN", "crosswalk_endpoint_alignment", cid, f"half-length {endpoint_r:.1f}px should land near sidewalk envelope {expected_min:.1f}-{expected_max:.1f}px for {road.get('id','road')}"))
         tangent = _nearest_road_tangent_deg(road, x, y)
         if tangent is not None:
-            # Crossing angle is pedestrian travel direction. Zebra bars are rendered
-            # at angle+90 and must therefore be parallel to the road/lane tangent.
-            stripe_angle = (float(crossing.get("angle", 0.0)) + 90.0) % 180.0
+            # Crossing angle is the zebra-bar direction. Bars must remain parallel
+            # to the road/lane tangent while the crossing spans its normal.
+            stripe_angle = float(crossing.get("angle", 0.0)) % 180.0
             err = _axis_angle_error_deg(stripe_angle, tangent)
             if err > 6.0:
                 issues.append(ArtRuleIssue("ERROR", "crosswalk_stripes_not_parallel", cid, f"zebra bars differ from {road.get('id','road')} lane direction by {err:.1f} deg"))

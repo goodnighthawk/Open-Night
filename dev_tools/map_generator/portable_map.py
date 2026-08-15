@@ -32,6 +32,7 @@ def _sha256(path: Path):
 
 def _role(rel: Path):
     p = rel.as_posix()
+    if p.startswith('composition/'): return 'baked_map_composition'
     if p.startswith('textures/objects/'): return 'object_sprite'
     if p.startswith('textures/materials/'): return 'surface_material'
     if p.startswith('signs/'): return 'sign_texture'
@@ -49,6 +50,7 @@ def _copy_pack_assets(asset_root: Path):
     (asset_root / 'lighting').mkdir(parents=True, exist_ok=True)
     (asset_root / 'atlases').mkdir(parents=True, exist_ok=True)
     (asset_root / 'catalogs').mkdir(parents=True, exist_ok=True)
+    (asset_root / 'composition').mkdir(parents=True, exist_ok=True)
 
     # Individual PNG files are deliberately preserved for direct editing/modding.
     for p in sorted((PACK_DIR / 'sprites').glob('*.png')):
@@ -64,6 +66,8 @@ def _copy_pack_assets(asset_root: Path):
         (PACK_DIR / 'sprite_atlas_night.png', asset_root / 'atlases' / 'sprite_atlas_night.png'),
         (PACK_DIR / 'object_catalog.csv', asset_root / 'catalogs' / 'object_catalog.csv'),
         (PACK_DIR / 'atlas_index.csv', asset_root / 'catalogs' / 'atlas_index.csv'),
+        (ROOT.parent.parent / 'assets' / 'environment' / 'approved' / 'map_001_gwb_corridor' / 'composition_tiles_v18.zip',
+         asset_root / 'composition' / 'composition_tiles_v18.zip'),
     ]:
         if src.exists(): shutil.copy2(src, dst)
 

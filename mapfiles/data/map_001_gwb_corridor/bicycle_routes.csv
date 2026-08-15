@@ -1,28 +1,3 @@
-﻿route_id,name,speed,loop,lane_offset,axis,direction,turn_radius
-bike_001,Bike 001,112,true,0,mixed,loop,18
-bike_002,Bike 002,112,true,0,mixed,loop,18
-bike_003,Bike 003,112,true,0,mixed,loop,18
-bike_004,Bike 004,112,true,0,mixed,loop,18
-bike_005,Bike 005,112,true,0,mixed,loop,18
-bike_006,Bike 006,112,true,0,mixed,loop,18
-bike_007,Bike 007,112,true,0,mixed,loop,18
-bike_008,Bike 008,112,true,0,mixed,loop,18
-bike_009,Bike 009,112,true,0,mixed,loop,18
-bike_010,Bike 010,112,true,0,mixed,loop,18
-bike_011,Bike 011,112,true,0,mixed,loop,18
-bike_013,Bike 013,112,true,0,mixed,loop,18
-bike_014,Bike 014,112,true,0,mixed,loop,18
-bike_015,Bike 015,112,true,0,mixed,loop,18
-bike_017,Bike 017,112,true,0,mixed,loop,18
-bike_019,Bike 019,112,true,0,mixed,loop,18
-bike_020,Bike 020,112,true,0,mixed,loop,18
-bike_022,Bike 022,112,true,0,mixed,loop,18
-bike_024,Bike 024,112,true,0,mixed,loop,18
-bike_025,Bike 025,112,true,0,mixed,loop,18
-bike_026,Bike 026,112,true,0,mixed,loop,18
-bike_027,Bike 027,112,true,0,mixed,loop,18
-bike_028,Bike 028,112,true,0,mixed,loop,18
-bike_029,Bike 029,112,true,0,mixed,loop,18
-bike_030,Bike 030,112,true,0,mixed,loop,18
-bike_031,Bike 031,112,true,0,mixed,loop,18
-bike_033,Bike 033,112,true,0,mixed,loop,18
+﻿route_id,name,speed,loop,lane_offset,turn_radius,axis,direction
+bike_fort_lee,Fort Lee neighborhood loop,48,true,0,42,mixed,loop
+bike_heights,Washington Heights neighborhood loop,48,true,0,42,mixed,loop
