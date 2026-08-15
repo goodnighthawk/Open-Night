@@ -286,19 +286,50 @@ def load_vegetation_atlas(name):
     return Image.open(path).convert('RGBA') if path.exists() else None
 
 
+def draw_attached_stairwell(im,building,cx,cy,W,H,night):
+    """Render the authored exterior access cue for ground/upper/roof layers."""
+    if not building.get('stair_x') or not building.get('stair_y'):return
+    x,y=tf((f(building,'stair_x'),f(building,'stair_y')),cx,cy,W,H)
+    if not (-40<x<W+40 and -40<y<H+40):return
+    side=(building.get('stair_side') or 'north').lower()
+    length=max(8,sc(22));width=max(6,sc(15));d=ImageDraw.Draw(im,'RGBA')
+    metal=(180,174,154,235) if not night else (103,108,103,235)
+    dark=(47,49,47,245) if not night else (19,23,23,245)
+    landing=(88,83,72,245) if not night else (42,45,42,245)
+    if side in {'north','south'}:
+        box=(x-width,y-length,x+width,y+length)
+        d.rectangle(box,fill=landing,outline=metal,width=max(1,sc(2)))
+        for step in range(-3,4):
+            yy=y+step*length/7
+            d.line((x-width,yy,x+width,yy),fill=dark,width=max(1,sc(2)))
+    else:
+        box=(x-length,y-width,x+length,y+width)
+        d.rectangle(box,fill=landing,outline=metal,width=max(1,sc(2)))
+        for step in range(-3,4):
+            xx=x+step*length/7
+            d.line((xx,y-width,xx,y+width),fill=dark,width=max(1,sc(2)))
+    # Small landing square makes the access point legible without a UI glyph.
+    rr=max(3,sc(6));d.rectangle((x-rr,y-rr,x+rr,y+rr),outline=metal,width=max(1,sc(2)))
+
+
 def draw_building_cosmetic_sprite(im, building, cx, cy, W, H, night):
     atlas=load_building_atlas(building.get('cosmetic_atlas',''))
     if atlas is None:return False
     cols=4;rows=4;cell=i(building,'cosmetic_cell',0)%16
     cw=atlas.width//cols;ch=atlas.height//rows
     sprite=atlas.crop(((cell%cols)*cw,(cell//cols)*ch,(cell%cols+1)*cw,(cell//cols+1)*ch))
-    alpha=sprite.getchannel('A');box=alpha.getbbox()
+    alpha=sprite.getchannel('A');box=alpha.point(lambda value:255 if value>=32 else 0).getbbox()
     if not box:return False
     sprite=sprite.crop(box)
     x0,y0=tf((f(building,'x'),f(building,'y')),cx,cy,W,H)
     x1,y1=tf((f(building,'x')+f(building,'w'),f(building,'y')+f(building,'h')),cx,cy,W,H)
     target_w=max(1,int(x1-x0));target_h=max(1,int(y1-y0))
-    scale=min(target_w/sprite.width,target_h/sprite.height)
+    fit_scale=min(target_w/sprite.width,target_h/sprite.height)
+    native_scale=max(.01,f(building,'cosmetic_world_units_per_pixel',2.0)*VIEW_SCALE)
+    requested_ratio=max(.01,f(building,'cosmetic_render_scale_ratio',1.0))
+    # A sprite carries a physical source-pixel scale. Lots choose a matching
+    # atlas family; they no longer enlarge every cell until it fills the parcel.
+    scale=min(fit_scale,native_scale*requested_ratio)
     nw=max(1,int(sprite.width*scale));nh=max(1,int(sprite.height*scale))
     sprite=sprite.resize((nw,nh),Image.Resampling.LANCZOS)
     if night:
@@ -306,6 +337,7 @@ def draw_building_cosmetic_sprite(im, building, cx, cy, W, H, night):
         sprite=rgb.convert('RGBA');sprite.putalpha(a)
     px=int(x0+(target_w-nw)/2);py=int(y0+(target_h-nh)/2)
     im.paste(sprite,(px,py),sprite)
+    draw_attached_stairwell(im,building,cx,cy,W,H,night)
     return True
 
 
