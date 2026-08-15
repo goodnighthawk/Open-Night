@@ -1,0 +1,106 @@
+name: Promote Open Night v0.9.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-v090.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote-v090:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install map build dependencies
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Rebuild balanced release candidate
+        run: python dev_tools/map_generator/tools/build_v090_release_candidate.py
+
+      - name: Promote guarded v0.9.0 map
+        run: python dev_tools/map_generator/tools/promote_v090.py
+
+      - name: Verify promoted package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Open Night v0.9.0' VERSION.txt
+          grep -q 'composition_tiles_v19.zip' mapfiles/data/map_001_gwb_corridor/map.csv
+          grep -q 'open_night_v0_9_0_pass19_default_only' mapfiles/data/map_001_gwb_corridor/map.csv
+          grep -q 'render_pass,19' mapfiles/data/map_001_gwb_corridor/render_contract.csv
+          test -s assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip
+          test -s assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip
+          cmp assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip
+          test -f mapfiles/data/map_001_gwb_corridor/iterated_vegetation.csv
+          test -f mapfiles/data/map_001_gwb_corridor/iterated_frontage_dressing.csv
+          python - <<'PY'
+          from pathlib import Path
+          import csv, zipfile
+          root = Path('mapfiles/data/map_001_gwb_corridor')
+          def rows(name):
+              with (root / name).open(encoding='utf-8-sig', newline='') as f:
+                  return list(csv.DictReader(f))
+          mapcfg = {r['key']: r['value'] for r in rows('map.csv')}
+          assert mapcfg['id'] == 'map_001_gwb_corridor'
+          assert mapcfg['render_pass'] == '19'
+          assert mapcfg['release_version'] == '0.9.0'
+          assert mapcfg['baked_composition_archive'].endswith('composition_tiles_v19.zip')
+          assert len(rows('buildings.csv')) == 95
+          assert len(rows('iterated_vegetation.csv')) == 249
+          frontage = rows('iterated_frontage_dressing.csv')
+          obvious = [r for r in frontage if r.get('kind') not in {'frontage_wear','litter_cluster'}]
+          dressed = {r['building_id'] for r in obvious}
+          counts = {}
+          for r in obvious: counts[r['building_id']] = counts.get(r['building_id'],0)+1
+          cluttered = {bid for bid,count in counts.items() if count >= 4}
+          assert len(dressed) == 43
+          assert len(cluttered) == 12
+          archive = Path(mapcfg['baked_composition_archive'])
+          with zipfile.ZipFile(archive) as z:
+              names = set(z.namelist())
+              expected = {f'{mode}/tile_{x:02d}_{y:02d}.png' for mode in ('day','night') for x in range(8) for y in range(4)}
+              assert expected <= names, f'missing {len(expected-names)} composition tiles'
+          print('V090_PROMOTION_IDENTITY_OK buildings=95 vegetation=249 dressed=43 cluttered=12 tiles=64')
+          PY
+
+      - name: Run map release QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/building_road_audit.py
+          python tools/map_scale_bicycle_audit.py
+          python tools/multilevel_map_audit.py
+          python tools/deterministic_traffic_audit.py
+          python tools/building_art_convergence_audit.py
+
+      - name: Commit v0.9.0 promoted runtime map
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Open Night Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add VERSION.txt \
+            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip \
+            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip \
+            mapfiles/data/map_001_gwb_corridor \
+            dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor
+          if git diff --cached --quiet; then
+            echo 'No promotion changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Open Night v0.9.0 — promote balanced Pass 19 map [skip ci]'
+          git push origin HEAD:main
