@@ -280,6 +280,12 @@ def load_building_atlas(name):
     return Image.open(path).convert('RGBA') if path.exists() else None
 
 
+@lru_cache(maxsize=8)
+def load_vegetation_atlas(name):
+    path=PACK/'vegetation_atlases'/name
+    return Image.open(path).convert('RGBA') if path.exists() else None
+
+
 def draw_building_cosmetic_sprite(im, building, cx, cy, W, H, night):
     atlas=load_building_atlas(building.get('cosmetic_atlas',''))
     if atlas is None:return False
@@ -300,6 +306,30 @@ def draw_building_cosmetic_sprite(im, building, cx, cy, W, H, night):
         sprite=rgb.convert('RGBA');sprite.putalpha(a)
     px=int(x0+(target_w-nw)/2);py=int(y0+(target_h-nh)/2)
     im.paste(sprite,(px,py),sprite)
+    return True
+
+
+def draw_vegetation_cosmetic_sprite(im, tree, cx, cy, W, H, night):
+    atlas=load_vegetation_atlas(tree.get('cosmetic_atlas',''))
+    if atlas is None:return False
+    cols=4;rows=4;cell=i(tree,'cosmetic_cell',0)%16
+    cw=atlas.width//cols;ch=atlas.height//rows
+    sprite=atlas.crop(((cell%cols)*cw,(cell//cols)*ch,(cell%cols+1)*cw,(cell//cols+1)*ch))
+    alpha=sprite.getchannel('A')
+    # The approved sheet has soft antialiased edges and a few near-transparent
+    # speckles; threshold only for crop detection while preserving the real alpha.
+    box=alpha.point(lambda value:255 if value>=32 else 0).getbbox()
+    if not box:return False
+    sprite=sprite.crop(box)
+    target=max(12,int(f(tree,'size',150)*VIEW_SCALE))
+    scale=target/max(sprite.width,sprite.height)
+    nw=max(1,int(sprite.width*scale));nh=max(1,int(sprite.height*scale))
+    sprite=sprite.resize((nw,nh),Image.Resampling.LANCZOS)
+    if night:
+        a=sprite.getchannel('A');rgb=ImageEnhance.Brightness(sprite.convert('RGB')).enhance(.46)
+        sprite=rgb.convert('RGBA');sprite.putalpha(a)
+    x,y=tf((f(tree,'x'),f(tree,'y')),cx,cy,W,H)
+    im.paste(sprite,(int(x-nw*.5),int(y-nh*.5)),sprite)
     return True
 
 
@@ -657,7 +687,9 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
 def draw_authored_waterfront_edges(d, surface_polygons, cx, cy, W, H, night):
     base=(66,72,72) if night else (111,112,103)
     hi=(135,143,139) if night else (194,190,172)
-    for poly in (surface_polygons or {}).get('water',[]):
+    # The first polygon is the authoritative continuous shoreline. Supplemental
+    # reference polygons preserve water coverage but must not draw interior rails.
+    for poly in (surface_polygons or {}).get('water',[])[:1]:
         closed=list(poly)+[poly[0]]
         for wa,wb in zip(closed,closed[1:]):
             # Only trace the north-south shorelines; map-edge closures stay invisible.
@@ -710,7 +742,8 @@ def draw_authored_gwb_structure(d, roads, rp, cx, cy, W, H, night):
 def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
            additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0,
            orthogonal_grid_px=0.0, render_existing_buildings=True,roads_override=None,rp_override=None,
-           draw_source_crosswalks=True,crosswalks_override=None,surface_polygons_override=None):
+           draw_source_crosswalks=True,crosswalks_override=None,surface_polygons_override=None,
+           parcel_uses_override=None,vegetation_override=None):
     global VIEW_SCALE, ORTHOGONAL_GRID_PX
     views={r['view_id']:r for r in read(ROOT/'config'/'preview_views.csv')}
     v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); ORTHOGONAL_GRID_PX=float(orthogonal_grid_px or 0); P=NIGHT if night else DAY
@@ -726,8 +759,9 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     apply_mask(im,masks['road'],'asphalt_night.png' if night else 'asphalt_day.png',P['road'])
     apply_mask(im,masks['alley'],'asphalt_night.png' if night else 'asphalt_day.png',P['alley'])
     d=ImageDraw.Draw(im)
-    # Five intentional small car parks are semantic destinations, not accidental dead ends.
-    for lot in read('parking_regions.csv'):
+    # Legacy car parks belong to the source map. Unified compositions provide
+    # parcel uses derived from their final road/green/water geometry instead.
+    for lot in ([] if clean_authored_surfaces else read('parking_regions.csv')):
         x0,y0=tf((f(lot,'x'),f(lot,'y')),cx,cy,W,H);x1,y1=tf((f(lot,'x')+f(lot,'w'),f(lot,'y')+f(lot,'h')),cx,cy,W,H)
         if x1<0 or y1<0 or x0>W or y0>H:continue
         if clean_authored_surfaces and over_water((x0+x1)*.5,(y0+y1)*.5):continue
@@ -736,6 +770,26 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         bay=max(sc(28),1);margin=sc(14);xx=x0+margin
         while xx<x1-margin:
             d.line((xx,y0+margin,xx,y1-margin),fill=P['lane'],width=max(1,sc(2)));xx+=bay
+    for use in parcel_uses_override or []:
+        x0,y0=tf((f(use,'x'),f(use,'y')),cx,cy,W,H);x1,y1=tf((f(use,'x')+f(use,'w'),f(use,'y')+f(use,'h')),cx,cy,W,H)
+        if x1<0 or y1<0 or x0>W or y0>H:continue
+        kind=use.get('kind','plaza')
+        if kind=='parking':
+            d.rectangle((x0,y0,x1,y1),fill=(31,35,37) if night else (61,65,66),outline=P['curb'],width=max(1,sc(4)))
+            margin=sc(16);bay=max(sc(34),1)
+            if x1-x0>=y1-y0:
+                xx=x0+margin
+                while xx<x1-margin:
+                    d.line((xx,y0+margin,xx,y1-margin),fill=P['lane'],width=max(1,sc(2)));xx+=bay
+            else:
+                yy=y0+margin
+                while yy<y1-margin:
+                    d.line((x0+margin,yy,x1-margin,yy),fill=P['lane'],width=max(1,sc(2)));yy+=bay
+        else:
+            fill=(117,111,98) if night else (192,183,163)
+            edge=(155,147,127) if night else (226,216,190)
+            d.rectangle((x0,y0,x1,y1),fill=fill,outline=edge,width=max(1,sc(4)))
+            inset=max(3,sc(14));d.rectangle((x0+inset,y0+inset,x1-inset,y1-inset),outline=P['plaza'],width=max(1,sc(2)))
     # Parking/service courts and plazas from layout overlays.
     for o in read(COS/'layout_overlays.csv'):
         if o.get('kind') not in {'roof_courtyard'}: continue
@@ -812,14 +866,20 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         x,y=f(c,'x'),f(c,'y');ang=math.radians(f(c,'angle'));sx,sy=tf((x,y),cx,cy,W,H)
         if not (0 <= int(sx) < W and 0 <= int(sy) < H) or not masks['road'].getpixel((int(sx),int(sy))):
             continue
-        length=max(78,f(c,'length'));width=max(18,f(c,'width'));stripe=max(3,f(c,'stripe_width',4));gap=max(4,f(c,'stripe_gap',5));ux,uy=math.cos(ang),math.sin(ang);vx,vy=-uy,ux;n=max(3,int(math.ceil((width+gap)/(stripe+gap))))
+        # `length` is the curb-to-curb span; `width` is the compact crossing
+        # depth along traffic. Bars are parallel to lane lines and repeated
+        # across the carriageway, matching the approved top-down convention.
+        span=max(64,f(c,'length'));depth=max(18,f(c,'width'));stripe=max(3,f(c,'stripe_width',4));gap=max(7,f(c,'stripe_gap',9));ux,uy=math.cos(ang),math.sin(ang);vx,vy=-uy,ux
+        n=max(3,int(math.floor((span+gap)/(stripe+gap))))
         for j in range(n):
-            oo=(j-(n-1)/2)*(stripe+gap)*VIEW_SCALE;mx=sx+ux*oo;my=sy+uy*oo;p1=(mx-vx*length*VIEW_SCALE/2,my-vy*length*VIEW_SCALE/2);p2=(mx+vx*length*VIEW_SCALE/2,my+vy*length*VIEW_SCALE/2);d.line((p1,p2),fill=P['lane'],width=max(2,sc(stripe)))
+            oo=(j-(n-1)/2)*(stripe+gap)*VIEW_SCALE;mx=sx+vx*oo;my=sy+vy*oo
+            p1=(mx-ux*depth*VIEW_SCALE/2,my-uy*depth*VIEW_SCALE/2);p2=(mx+ux*depth*VIEW_SCALE/2,my+uy*depth*VIEW_SCALE/2)
+            d.line((p1,p2),fill=P['lane'],width=max(2,sc(stripe)))
         # Thin stop bars just outside the zebra improve junction approach readability.
         stop_gap=max(10,f(c,'stop_bar_gap',12)); stop_col=tuple(max(0,int(v*.80)) for v in P['lane'])
         for sign in (-1,1):
-            off=(width*.5+stop_gap)*VIEW_SCALE; mx=sx+vx*sign*off; my=sy+vy*sign*off
-            p1=(mx-ux*length*VIEW_SCALE*.46,my-uy*length*VIEW_SCALE*.46);p2=(mx+ux*length*VIEW_SCALE*.46,my+uy*length*VIEW_SCALE*.46)
+            off=(depth*.5+stop_gap)*VIEW_SCALE; mx=sx+ux*sign*off; my=sy+uy*sign*off
+            p1=(mx-vx*span*VIEW_SCALE*.46,my-vy*span*VIEW_SCALE*.46);p2=(mx+vx*span*VIEW_SCALE*.46,my+vy*span*VIEW_SCALE*.46)
             d.line((p1,p2),fill=stop_col,width=max(2,sc(3)))
     # Pass 34: fixed waterfront retaining rails + elevated bridge deck barriers.
     if not clean_authored_surfaces:
@@ -839,6 +899,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         if not (-90<x<W+90 and -90<y<H+90):continue
         if clean_authored_surfaces and over_water(x,y):continue
         cr=cos.get(f'prop:{p.get("id")}',{});kind=p.get('kind','')
+        if clean_authored_surfaces and kind!='edge_tunnel':continue
         if kind=='edge_tunnel':
             angle=math.radians(f(p,'rotation'));ux,uy=math.cos(angle),math.sin(angle);nx,ny=-uy,ux
             width=max(46,80*f(p,'scale',1))*VIEW_SCALE;length=max(68,46+width*.22)*VIEW_SCALE
@@ -848,14 +909,17 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
             d.line((corner(-length*.25,-width*.5),corner(-length*.25,width*.5)),fill=(211,179,65),width=max(2,sc(3)))
             continue
         size=72 if kind=='street_tree' else (58 if kind=='curved_streetlamp' else (32 if kind=='fire_hydrant' else 46));paste_prop(cr.get('archetype_id',''),x,y,size)
-    for p in read(COS/'street_dressing.csv'):
+    for p in ([] if clean_authored_surfaces else read(COS/'street_dressing.csv')):
         x,y=tf((f(p,'x'),f(p,'y')),cx,cy,W,H)
         if not (-90<x<W+90 and -90<y<H+90):continue
         if clean_authored_surfaces and over_water(x,y):continue
+        if clean_authored_surfaces and p.get('kind')=='tree':continue
         base=96 if p.get('kind')=='tree' else 48;paste_prop(p.get('archetype_id',''),x,y,base*f(p,'scale',.5))
+    for tree in vegetation_override or []:
+        draw_vegetation_cosmetic_sprite(im,tree,cx,cy,W,H,night)
     d=ImageDraw.Draw(im)
     # 2.5D sign anchors.
-    for s in read(COS/'road_sign_anchors.csv'):
+    for s in ([] if clean_authored_surfaces else read(COS/'road_sign_anchors.csv')):
         x,y=tf((f(s,'x'),f(s,'y')),cx,cy,W,H)
         if not (-130<x<W+130 and -130<y<H+130):continue
         if clean_authored_surfaces and over_water(x,y):continue
@@ -875,7 +939,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         spacing=max(65,f(cb,'suspender_spacing_px',95));worldL=math.hypot(f(cb,'x2')-f(cb,'x1'),f(cb,'y2')-f(cb,'y1'));count=max(2,int(worldL/spacing))
         for j in range(1,count):
             t=j/count;x=p1[0]*(1-t)+p2[0]*t;basey=p1[1]*(1-t)+p2[1]*t;y=basey+sag*4*t*(1-t);deck_y=tf((0,3925 if avg_world<3964 else 4004),cx,cy,W,H)[1];d.line((x,y,x,deck_y),fill=cable_col,width=max(1,sc(1)))
-    for lm in read(COS/'landmark_anchors.csv'):
+    for lm in ([] if clean_authored_surfaces else read(COS/'landmark_anchors.csv')):
         x,y=tf((f(lm,'x'),f(lm,'y')),cx,cy,W,H)
         if not (-300<x<W+300 and -300<y<H+300):continue
         if clean_authored_surfaces and over_water(x,y):continue
