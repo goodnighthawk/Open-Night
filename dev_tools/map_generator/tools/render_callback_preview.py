@@ -382,7 +382,7 @@ def draw_arrow(d, a, b, P):
     d.polygon([(tip[0]+ux*sc(9),tip[1]+uy*sc(9)),(tip[0]-ux*sc(5)+vx*sc(8),tip[1]-uy*sc(5)+vy*sc(8)),(tip[0]-ux*sc(5)-vx*sc(8),tip[1]-uy*sc(5)-vy*sc(8))],fill=P['lane'])
 
 
-def surface_masks(W,H,cx,cy,P,night):
+def surface_masks(W,H,cx,cy,P,night,road_ids=None,road_width_scale=1.0,sidewalk_scale=1.0):
     masks = {k: Image.new('L',(W,H),0) for k in ('water','green','sidewalk','curb','road','alley')}
     for fn,key in [('water_polygons.csv','water'),('green_polygons.csv','green')]:
         md=ImageDraw.Draw(masks[key])
@@ -390,12 +390,14 @@ def surface_masks(W,H,cx,cy,P,night):
             q=[tf(z,cx,cy,W,H) for z in poly]
             if len(q)>=3: md.polygon(q,fill=255)
     roads=read('roads.csv'); rp=pts('road_points.csv','road_id')
+    if road_ids is not None:
+        roads=[r for r in roads if r['road_id'] in road_ids]
     for layer in ('sidewalk','curb','road'):
         md=ImageDraw.Draw(masks[layer])
         for r in roads:
             q=visual_road_points(r,rp,cx,cy,W,H)
             if len(q)<2: continue
-            n=lanes(r); rw=max(38,n*38+10); hw=(r.get('highway') or '').lower(); sw=0 if hw.startswith('motorway') else max(28,f(r,'sidewalk_width',28)); cw=max(4,f(r,'curb_width',4))
+            n=lanes(r); rw=max(38,n*38+10)*road_width_scale; hw=(r.get('highway') or '').lower(); sw=0 if hw.startswith('motorway') else max(28,f(r,'sidewalk_width',28))*sidewalk_scale; cw=max(4,f(r,'curb_width',4))
             width={'sidewalk':rw+2*(sw+cw),'curb':rw+2*cw,'road':rw}[layer]
             md.line(q,fill=255,width=max(1,sc(width)),joint='curve')
     md=ImageDraw.Draw(masks['alley'])
@@ -407,7 +409,7 @@ def surface_masks(W,H,cx,cy,P,night):
 
 
 
-def draw_street_edge_accents(d, roads, rp, cx, cy, W, H, P, night):
+def draw_street_edge_accents(d, roads, rp, cx, cy, W, H, P, night, road_width_scale=1.0, sidewalk_scale=1.0):
     """Cosmetic-only street-edge definition for GTA2-style top-down readability.
 
     Geometry stays authoritative in the road/sidewalk masks.  These thin seams
@@ -422,8 +424,8 @@ def draw_street_edge_accents(d, roads, rp, cx, cy, W, H, P, night):
         q=visual_road_points(r,rp,cx,cy,W,H)
         if len(q)<2:
             continue
-        n=lanes(r); rw=max(38,n*38+10)
-        sw=max(28,f(r,'sidewalk_width',28)); cw=max(4,f(r,'curb_width',4))
+        n=lanes(r); rw=max(38,n*38+10)*road_width_scale
+        sw=max(28,f(r,'sidewalk_width',28))*sidewalk_scale; cw=max(4,f(r,'curb_width',4))
         # Asphalt/curb seam and outside sidewalk seam. Segment-by-segment keeps
         # the pass completely cosmetic and avoids changing semantic road points.
         for sign in (-1,1):
@@ -580,12 +582,12 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
             d.line(edge,fill=hi,width=max(1,sc(2)),joint='curve')
 
 def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
-           additional_buildings=None):
+           additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0):
     global VIEW_SCALE
     views={r['view_id']:r for r in read(ROOT/'config'/'preview_views.csv')}
     v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); P=NIGHT if night else DAY
     im=tiled_texture('land_night.png' if night else 'land_day.png',(W,H),P['land'])
-    masks=surface_masks(W,H,cx,cy,P,night)
+    masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale)
     apply_mask(im,masks['water'],'water_night.png' if night else 'water_day.png',P['water'])
     apply_mask(im,masks['green'],'grass_night.png' if night else 'grass_day.png',P['green'])
     apply_mask(im,masks['sidewalk'],'sidewalk_night.png' if night else 'sidewalk_day.png',P['sidewalk'])
@@ -608,6 +610,8 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         # roof courtyards are drawn after building volumes; skip here
         pass
     roads=read('roads.csv'); rp=pts('road_points.csv','road_id')
+    if road_ids is not None:
+        roads=[r for r in roads if r['road_id'] in road_ids]
     for r in roads:
         q=visual_road_points(r,rp,cx,cy,W,H)
         if len(q)<2: continue
@@ -640,7 +644,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     apply_mask(im,masks['road'],'asphalt_night.png' if night else 'asphalt_day.png',P['road'])
     apply_mask(im,masks['alley'],'asphalt_night.png' if night else 'asphalt_day.png',P['alley'])
     d=ImageDraw.Draw(im)
-    draw_street_edge_accents(d, roads, rp, cx, cy, W, H, P, night)
+    draw_street_edge_accents(d, roads, rp, cx, cy, W, H, P, night, road_width_scale, sidewalk_scale)
     for r in roads:
         q=visual_road_points(r,rp,cx,cy,W,H)
         if len(q)<2: continue
@@ -669,7 +673,10 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         d.rectangle((x0+sc(5),y0+sc(5),x1-sc(5),y1-sc(5)),outline=(114,113,103) if not night else (55,57,54),width=1)
     # Authored crosswalks.
     for c in read('crosswalks.csv'):
-        x,y=f(c,'x'),f(c,'y');ang=math.radians(f(c,'angle'));sx,sy=tf((x,y),cx,cy,W,H);length=max(78,f(c,'length'));width=max(18,f(c,'width'));stripe=max(3,f(c,'stripe_width',4));gap=max(4,f(c,'stripe_gap',5));ux,uy=math.cos(ang),math.sin(ang);vx,vy=-uy,ux;n=max(3,int(math.ceil((width+gap)/(stripe+gap))))
+        x,y=f(c,'x'),f(c,'y');ang=math.radians(f(c,'angle'));sx,sy=tf((x,y),cx,cy,W,H)
+        if not (0 <= int(sx) < W and 0 <= int(sy) < H) or not masks['road'].getpixel((int(sx),int(sy))):
+            continue
+        length=max(78,f(c,'length'));width=max(18,f(c,'width'));stripe=max(3,f(c,'stripe_width',4));gap=max(4,f(c,'stripe_gap',5));ux,uy=math.cos(ang),math.sin(ang);vx,vy=-uy,ux;n=max(3,int(math.ceil((width+gap)/(stripe+gap))))
         for j in range(n):
             oo=(j-(n-1)/2)*(stripe+gap)*VIEW_SCALE;mx=sx+ux*oo;my=sy+uy*oo;p1=(mx-vx*length*VIEW_SCALE/2,my-vy*length*VIEW_SCALE/2);p2=(mx+vx*length*VIEW_SCALE/2,my+vy*length*VIEW_SCALE/2);d.line((p1,p2),fill=P['lane'],width=max(2,sc(stripe)))
         # Thin stop bars just outside the zebra improve junction approach readability.
