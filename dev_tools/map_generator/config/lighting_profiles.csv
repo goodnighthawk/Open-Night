@@ -1,0 +1,4 @@
+profile,ambient_strength,local_light_strength,glow_radius_scale,shadow_strength,notes
+day,0.00,0.15,0.70,0.45,Mostly geometry/material contrast; local lights subtle
+dusk,0.32,0.75,1.00,0.65,Transition state with stronger storefront and streetlamp glow
+night_callback,0.58,1.00,1.15,0.82,Strong local pools warm/cool contrast and darker unlit streets

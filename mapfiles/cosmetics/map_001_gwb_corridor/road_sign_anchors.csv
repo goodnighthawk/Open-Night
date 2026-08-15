@@ -1,0 +1,20 @@
+﻿sign_id,source_road_id,semantic_type,archetype_id,x,y,rotation,height_px,width_px,depth_px,label,style_zone
+s000,road_005,directional,sig_highway_gantry_01,4817.72,9458.52,84.76,58,150,7,,residential
+s001,road_013,directional,sig_highway_gantry_01,13274.18,2623.58,74.0,58,150,7,,dense_urban
+s002,road_017,directional,sig_highway_gantry_01,14224.01,6511.52,62.38,58,150,7,,dense_urban
+s003,road_025,directional,sig_highway_gantry_10,13884.48,5476.0,79.15,58,150,7,,dense_urban
+s004,road_026,directional,sig_highway_gantry_10,14144.84,6978.98,145.22,58,150,7,,dense_urban
+s005,road_028,directional,sig_highway_gantry_01,2373.75,7902.53,-12.42,58,150,7,,residential
+s006,road_029,directional,sig_highway_gantry_10,13210.53,3952.37,69.47,58,150,7,,dense_urban
+s007,road_034,directional,sig_highway_gantry_01,7373.36,6960.1,23.25,58,150,7,,commercial
+s008,road_035,directional,sig_highway_gantry_01,1129.75,7721.4,29.33,58,150,7,,residential
+s009,road_044,directional,sig_highway_gantry_01,13606.4,4687.98,62.23,58,150,7,,dense_urban
+s010,road_046,directional,sig_highway_gantry_10,7589.4,6421.14,138.69,58,150,7,,bridge_highway
+s011,road_047,directional,sig_highway_gantry_01,7858.82,3196.01,91.0,58,150,7,,industrial
+s012,road_049,directional,sig_highway_gantry_10,4311.86,7341.92,-11.7,58,150,7,,residential
+s013,road_054,directional,sig_highway_gantry_10,10925.84,6131.68,-22.16,58,150,7,,dense_urban
+s014,road_056,directional,sig_highway_gantry_10,4665.5,6583.97,128.16,58,150,7,,residential
+s015,road_062,directional,sig_highway_gantry_10,10641.9,3292.98,120.59,58,150,7,,industrial
+s016,road_064,directional,sig_highway_gantry_01,8255.26,2540.24,103.74,58,150,7,,industrial
+s017,road_072,directional,sig_highway_gantry_10,11217.73,1966.92,129.25,58,150,7,,industrial
+s018,gwb_upper_level,directional,sig_highway_gantry_10,9107.21,6877.13,-5.58,58,150,7,Gwb Upper Level,dense_urban

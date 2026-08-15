@@ -1,0 +1,23 @@
+setting,value,type,description
+walk_speed_px_per_second,185,float,Base camera-relative walking speed
+slow_walk_control,shift,string,Hold either Shift key for slow walking
+slow_walk_multiplier,0.55,float,Speed multiplier while Shift is held
+sprint_control,double_tap_direction,string,Double tap W A S or D and keep the second press held
+sprint_double_tap_window_seconds,0.30,float,Maximum interval between presses of the same direction
+sprint_speed_multiplier,3.0,float,Running speed multiplier while sprint remains armed
+sprint_animation_rate_multiplier,1.85,float,Walk-cycle playback multiplier while running
+sprint_gait_animation,run_wide_8,string,Dedicated eight-frame run with wider leg separation and preserved ground anchor
+sprint_gait_width_multiplier,1.48,float,Maximum authored leg-separation multiplier at peak run frames
+sprint_cancel_inputs,trigger_release;shift;crouch;prone;jump;action,string,Inputs and states that cancel sprint
+jump_forward_speed_px_per_second,570,float,Initial forward propulsion; twice the previous jump range
+jump_duration_seconds,0.75,float,Single-jump airborne duration
+double_jump_window_seconds,0.55,float,Maximum time after first launch for the second Space press
+double_jump_forward_speed_px_per_second,940,float,Second-launch propulsion; twice the previous double-jump range
+double_jump_duration_seconds,0.95,float,Double-jump airborne duration after the second launch
+double_jump_landing,prone,string,Double jump always ends in prone state
+crouch_control,c,string,Hold C to crouch while stationary
+prone_control,x,string,X toggles prone and stands up from prone
+stand_control,space_or_x,string,Either Space or X stands up after a prone landing
+movement_cancels_crouch,true,bool,Directional input starts the stand transition from crouch
+movement_cancels_prone,true,bool,Directional input starts the stand transition from prone
+movement_stand_delay_seconds,1.0,float,Continuous directional input required before movement resumes standing

@@ -1,0 +1,269 @@
+﻿road_id,points_image_px,width_class,lane_hint,direction,notes
+road_001,"873,555;862.73,562.55;854.64,570.4;848.73,578.55;845,587;822,662;756,761",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_002,"1377,595;1380.59,596.32;1384.12,597.6;1387.59,598.82;1391,600;1526,646;1561,666",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_003,"60,356;130,412;220,435;222.86,434.87;224.98,432.83;226.36,428.87;227,423",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_004,"1173,519;1263,539;1323,586;1328.25,593.16;1329.84,603.55;1327.75,617.16;1322,634",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_005,"350,490;351.86,494.38;352.98,498.67;353.36,502.88;353,507;339,585;304,653",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_006,"1481,296;1431,353;1413,401;1390,407;1388.8,407.58;1387.9,408.6;1387.3,410.08;1387,412",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_007,"1247,360;1181,495;1178.67,500.6;1176.98,506.57;1175.94,512.89;1175.54,519.56",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_008,"1247,360;1253.01,357.9;1258.18,357.37;1262.51,358.4;1266,361;1286,383;1346,416;1386,411",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_009,"1141,5;1133,25;1131,91;1100,127;1092.91,132.11;1083.38,133.82;1071.41,132.11;1057,127",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_010,"571,229;615,256;658,318",primary,4,both,auto-traced major road from roads screenshot
+road_011,"580,211;579.66,218.42;578.04,223.89;575.16,227.42;571,229;524,235;463,281;460.9,283.26;459.69,286.18;459.4,289.76;460,294",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_012,"227,423;229.12,430.04;232.16,435.89;236.12,440.54;241,444;325,489;350,490",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_013,"1417,151;1410.7,165.29;1405.93,178.05;1402.7,189.29;1401,199;1389,314",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_014,"664,392;661.6,389.42;659.13,387.72;656.6,386.92;654,387;614,395;588,428;583,458;583.41,463.77;586.72,468.7;592.91,472.77;602,476",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_015,"189,316;193.34,312.18;197.79,309.58;202.34,308.18;207,308;319,318",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_016,"1203,37;1209.73,38.93;1214.13,41.4;1216.23,44.43;1216,48;1180,148;1179.74,151.58;1181.68,154.71;1185.84,157.4;1192.21,159.63",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_017,"1373,597;1385,701;1385.23,702.94;1385.47,704.92;1385.73,706.94;1386,709",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_018,"843,185;824,247;804,280;802.94,282.6;802.75,285.47;803.44,288.6;805,292",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_019,"824,185;810,249;788,279",local,2,both,auto-traced major road from roads screenshot
+road_020,"394,333;391,388;376,433",primary,4,both,auto-traced major road from roads screenshot
+road_021,"788,279;796.33,280.94;801.94,283.75;804.83,287.44;805,292;794,338;760,379",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_022,"449,85;449.51,85.28;450.01,85.54;450.51,85.78;451,86;509,111;538,133;541.88,136.11;545.67,139.48;549.38,143.11;553,147",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_023,"1560,674;1541,686;1466,699",primary,4,both,auto-traced major road from roads screenshot
+road_024,"1169,184;1165.41,189.1;1162.37,194.3;1159.91,199.6;1158,205;1130,299",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_025,"1395,487;1395.51,490.91;1395.68,494.72;1395.51,498.41;1395,502;1377,595;1376.6,595.92;1375.8,596.55;1374.6,596.92;1373,597",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_026,"1386,709;1296,727;1294.51,727.1;1293.01,726.8;1291.51,726.1;1290,725",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_027,"1303,636;1293,657;1290,725",local,2,both,auto-traced major road from roads screenshot
+road_028,"82,295;172,309;180.42,309.91;189.05,310.04;197.92,309.41;207,308",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_029,"1389,315;1389,406",motorway,6,both,auto-traced major road from roads screenshot
+road_030,"1045,298;1040.37,300.57;1035.82,303.1;1031.37,305.57;1027,308;982,333;970,370;969.56,374.1;970.95,378.09;974.15,381.97;979.18,385.73",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_031,"1110,242;1078,282;1045,298",local,2,both,auto-traced major road from roads screenshot
+road_032,"1229,121;1169,184;1165.11,190.93;1165.48,199.08;1170.11,208.43;1179,219",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_033,"416,608;413.24,611.05;411.16,614.23;409.74,617.55;409,621;403,673;413,706",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_034,"664,392;689,421;736,433",trunk,4,both,auto-traced major road from roads screenshot
+road_035,"17,190;17.14,200.93;18.85,210.74;22.14,219.43;27,227;81,294",trunk,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_036,"466,539;465.33,538.7;464.77,538.61;464.33,538.7;464,539;416,608",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_037,"553,147;606,192;619,192;627.49,192;636.15,192;644.99,192;654,192",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_038,"967,535;938,611;936.51,613.83;934.35,616.27;931.51,618.33;928,620",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_039,"369,51;370.22,51.91;371.46,52.72;372.72,53.41;374,54;449,85",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_040,"952,332;914,403",primary,4,both,auto-traced major road from roads screenshot
+road_041,"908,645;923.14,652.25;934.03,660;940.64,668.25;943,677;945,757",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_042,"1466,699;1389,710;1387,709.69;1385.66,708.08;1385,705.19;1385,701",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_043,"1089,501;1089.76,506.51;1091.34,510.51;1093.76,513.01;1097,514;1173,519",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_044,"1387,412;1395,487",trunk,4,both,auto-traced major road from roads screenshot
+road_045,"551,509;545.07,511.66;539.59,514.72;534.57,518.16;530,522;502,548;466,539",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_046,"731,360;699,365;665,391",trunk,4,both,auto-traced major road from roads screenshot
+road_047,"898,52;869,121",trunk,4,both,auto-traced major road from roads screenshot
+road_048,"1006,515;1003.86,515.55;1002.15,516.4;1000.86,517.55;1000,519;972,588",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_049,"320,319;393,332",trunk,4,both,auto-traced major road from roads screenshot
+road_050,"737,433;807,450",primary,4,both,auto-traced major road from roads screenshot
+road_051,"434,390;428,418;407,453",secondary,2,both,auto-traced major road from roads screenshot
+road_053,"658,319;654,386",motorway,6,both,auto-traced major road from roads screenshot
+road_054,"1006,515;1072,515;1078.07,514.94;1084.25,514.75;1090.57,514.44;1097,514",motorway,6,both,auto-traced major road from roads screenshot; pass19-connected
+road_055,"1098,352;1065,409;1064.74,409.47;1064.48,409.96;1064.24,410.47;1064,411",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_056,"463,281;460.74,286.82;457.82,291.76;454.24,295.82;450,299;395,332",motorway,6,both,auto-traced major road from roads screenshot; pass19-connected
+road_057,"672,255;671.98,255.52;671.98,256.02;671.98,256.52;672,257;673,278;659,318",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_058,"1457,74;1449.34,77.14;1443.28,81.18;1438.84,86.14;1436,92;1417,151",primary,4,both,auto-traced major road from roads screenshot; pass19-connected
+road_059,"1130,300;1113,341;1099,351",primary,4,both,auto-traced major road from roads screenshot
+road_060,"277,19;287.68,17.12;297.57,16.99;306.68,18.62;315,22;369,51",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_061,"1064,411;1030,462",local,2,both,auto-traced major road from roads screenshot
+road_062,"1158,205;1110,242",trunk,4,both,auto-traced major road from roads screenshot
+road_063,"633,211;659,232;672,255",local,2,both,auto-traced major road from roads screenshot
+road_064,"924,0;904,28;898,52",trunk,4,both,auto-traced major road from roads screenshot
+road_065,"0,135;17,190",primary,4,both,auto-traced major road from roads screenshot
+road_066,"225,725;205,751;183,761",local,2,both,auto-traced major road from roads screenshot
+road_067,"977,387;972.2,386.84;968.43,387.62;965.7,389.34;964,392;944,445",secondary,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_068,"759,380;737,432",primary,4,both,auto-traced major road from roads screenshot
+road_069,"993,383;1010.99,387.3;1022.81,392.74;1028.49,399.3;1028,407;1006,458",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_070,"1022,639;1036.72,640.04;1049.8,641.06;1061.22,642.04;1071,643;1109,647;1118,641;1119,647",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_071,"1005,678;988.5,683.98;977.01,690.81;970.5,698.48;969,707;975,761",local,2,both,auto-traced major road from roads screenshot; pass19-connected
+road_072,"1276,95;1229,121",trunk,4,both,auto-traced major road from roads screenshot
+road_073,"725,485;716,499;708,529;706.74,532.36;704.82,535.48;702.24,538.36;699,541",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_074,"1023,606;1010,631;1022,639",local,2,both,auto-traced local street from roads screenshot
+road_075,"646,339;634,376;633.36,379.42;633.63,382.96;634.81,386.63;636.88,390.42",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_076,"624.73,479.62;632.3,478.79;639.2,479.24;645.43,480.98;651,484;681,505",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_078,"624.14,483.19;617.82,478.97;612.52,477.03;608.25,477.38;605,480;589,502;583,498",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_079,"632.25,463.07;638.07,467.23;643.8,471.28;649.44,475.2;655,479;683,498;689.73,501.77;697.15,504.4;705.26,505.91;714.06,506.28",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_081,"928,620;914,632;908,645",local,2,both,auto-traced local street from roads screenshot
+road_082,"989,380;977,387;987,389;993,383",local,2,both,auto-traced local street from roads screenshot
+road_083,"777,317;760,343",local,2,both,auto-traced local street from roads screenshot
+road_084,"633,462;626,472;623,490;621.58,498.94;620.28,508.09;619.08,517.44;618,527",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_085,"604.57,480.59;613.14,482.39;619.07,485.22;622.36,489.09;623,494;622,502;609,520",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_086,"1022,639;1020.97,642.71;1019.79,646.28;1018.47,649.71;1017,653;1005,678",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_087,"648,612;655,616;650,635",local,2,both,auto-traced local street from roads screenshot
+road_088,"873,555;896,570;904.8,574.89;916.12,579.72;929.96,584.49;946.32,589.2",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_089,"586,468;583,495",local,2,both,auto-traced local street from roads screenshot
+road_090,"946.46,342.36;951.15,342.67;954.47,343.72;956.42,345.5;957,348;956,375;957.15,380.1;961.04,383.8;967.65,386.1;977,387",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_091,"609,520;592,541",local,2,both,auto-traced local street from roads screenshot
+road_092,"602,476;584,496;583.67,496.42;583.39,496.9;583.17,497.42;583,498",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_093,"607,298;610.98,309.9;614.98,320.7;618.98,330.4;623,339;628,349;636,350;639,343;642.41,336.24;646.72,329.82;651.91,323.74;658,318",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_094,"562,332;574.01,335.13;584.01,339.51;592.01,345.13;598,352;602,358;593,375;591.87,380.86;594.99,386.15;602.37,390.86;614,395",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_095,"618,527;602,548",local,2,both,auto-traced local street from roads screenshot
+road_096,"699,541;691,539;687,550;692,554",local,2,both,auto-traced local street from roads screenshot
+road_097,"583.46,490.83;578.12,487.7;573.6,486.35;569.89,486.79;567,489;551,509",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_098,"562,332;554,330;545,344",local,2,both,auto-traced local street from roads screenshot
+road_099,"608,382;614,372;610,384;609.58,386.69;610.11,389.41;611.58,392.19;614,395",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_100,"710,329;709.35,330.51;708.8,332.01;708.35,333.51;708,335;707,340;698,335;692,340;688.31,342.04;684.03,342.5;679.14,341.38;673.66,338.69",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_101,"49.8,445.58;51.46,445.81;52.87,446.29;54.06,447.02;55,448;58,452;55,504;59,520;52,536;51,557",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_102,"56,610;51.62,614.38;48,619.01;45.12,623.88;43,629;39,641;52,646;57,658;87,669",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_103,"202,71;204.81,71.65;207.58,72.2;210.31,72.65;213,73;240,76;239,99;254,103",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_104,"51,443;24,501;23.85,501.45;23.8,501.94;23.85,502.45;24,503",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_105,"185,148;192.07,147.19;198.26,147.76;203.57,149.69;208,153;228,173;230,192;240,197;248.54,199.83;258.05,200.27;268.54,198.33;280,194",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_107,"1201.92,184.62;1193.75,193.17;1187.2,201.75;1182.29,210.36;1179,219;1165,268;1160,272;1152.98,279.09;1145.97,289.12;1138.98,302.09;1132,318",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_108,"296.02,169.08;309.5,179.06;321.49,187.21;331.99,193.52;341,198;392,220;401.08,222.88;411.79,224.39;424.14,224.53;438.12,223.29",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_109,"1066,79;1057,106;1057,133;1056.19,140.53;1053.75,147.88;1049.69,155.03;1044,162",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_110,"87,669;56,712;50.8,716.59;43.9,718.29;35.3,717.09;25,713",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_111,"1345,292;1356,290;1370,309;1386,317;1386.67,317.24;1387.39,317.32;1388.17,317.24;1389,317",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_112,"747,155;744,170;730,186;717,177",local,2,both,auto-traced local street from roads screenshot
+road_114,"219,347;224,373;223,398",local,2,both,auto-traced local street from roads screenshot
+road_115,"1312,317;1305,333;1322,362;1322.52,362.68;1323.19,363.25;1324.02,363.68;1325,364",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_116,"83,542;71,562;52,578;51.4,578.35;50.7,578.46;49.9,578.35;49,578",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_117,"221,509;212.96,512.93;207.78,517.23;205.46,521.93;206,527;209,535;191,552;182,553;181,548;177.43,540.44;170.23,535.42;159.43,532.94;145,533",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_118,"88,319;127,346;131.5,349.21;136,352.62;140.5,356.21;145,360",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_119,"1104,189;1089,203;1065,211;1064.53,211.11;1064.04,211.15;1063.53,211.11;1063,211",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_120,"11,697;5,694;0,702;21,715;25,713",local,2,both,auto-traced local street from roads screenshot
+road_121,"1550,393;1505,397;1503.33,396.86;1501.78,396.15;1500.33,394.86;1499,393",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_122,"198,350;201.07,349.45;203.43,349.61;205.07,350.45;206,352;219,395",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_123,"645,45;645.91,50.87;645.71,56.16;644.41,60.87;642,65;615,100",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_124,"66,425;69.24,432.24;71.15,439.32;71.74,446.24;71,453;62,496",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_125,"771.11,14.65;775.34,22.56;777.57,30.09;777.79,37.24;776,44;759,84",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_127,"732,110;731.65,110.75;731.37,111.5;731.15,112.25;731,113;729,126;743,137;740,149",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_128,"24,503;25,546",local,2,both,auto-traced local street from roads screenshot
+road_129,"52,578;48.22,590.25;47.62,599.66;50.22,606.25;56,610;97,623;97.47,623.11;97.96,623.15;98.47,623.11;99,623",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_130,"26,547;40,562;41,576;49,578",local,2,both,auto-traced local street from roads screenshot
+road_131,"460,294;495,318",local,2,both,auto-traced local street from roads screenshot
+road_132,"697,250;693,262;704,277;701,280;695,277;690.08,275.29;684.77,274.89;679.08,275.79;673,278",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_133,"246,710;256,732;261,737;271,735;280.74,733.68;292.33,733.23;305.74,733.68;321,735",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_134,"664,636;649,661;644,659;643,653;642.87,648.45;643.99,643.93;646.37,639.45;650,635",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_135,"1474,588;1486,587;1508,604",local,2,both,auto-traced local street from roads screenshot
+road_136,"758,87;750,102;738,104;732,110",local,2,both,auto-traced local street from roads screenshot
+road_137,"1235.26,532.84;1235.17,535.64;1234.76,538.26;1234.04,540.72;1233,543;1215,576",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_138,"1115.04,109.53;1111.43,102.74;1107.22,97.88;1102.41,94.97;1097,94;1080,94;1078,114",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_139,"219,347;213.61,347.89;208.31,348.69;203.11,349.39;198,350;180,352;173,369",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_140,"5,50;9.6,41.39;14.14,36.19;18.6,34.39;23,36;52,58;58.31,63.26;64.25,69.18;69.81,75.76;75,83",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_141,"1516,558;1501,561;1483,572;1480.74,574.37;1480.2,577.69;1481.38,581.95;1484.26,587.14",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_142,"687,305;685,308;710,329",local,2,both,auto-traced local street from roads screenshot
+road_143,"1057,133;1050.22,131.22;1044.96,131.12;1041.22,132.72;1039,136;1027,170",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_144,"476,13;502,26;499,32;498.2,33.66;497.43,35.38;496.7,37.16;496,39",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_145,"905,8;893,0;877,14;870.86,20.76;865.98,29.18;862.36,39.26;860,51",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_146,"661.56,310.69;664.69,310.64;667.31,311.18;669.41,312.3;671,314;675,320;673,348",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_147,"201,36;202,71",local,2,both,auto-traced local street from roads screenshot
+road_148,"1499,393;1464,394;1454.6,393.2;1444.4,390.28;1433.4,385.25;1421.59,378.1",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_149,"189,316;199,349",local,2,both,auto-traced local street from roads screenshot
+road_150,"316,538;326,552;343,553;343.41,553.04;343.83,553.1;344.26,553.19;344.69,553.3",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_151,"1204,186;1201.22,198.23;1197.62,208.97;1193.22,218.23;1188,226;1180,236;1176,257",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_153,"125,570;109,600",local,2,both,auto-traced local street from roads screenshot
+road_154,"221.98,467.07;217.07,474.2;214.27,481.07;213.58,487.67;215,494;221,509;238,514",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_155,"654,192;682,211",local,2,both,auto-traced local street from roads screenshot
+road_156,"1177.4,23.2;1183.23,23.63;1187.78,25.08;1191.03,27.53;1193,31;1199,49;1192,62;1188.21,67.85;1183.45,73.13;1177.71,77.85;1171,82",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_157,"446,214;448.94,198.77;453.25,188.86;458.94,184.27;466,185;482,192;476,207",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_158,"763.13,74.28;769.54,75.87;775.49,78.02;780.98,80.73;786,84;813,104;819.66,107.21;827.22,107.61;835.66,105.21;845,100",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_159,"754,128;781,148;784.68,152.24;786.08,157.82;785.18,164.74;782,173",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_160,"298,166;280,194",local,2,both,auto-traced local street from roads screenshot
+road_161,"546,88;551.43,91.21;554.91,94.62;556.43,98.21;556,102;552,113;571,123",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_162,"142,500;145,533",local,2,both,auto-traced local street from roads screenshot
+road_163,"543,677;554.54,667.87;564.89,662.82;574.04,661.87;582,665;609,684;616.61,688.81;624.83,692.93;633.64,696.37;643.05,699.13",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_164,"704,277;707.19,277.06;710.08,277.58;712.69,278.56;715,280;741,300;748.41,305.46;756.38,310.88;764.92,316.25;774.01,321.58",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_165,"782,173;765,201",local,2,both,auto-traced local street from roads screenshot
+road_166,"5,50;1,63;16,74",local,2,both,auto-traced local street from roads screenshot
+road_167,"1117,559;1128.37,571.15;1135.49,582.21;1138.37,592.15;1137,601;1129,620;1139,625",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_168,"1131.06,89.15;1139.09,92.32;1146.43,93.51;1153.07,92.74;1159,90;1171,82;1170,99",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_169,"690,5;683,0;674,21;669.53,28.7;663.2,35.27;655.03,40.7;645,45",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_170,"1325,364;1328,367;1325,394;1324.54,396.14;1323.65,398.19;1322.34,400.15;1320.59,402.02",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_171,"713,154;726,164;717,176;710.76,183.59;702.85,191.95;693.26,201.09;682,211",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_172,"1181,1;1183,12;1174,30",local,2,both,auto-traced local street from roads screenshot
+road_173,"1380,241;1366,269;1363.5,274.06;1361,279.24;1358.5,284.56;1356,290",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_174,"130.78,412.2;131.22,416.89;130.74,420.93;129.33,424.29;127,427;107,444;107,449",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_175,"787.34,84.99;784.09,89.77;780.78,94.37;777.42,98.78;774,103;754,127",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_176,"391,261;422,263;429.74,261.06;434.98,254.08;437.74,242.06;438,225",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_177,"68,393;65.83,388.06;63.44,384.91;60.83,383.56;58,384;47,389;41,407",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_178,"120,468;122.36,470.29;124.15,472.72;125.36,475.29;126,478;128,494;142,499",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_179,"65,10;84,24;82,31;78.27,39.18;72.03,46.4;63.27,52.68;52,58",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_180,"617,69;622,76;609,94",local,2,both,auto-traced local street from roads screenshot
+road_181,"448,617;430,642;426.11,645.23;420.96,645.87;414.55,643.9;406.88,639.33",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_182,"1049,197;1056,216;1059,217;1063,211",local,2,both,auto-traced local street from roads screenshot
+road_183,"359,594;374,590;386,599;392.39,602.95;399.51,605.76;407.39,607.45;416,608",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_184,"672.03,257.67;670.16,257.41;668.36,257.38;666.64,257.58;665,258;659,260;649,282",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_185,"277,19;263,46;258.46,53.87;253.11,61.49;246.96,68.87;240,76",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_186,"825,39;840,52;839,57;834,55",local,2,both,auto-traced local street from roads screenshot
+road_187,"654.16,228.09;652.87,228.9;651.91,229.82;651.29,230.86;651,232;650,242;642,242;632,235",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_188,"270.89,30.79;279.97,36.29;288.84,41.16;297.52,45.39;306,49;334,60",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_189,"281,424;282,454;281.75,456.48;280.84,458.85;279.26,461.13;277.02,463.3",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_190,"106.83,393.46;104.46,400.43;101.2,405.84;97.04,409.7;92,412;74,417;66,425;62.07,429.68;58.92,435.08;56.57,441.18;55,448",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_191,"345.52,548.66;348.14,548.04;350.26,548.06;351.88,548.72;353,550;359,561;355,578",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_192,"738,79;725,106;722.31,112.43;720.25,119.24;718.81,126.43;718,134",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_194,"649,661;650.54,668.37;650.88,675.32;650.04,681.87;648,688;636,715;633.29,718.29;629.05,719.39;623.29,718.29;616,715",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_195,"277,19;285.89,24.81;294.68,29.75;303.39,33.81;312,37;340,46",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_196,"1398,3;1421,0;1422,6",local,2,both,auto-traced local street from roads screenshot
+road_197,"520,667;539,681;543,677",local,2,both,auto-traced local street from roads screenshot
+road_198,"724,21;715.91,27.06;708.55,33.41;701.91,40.06;696,47;678,70;673.46,73.98;667.61,75.97;660.46,75.98;652,74",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_199,"1200,23;1203,37;1198,35;1195,26;1193.08,22.62;1189.91,20.23;1185.48,18.82;1179.8,18.4",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_200,"113.54,52.17;99.22,59.41;88.03,66.96;79.96,74.82;75,83;64,110;63.86,110.46;63.82,110.94;63.86,111.46;64,112",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_201,"64,112;53,139",local,2,both,auto-traced local street from roads screenshot
+road_203,"454,622;438,646;432.87,650.52;425.92,651.42;417.14,648.7;406.53,642.37",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_204,"622,28;645,45;649.76,50;652.51,56.51;653.26,64.5;652,74",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_205,"824,38;817,40;833,54;837.8,57.41;843.31,59.85;849.5,61.31;856.4,61.8",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_206,"1555,53;1561,73;1554,76",local,2,both,auto-traced local street from roads screenshot
+road_207,"30,57;47,71;43,76;38.27,79.68;32.19,80.57;24.77,78.68;16,74",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_208,"591.19,179.42;590.55,180.03;589.98,180.67;589.46,181.32;589,182;574,206",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_209,"1117,559;1126.57,567.36;1132.43,575.64;1134.57,583.86;1133,592;1122,618;1120.11,623.31;1118.82,628.91;1118.11,634.81;1118,641",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_210,"185,148;179,163;179,175",local,2,both,auto-traced local street from roads screenshot
+road_211,"1117.56,515.35;1116.66,521.44;1116.1,527.41;1115.88,533.26;1116,539;1117,559;1109,558",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_212,"191,147;195,139;208,153",local,2,both,auto-traced local street from roads screenshot
+road_213,"682,152;705,168;707.88,169.98;710.84,171.98;713.88,173.98;717,176",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_214,"584,282;607,298",local,2,both,auto-traced local street from roads screenshot
+road_215,"214,465;241,472",local,2,both,auto-traced local street from roads screenshot
+road_216,"56,610;41.95,608.41;31.1,609.71;23.45,613.91;19,621;14,636;6,645",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_217,"1116,207;1109,208;1100,217;1100,225;1100.62,229.61;1102.5,233.98;1105.62,238.11;1110,242",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_218,"439,211;438,225;446,214",local,2,both,auto-traced local street from roads screenshot
+road_219,"773.54,734.69;779.68,739.14;785.8,743.35;791.91,747.3;798,751;815,761;821,756",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_220,"125,43;116,39;111,49;115,54",local,2,both,auto-traced local street from roads screenshot
+road_221,"529,6;515,1;509,12;507.21,15.35;505.45,18.8;503.71,22.35;502,26",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_222,"1211,164;1202,173;1201,184;1204,186",local,2,both,auto-traced local street from roads screenshot
+road_223,"1044,162;1032,177;1033,185;1035.84,193.32;1042.12,200.43;1051.84,206.32;1065,211",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_224,"1240,159;1230,158;1216,168;1214.75,168.42;1213.5,167.89;1212.25,166.42;1211,164",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_225,"638.36,40.1;632.82,47.51;627.41,54.8;622.14,61.96;617,69;601,91;596.43,94.43;590.57,93.91;583.43,89.43;575,81",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_226,"108,450;118,451;120,468",local,2,both,auto-traced local street from roads screenshot
+road_227,"879,750;897,760;901,755",local,2,both,auto-traced local street from roads screenshot
+road_228,"1467,49;1457,74",local,2,both,auto-traced local street from roads screenshot
+road_229,"652,74;638,97",local,2,both,auto-traced local street from roads screenshot
+road_230,"486.72,101.4;484.92,105.38;483.2,109.31;481.56,113.19;480,117;470,142",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_231,"68,393;58,418;57.79,420.21;59.05,422.12;61.79,423.71;66,425",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_232,"321,735;328,761",local,2,both,auto-traced local street from roads screenshot
+road_233,"753,128;747,154",local,2,both,auto-traced local street from roads screenshot
+road_234,"1522,586;1509,590;1509,603",local,2,both,auto-traced local street from roads screenshot
+road_236,"919,725;937,736;935,741;930.42,748.02;923.22,752.69;913.42,755.02;901,755",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_237,"32.32,553.77;27.61,557.24;23.33,560.93;19.45,564.85;16,569;0,590",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_238,"1483,572;1481.33,578.64;1478.78,583.52;1475.33,586.64;1471,588;1461,589;1460,605;1459.45,609.18;1458.32,613.34;1456.62,617.48;1454.35,621.59",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_239,"499,32;504.24,46.75;510.16,58.67;516.74,67.75;524,74;546,88",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_240,"1322,634;1308,656",local,2,both,auto-traced local street from roads screenshot
+road_241,"678,70;692.04,74.11;701.39,79.48;706.04,86.11;706,94;699,119",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_242,"205,426;230,433",local,2,both,auto-traced local street from roads screenshot
+road_243,"43,76;49.85,83.53;54.13,91.04;55.85,98.53;55,106;51,120;43,128;35.65,133.57;26.33,137.55;15.04,139.94;1.77,140.74",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_244,"639,6;640,1;645,0;657,10;660.91,12.79;665.27,15.03;670.08,16.72;675.34,17.86",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_245,"699,119;703.77,123.03;708.52,126.87;713.27,130.53;718,134;739,149;740.85,150.06;742.91,150.75;745.2,151.06;747.69,151.01",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_246,"450,509;471,524;472.99,526.67;472.48,530.06;469.49,534.17;464,539",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_247,"1183.41,231.73;1186.47,234.03;1189.42,236.34;1192.27,238.66;1195,241;1203,248;1205,263",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_248,"1132,318;1126,343",local,2,both,auto-traced local street from roads screenshot
+road_249,"1023,723;1015,741;1009,741;1000.28,741.25;991.41,741.99;982.39,743.24;973.22,744.98",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_250,"601,702;616,715;613,720",local,2,both,auto-traced local street from roads screenshot
+road_251,"1022,292;1003,295;999,300;997.31,304.02;998.41,308.36;1002.31,313.02;1009,318",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_252,"474,23;498,32",local,2,both,auto-traced local street from roads screenshot
+road_253,"412,0;396,20;390.83,27.57;386.57,36.23;383.23,45.97;380.79,56.81",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_254,"708,1;724,21",local,2,both,auto-traced local street from roads screenshot
+road_255,"1474.96,697.45;1475.79,701.96;1476.57,706.39;1477.31,710.74;1478,715;1481,734;1475,736",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_256,"200,405;199,400;190,399;183,408;180.86,411.44;179.44,415.34;178.75,419.68;178.79,424.47",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_257,"596.97,184.33;595.79,185.42;594.74,186.57;593.81,187.76;593,189;580,211",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_258,"321,512;316,537",local,2,both,auto-traced local street from roads screenshot
+road_259,"1414.19,397.82;1419.76,400.07;1425.24,402.19;1430.66,404.16;1436,406;1442,408;1441,427",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_260,"223,398;227,423;227.1,425.1;226.74,427.21;225.91,429.35;224.62,431.49",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_261,"1552,477;1561,492;1555,497",local,2,both,auto-traced local street from roads screenshot
+road_262,"860,51;852,75",local,2,both,auto-traced local street from roads screenshot
+road_263,"369,232;373,226;389,234;393.48,237.87;395.31,243.66;394.48,251.37;391,261",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_264,"1554,76;1542.87,92.44;1537.32,105.09;1537.37,113.94;1543,119;1559,125;1559,133",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_266,"109,600;99,623",local,2,both,auto-traced local street from roads screenshot
+road_267,"635,716;625,739",local,2,both,auto-traced local street from roads screenshot
+road_268,"9,42;29,57",local,2,both,auto-traced local street from roads screenshot
+road_269,"852,76;845,100",local,2,both,auto-traced local street from roads screenshot
+road_270,"790,4;781,13;769,15",local,2,both,auto-traced local street from roads screenshot
+road_271,"598,8;607,0;615,10;619.24,13.17;624.65,13.56;631.24,11.17;639,6",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_272,"1312.92,723.62;1313.1,725.03;1313.34,726.39;1313.64,727.72;1314,729;1318,742;1329,740",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_273,"173,369;167.16,369.87;161.88,369.66;157.16,368.37;153,366;145,360;138,373",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_274,"472,33;496,39",local,2,both,auto-traced local street from roads screenshot
+road_275,"493.24,104.21;491.27,108.49;489.41,112.71;487.65,116.89;486,121;477,144;473.85,152.85;470.97,162.63;468.35,173.35;466,185",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_276,"1443,548;1421,559;1413.99,564.89;1409.04,574.5;1406.17,587.83;1405.36,604.89",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+road_277,"1097,485;1089,501;1083,500",local,2,both,auto-traced local street from roads screenshot
+road_278,"561,67;576,74;575,81;572.43,86.75;566.74,89.84;557.93,90.25;546,88",local,2,both,auto-traced local street from roads screenshot; pass19-connected
+gwb_upper_level,"714,426;760,437;815,452;870,468;925,486;985,501",motorway,6,both,gwb mandatory bridge connector traced from roads screenshot

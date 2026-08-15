@@ -1,0 +1,97 @@
+rule_type,left_id,right_id,allowed,reason
+head_top,baseball_cap,hoodie_navy,true,registered pair
+head_top,baseball_cap,hoodie_olive,true,registered pair
+head_top,baseball_cap,hoodie_rust,true,registered pair
+head_top,baseball_cap,jacket_black,true,registered pair
+head_top,baseball_cap,jacket_brown,true,registered pair
+head_top,baseball_cap,motorcycle_jacket,true,registered pair
+head_top,baseball_cap,tshirt_blue,true,registered pair
+head_top,baseball_cap,tshirt_gold,true,registered pair
+head_top,baseball_cap,tshirt_purple,true,registered pair
+head_top,baseball_cap,tshirt_red,true,registered pair
+head_top,baseball_cap,tshirt_teal,true,registered pair
+head_top,baseball_cap,tshirt_white,true,registered pair
+head_top,curly_short,hoodie_navy,true,registered pair
+head_top,curly_short,hoodie_olive,true,registered pair
+head_top,curly_short,hoodie_rust,true,registered pair
+head_top,curly_short,jacket_black,true,registered pair
+head_top,curly_short,jacket_brown,true,registered pair
+head_top,curly_short,motorcycle_jacket,true,registered pair
+head_top,curly_short,tshirt_blue,true,registered pair
+head_top,curly_short,tshirt_gold,true,registered pair
+head_top,curly_short,tshirt_purple,true,registered pair
+head_top,curly_short,tshirt_red,true,registered pair
+head_top,curly_short,tshirt_teal,true,registered pair
+head_top,curly_short,tshirt_white,true,registered pair
+head_top,curly_short_rust,hoodie_navy,true,registered pair
+head_top,curly_short_rust,hoodie_olive,true,registered pair
+head_top,curly_short_rust,hoodie_rust,true,registered pair
+head_top,curly_short_rust,jacket_black,true,registered pair
+head_top,curly_short_rust,jacket_brown,true,registered pair
+head_top,curly_short_rust,motorcycle_jacket,true,registered pair
+head_top,curly_short_rust,tshirt_blue,true,registered pair
+head_top,curly_short_rust,tshirt_gold,true,registered pair
+head_top,curly_short_rust,tshirt_purple,true,registered pair
+head_top,curly_short_rust,tshirt_red,true,registered pair
+head_top,curly_short_rust,tshirt_teal,true,registered pair
+head_top,curly_short_rust,tshirt_white,true,registered pair
+head_top,fade_mask,hoodie_navy,true,registered pair
+head_top,fade_mask,hoodie_olive,true,registered pair
+head_top,fade_mask,hoodie_rust,true,registered pair
+head_top,fade_mask,jacket_black,true,registered pair
+head_top,fade_mask,jacket_brown,true,registered pair
+head_top,fade_mask,motorcycle_jacket,true,registered pair
+head_top,fade_mask,tshirt_blue,true,registered pair
+head_top,fade_mask,tshirt_gold,true,registered pair
+head_top,fade_mask,tshirt_purple,true,registered pair
+head_top,fade_mask,tshirt_red,true,registered pair
+head_top,fade_mask,tshirt_teal,true,registered pair
+head_top,fade_mask,tshirt_white,true,registered pair
+head_top,motorcycle_helmet,hoodie_navy,false,helmet requires outerwear
+head_top,motorcycle_helmet,hoodie_olive,false,helmet requires outerwear
+head_top,motorcycle_helmet,hoodie_rust,false,helmet requires outerwear
+head_top,motorcycle_helmet,jacket_black,true,registered pair
+head_top,motorcycle_helmet,jacket_brown,true,registered pair
+head_top,motorcycle_helmet,motorcycle_jacket,true,registered pair
+head_top,motorcycle_helmet,tshirt_blue,false,helmet requires outerwear
+head_top,motorcycle_helmet,tshirt_gold,false,helmet requires outerwear
+head_top,motorcycle_helmet,tshirt_purple,false,helmet requires outerwear
+head_top,motorcycle_helmet,tshirt_red,false,helmet requires outerwear
+head_top,motorcycle_helmet,tshirt_teal,false,helmet requires outerwear
+head_top,motorcycle_helmet,tshirt_white,false,helmet requires outerwear
+head_top,ponytail_shades,hoodie_navy,true,registered pair
+head_top,ponytail_shades,hoodie_olive,true,registered pair
+head_top,ponytail_shades,hoodie_rust,true,registered pair
+head_top,ponytail_shades,jacket_black,true,registered pair
+head_top,ponytail_shades,jacket_brown,true,registered pair
+head_top,ponytail_shades,motorcycle_jacket,true,registered pair
+head_top,ponytail_shades,tshirt_blue,true,registered pair
+head_top,ponytail_shades,tshirt_gold,true,registered pair
+head_top,ponytail_shades,tshirt_purple,true,registered pair
+head_top,ponytail_shades,tshirt_red,true,registered pair
+head_top,ponytail_shades,tshirt_teal,true,registered pair
+head_top,ponytail_shades,tshirt_white,true,registered pair
+accessory_head,baseball_cap,baseball_cap,true,registered pair
+accessory_head,baseball_cap,curly_short,true,registered pair
+accessory_head,baseball_cap,curly_short_rust,true,registered pair
+accessory_head,baseball_cap,fade_mask,true,registered pair
+accessory_head,baseball_cap,motorcycle_helmet,true,registered pair
+accessory_head,baseball_cap,ponytail_shades,true,registered pair
+accessory_head,face_mask,baseball_cap,true,registered pair
+accessory_head,face_mask,curly_short,true,registered pair
+accessory_head,face_mask,curly_short_rust,true,registered pair
+accessory_head,face_mask,fade_mask,true,registered pair
+accessory_head,face_mask,motorcycle_helmet,false,hidden by full-face helmet
+accessory_head,face_mask,ponytail_shades,true,registered pair
+accessory_head,none,baseball_cap,true,registered pair
+accessory_head,none,curly_short,true,registered pair
+accessory_head,none,curly_short_rust,true,registered pair
+accessory_head,none,fade_mask,true,registered pair
+accessory_head,none,motorcycle_helmet,true,registered pair
+accessory_head,none,ponytail_shades,true,registered pair
+accessory_head,sunglasses,baseball_cap,true,registered pair
+accessory_head,sunglasses,curly_short,true,registered pair
+accessory_head,sunglasses,curly_short_rust,true,registered pair
+accessory_head,sunglasses,fade_mask,true,registered pair
+accessory_head,sunglasses,motorcycle_helmet,false,hidden by full-face helmet
+accessory_head,sunglasses,ponytail_shades,true,registered pair

@@ -1,0 +1,3 @@
+﻿connector_id,kind,from_level,to_level,x0,y0,x1,y1,width
+gwb_upper_level_start_ramp,ramp,0,1,7763.33,6782.63,7761.93,6774.14,160
+gwb_upper_level_end_ramp,ramp,0,1,10600.97,6570.65,10403.68,6481.07,160

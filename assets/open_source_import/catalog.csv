@@ -1,0 +1,10 @@
+asset_id,runtime_file,source_path,asset_type,camera_mode,license,runtime_status,notes
+arcade_car_01,../cars/open_asset_arcade_car_01.png,Assets/Arcade_Car_Physics/Models/Car01.obj,vehicle_sprite,topdown,user_created,active,pickup; render 64x30; collision 58x24; speed 0.9; weight 1.0
+arcade_car_02,../cars/open_asset_arcade_car_02.png,Assets/Arcade_Car_Physics/Models/Car02.obj,vehicle_sprite,topdown,user_created,active,sports; render 52x24; collision 46x20; speed 1.08; weight 1.0
+arcade_car_03,../cars/open_asset_arcade_car_03.png,Assets/Arcade_Car_Physics/Models/Car03.obj,vehicle_sprite,topdown,user_created,active,truck; render 76x32; collision 70x26; speed 0.76; weight 0.65
+arcade_car_04,../cars/open_asset_arcade_car_04.png,Assets/Arcade_Car_Physics/Models/Car04.obj,vehicle_sprite,topdown,user_created,active,emergency; render 58x27; collision 52x22; speed 0.96; weight 0.7
+arcade_car_05,../cars/open_asset_arcade_car_05.png,Assets/Arcade_Car_Physics/Models/Car05.obj,vehicle_sprite,topdown,user_created,active,van; render 66x32; collision 60x26; speed 0.86; weight 0.85
+sprint_dust_8,../effects/sprint_dust_8.png,Assets/Arcade_Car_Physics/Textures/White puff,effect_atlas,both,user_created,active,Eight-frame approved-palette sprint dust
+city_building_01_topdown,city/city_building_01_topdown.png,Assets/CityVoxelPack/Assets/buildings/medium/Meshes/building1.obj,building_sprite,topdown,user_created,active,Top-down adaptation for the movement tester
+city_building_01_isometric,city/city_building_01_isometric.png,Assets/CityVoxelPack/Assets/buildings/medium/Meshes/building1.obj,building_sprite,isometric,user_created,active,2.5D rooftop-module adaptation for game and tester
+character_running_fbx,,Assets/character/Player/Character@Running.fbx,motion_source,3d_source,user_created,active_timing_reference,Mapped to the dual-camera walk_8 art at run cadence

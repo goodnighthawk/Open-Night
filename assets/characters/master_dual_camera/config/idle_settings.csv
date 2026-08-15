@@ -1,0 +1,12 @@
+setting,value,type,description
+breathing_start_seconds,0.35,float,Begin subtle breathing after the actor settles
+breathing_fps,3.0,float,Six-frame breathing playback rate
+breathing_frame_count,6,int,Registered breathing frames per direction
+waiting_start_seconds,6.0,float,First natural waiting gesture after continuous idle
+waiting_interval_seconds,10.0,float,Time between starts of waiting gestures
+waiting_duration_seconds,3.0,float,Waiting gesture duration before returning to breathing
+waiting_fps,4.0,float,Twelve-frame waiting playback rate
+waiting_frame_count,12,int,Registered waiting frames per direction
+idle_reset_inputs,movement;action;crouch;prone,string,Inputs that immediately reset the automatic idle timer
+ground_anchor,locked,string,Feet or overhead ground-contact point remains registered across all frames
+topdown_projection,strict_90_degree,string,Top-down idle retains head-and-shoulder dominance with legs barely visible

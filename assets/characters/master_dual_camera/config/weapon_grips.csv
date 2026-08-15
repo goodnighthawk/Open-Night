@@ -1,0 +1,65 @@
+camera_mode,direction,direction_column,hold_class,action_row,anchor_x,anchor_y,rotation_degrees,notes
+isometric,north,0,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,north,0,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,north,0,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,north,0,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,northeast,1,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northeast,1,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northeast,1,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northeast,1,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,east,2,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,east,2,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,east,2,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,east,2,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,southeast,3,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southeast,3,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southeast,3,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southeast,3,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,south,4,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,south,4,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,south,4,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,south,4,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,southwest,5,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southwest,5,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southwest,5,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,southwest,5,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,west,6,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,west,6,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,west,6,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,west,6,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+isometric,northwest,7,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northwest,7,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northwest,7,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+isometric,northwest,7,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,north,0,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,north,0,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,north,0,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,north,0,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,northeast,1,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northeast,1,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northeast,1,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northeast,1,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,east,2,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,east,2,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,east,2,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,east,2,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,southeast,3,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southeast,3,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southeast,3,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southeast,3,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,south,4,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,south,4,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,south,4,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,south,4,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,southwest,5,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southwest,5,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southwest,5,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,southwest,5,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,west,6,one_hand,0,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,west,6,compact_two_hand,1,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,west,6,long_low,2,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,west,6,long_aimed,3,128,128,0,directional weapon sheet is center-registered; tune per weapon after in-game recoil review
+topdown,northwest,7,one_hand,0,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northwest,7,compact_two_hand,1,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northwest,7,long_low,2,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors
+topdown,northwest,7,long_aimed,3,128,128,0,45-degree registered diagonal; midpoint of adjacent cardinal grip anchors

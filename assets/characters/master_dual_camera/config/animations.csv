@@ -1,0 +1,9 @@
+animation,row_sequence,fps,loop,description
+idle,0,2,true,standing idle
+breathing,0,3,true,six-frame subtle chest and shoulder breathing loop with locked feet
+waiting,0,4,true,twelve-frame upper-body weight shift returning to registered idle
+walk,1;2;3;2,8,true,base walk keys
+turn,0;4;0,10,false,turn/pivot transition
+jump,0;6;5;6;0,8,false,"crouch, airborne, land"
+crouch,0;6,6,false,stand to crouch
+prone,6;7,5,false,crouch to prone

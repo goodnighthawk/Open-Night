@@ -1,0 +1,4 @@
+profile,label,lane_multiplier,sidewalk_multiplier,road_lane_width_px,road_edge_margin_px,building_size_scale,max_lanes_motorway,max_lanes_trunk,max_lanes_primary,max_lanes_secondary,max_lanes_tertiary,max_lanes_residential,max_lanes_service,notes
+current_3x,Legacy literal 3x lanes,3,2,40,4,1.0,18,12,9,6,6,6,3,Retained only as a legacy geometry reference
+approved_nyc_callback_v3,Approved NYC/GWB callback geometry,1,1.65,38,6,1.12,6,6,4,4,3,2,1,Target-like wide readable avenues with pale sidewalks and strong street walls; GTA2 callback applies cosmetically rather than by multiplying lanes
+nyc_dense_v3,Dense NYC authored composition,1,1.75,36,6,1.20,6,6,4,4,3,2,1,Tighter visual lane scale and larger building footprints for dense blocks

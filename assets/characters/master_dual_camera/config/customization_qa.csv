@@ -1,0 +1,9 @@
+check,status,detail
+paired_selectable_parts,PASS,paired=39; unpaired=0
+preset_validation,PASS,presets=10
+raw_combination_space,PASS,paired_combinations_before_filters=20736
+topdown:90_degree_leg_occlusion,PASS,reference-guy single-lead-leg projection within overhead limits
+topdown:90_degree_rotation_invariance,PASS,direction_cells_not_exact_rotations=0
+directions:eight_direction_contract,PASS,north; northeast; east; southeast; south; southwest; west; northwest
+directions:paired_diagonal_registration,PASS,all modular camera pairs use identical 256px cell registration
+directions:fluid_action_weapon_coverage,PASS,fluid rows and action/weapon columns expanded from 4 to 8

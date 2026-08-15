@@ -1,0 +1,40 @@
+﻿key,value,type,description
+lane_multiplier,1,int,Multiply authored/reference lane counts by this factor
+road_width_multiplier,2.0,float,Multiply the complete asphalt width of every generated drivable road
+sidewalk_multiplier,1.65,float,Multiply ordinary sidewalk widths by this factor
+bicycle_render_scale,0.72,float,Compact strict top-down bicycle body/shadow scale without scaling the rider
+building_size_scale,1.12,float,Global building footprint scale around each building centroid; regenerate after changing
+preserve_curated_core,true,bool,Preserve the authored Fort Lee/GWB/Washington Heights core while compiling the full screenshot extent
+road_lane_width_px,38,float,Gameplay lane width used after lane multiplication
+base_sidewalk_width_px,34,float,Original approved-art sidewalk width before multiplier
+building_min_size_px,18,float,Discard generated building boxes smaller than this after scaling
+connect_nearby_roads,true,bool,Deterministically connect plausible nearby dead ends when the reference traces indicate a junction
+road_junction_snap_tolerance_px,8,float,Distance at which a road endpoint counts as already connected to another road
+dead_end_connect_min_px,24,float,Do not create tiny connector stubs shorter than this
+dead_end_connect_max_px,320,float,Maximum nearby gap that the road stitcher may bridge
+dead_end_connect_max_turn_deg,58,float,Maximum turn from the existing road direction into an automatic connector
+auto_intersection_crosswalks,true,bool,Generate clean zebra crossings and stop bars from junction topology
+auto_crosswalk_width_px,42,float,Thickness of each generated zebra crossing along the vehicle approach
+auto_crosswalk_edge_gap_px,8,float,Gap between intersection asphalt edge and the nearest zebra stripe zone
+junction_marking_clearance_px,72,float,Extra lane-marking suppression distance around intersections beyond the crossing road half-width
+dead_end_connector_cap,600,int,Hard safety cap on automatic dead-end connectors after road canonicalization
+dead_end_connector_max_fraction,0.30,float,At most this fraction of true dead-end candidates may receive automatic connectors
+road_edge_margin_px,6,float,Extra asphalt margin at each outer road edge
+max_lanes_motorway,6,int,Art-target cap on total motorway lanes after multiplier
+max_lanes_motorway_link,3,int,Art-target cap on total motorway-link lanes
+max_lanes_trunk,6,int,Art-target cap on total trunk lanes
+max_lanes_trunk_link,3,int,Art-target cap on total trunk-link lanes
+max_lanes_primary,4,int,Art-target cap on total primary lanes
+max_lanes_primary_link,3,int,Art-target cap on total primary-link lanes
+max_lanes_secondary,4,int,Art-target cap on total secondary lanes
+max_lanes_secondary_link,3,int,Art-target cap on total secondary-link lanes
+max_lanes_tertiary,3,int,Art-target cap on total tertiary lanes
+max_lanes_tertiary_link,2,int,Art-target cap on total tertiary-link lanes
+max_lanes_unclassified,2,int,Art-target cap on total unclassified lanes
+max_lanes_residential,2,int,Art-target cap on total residential lanes
+max_lanes_living_street,1,int,Art-target cap on total living-street lanes
+max_lanes_service,1,int,Art-target cap on total service-road lanes
+edge_tunnel_max_extension_px,1500,float,Maximum outward extension used to carry a perimeter road into a continuation tunnel
+edge_tunnel_min_outward_dot,0.25,float,Minimum outward-facing endpoint tangent for an automatic perimeter tunnel
+edge_tunnel_inset_px,54,float,Distance inside the world boundary used for the visible tunnel mouth
+edge_tunnel_dedupe_px,150,float,Merge co-located road exits into one visible tunnel mouth

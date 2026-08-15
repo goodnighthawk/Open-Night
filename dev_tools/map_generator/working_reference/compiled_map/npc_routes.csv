@@ -1,0 +1,9 @@
+﻿route_id,name,speed,loop,lane_offset,axis,direction,turn_radius
+walk_00,Pedestrian loop 1,55,true,0,mixed,loop,12
+walk_01,Pedestrian loop 2,55,true,0,mixed,loop,12
+walk_02,Pedestrian loop 3,55,true,0,mixed,loop,12
+walk_03,Pedestrian loop 4,55,true,0,mixed,loop,12
+walk_04,Pedestrian loop 5,55,true,0,mixed,loop,12
+walk_05,Pedestrian loop 6,55,true,0,mixed,loop,12
+walk_06,Pedestrian loop 7,55,true,0,mixed,loop,12
+walk_07,Pedestrian loop 8,55,true,0,mixed,loop,12

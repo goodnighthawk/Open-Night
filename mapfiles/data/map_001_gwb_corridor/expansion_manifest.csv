@@ -1,0 +1,12 @@
+﻿key,value
+version,2
+area_multiplier,2
+chunk_size,1024
+chunk_cols,16
+chunk_rows,12
+server_region_chunk_cols,8
+server_region_chunk_rows,4
+server_region_cols,3
+server_region_rows,2
+outer_geometry,reference_image_compiled_full_extent
+replacement_contract,Reference-image compiler regenerates semantic chunks without changing runtime map IDs

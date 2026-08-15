@@ -1,0 +1,5 @@
+﻿layer,method,source_w,source_h,master_w,master_h,uniform_scale,translate_x,translate_y,feature_matches,inliers,perspective_skew,anisotropic_scale
+traffic,orb_uniform_scale_translate,1645,810,1562,762,1.00004906,-42.024,1.987,1423,1367,0,false
+terrain,orb_uniform_scale_translate,1644,803,1562,762,0.99986479,-30.926,8.059,1408,1312,0,false
+transit,orb_uniform_scale_translate,1653,804,1562,762,0.99991822,-48.950,0.034,1757,1714,0,false
+biking,orb_uniform_scale_translate,1582,778,1562,762,1.00011317,8.930,29.955,703,682,0,false

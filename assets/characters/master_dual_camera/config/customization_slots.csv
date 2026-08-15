@@ -1,0 +1,7 @@
+slot,display_order,allow_none,description
+body,0,false,registered body/skin underlay
+head,1,false,"complete head, hair or helmet assembly"
+top,2,false,"shirt, hoodie or jacket"
+bottom,3,false,trousers or shorts
+footwear,4,false,shoes or boots
+accessory,5,true,"mask, sunglasses or cap overlay"

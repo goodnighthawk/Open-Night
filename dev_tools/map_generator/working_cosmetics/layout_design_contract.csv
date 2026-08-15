@@ -1,0 +1,9 @@
+﻿principle,enabled,weight,notes
+district_identity,true,1.0,Each district reuses a coherent building/prop/light vocabulary.
+road_loops,true,0.9,Prefer memorable looped navigation and multiple return paths; do not copy GTA2 road geometry.
+service_cutthroughs,true,0.85,Use narrow alleys/service gaps where real geometry supports them.
+landmark_compounds,true,1.0,Give bridge/major landmarks clear approach spaces and visual identity.
+chokepoints,true,0.6,Allow some readable constrictions without making routing brittle.
+street_wall_continuity,true,1.0,Buildings visually form blocks rather than isolated semantic rectangles.
+gameplay_readability,true,1.0,"Road edges, crossings, vehicles and props must remain legible at gameplay zoom."
+semantic_geometry_authority,true,1.0,This pass is cosmetic/layout dressing only; collision/network identities remain stable.

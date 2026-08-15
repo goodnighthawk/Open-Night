@@ -1,0 +1,15 @@
+﻿kind,path,category,status,notes
+source_atlas,2.5D City Texture Pack Atlas.png,source_reference,carry_forward,Approved-derived composite city/building texture source
+runtime,../environment/approved/city_red_brick_64.png,facade,active,Red brick facade crop
+runtime,../environment/approved/city_red_brick2_64.png,facade,included,Alternate red brick facade crop
+runtime,../environment/approved/city_brown_brick_64.png,facade,active,Brown brick/industrial facade crop
+runtime,../environment/approved/city_beige_stone_64.png,facade,active,Commercial beige-stone facade crop
+runtime,../environment/approved/city_gray_stone_64.png,facade,active,Tower gray-stone facade crop
+runtime,../environment/approved/city_concrete_64.png,facade,active,Concrete facade crop
+runtime,../environment/approved/city_painted_plaster_64.png,facade,included,Painted plaster facade crop
+runtime,../environment/approved/city_roof_tar_64.png,roof,active,Tar roof crop
+runtime,../environment/approved/city_roof_gravel_64.png,roof,active,Gravel roof crop
+runtime,../environment/approved/city_roof_concrete_64.png,roof,active,Concrete roof crop
+runtime,../environment/approved/city_roof_metal_green_64.png,roof,active,Green metal roof crop
+runtime,../environment/approved/city_roof_metal_gray_64.png,roof,active,Gray metal roof crop
+runtime,../environment/approved/city_roof_tile_64.png,roof,included,Tile roof crop

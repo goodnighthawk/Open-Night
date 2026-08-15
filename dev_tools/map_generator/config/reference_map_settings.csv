@@ -1,0 +1,17 @@
+﻿key,value,type,description
+input_mode,composite_or_five_layer_screenshots,str,Use one composite image or separate roads traffic terrain transit biking screenshots.
+world_width_px,16384,int,Pass 9 rotated world width; 16 chunks.
+world_height_px,12288,int,Pass 9 rotated world height; 12 chunks. Same total chunk area as prior 24x8 world.
+show_road_layout,true,bool,Trace road centerlines and hierarchy.
+show_traffic,true,bool,Trace traffic flow and relative density into deterministic route priority metadata.
+show_terrain,true,bool,Trace water parks green-space and other terrain polygons.
+show_transit,true,bool,Trace visible rail bus ferry or other transit corridors/stops.
+show_biking,true,bool,Trace bike lanes paths greenways and cycling corridors.
+reference_opacity,0.72,float,Default overlay opacity.
+reference_grid_columns,12,int,Alignment grid columns.
+reference_grid_rows,4,int,Alignment grid rows.
+polish_pass,25,int,Pass 25 traffic-geometry preflight: reject routes far from roads or intersecting semantic buildings.
+global_orthogonalization,true,bool,Rigidly rotate all semantic layers together only when road orthogonality improves materially.
+orthogonalization_max_rotation_deg,35,float,Maximum global rigid rotation considered by orthogonalization test.
+orthogonalization_step_deg,0.2,float,Search resolution for global road-bearing orthogonalization.
+orthogonalization_min_improvement_pct,8,float,Minimum RMS bearing-error improvement needed before rotation is applied.

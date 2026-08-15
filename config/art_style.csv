@@ -1,0 +1,52 @@
+﻿section,key,value,type,notes
+environment,land,70;76;69,color,Ground/base tone
+environment,land_grain,82;86;77,color,Ground texture flecks
+environment,water,47;72;84,color,Water body
+environment,water_line,63;92;103,color,Water edge
+environment,park,70;94;68,color,Park/vegetation fill
+environment,park_dark,54;77;55,color,Vegetation edge
+environment,road,44;47;47,color,Asphalt
+environment,road_grain,55;58;56,color,Asphalt speckle
+environment,lane,205;190;135,color,Lane markings
+environment,curb,126;125;116,color,Curb edge
+environment,sidewalk,103;104;99,color,Sidewalk
+environment,building_edge,54;53;49,color,Roof outline
+environment,building_shadow,22;24;23,color,Building shadow
+environment,roof_1,124;116;103,color,Roof palette 1
+environment,roof_2,107;112;108,color,Roof palette 2
+environment,roof_3,129;103;89,color,Roof palette 3
+environment,roof_4,94;104;96,color,Roof palette 4
+environment,crosswalk,217;214;202,color,Crosswalk bars
+ui,text,239;238;231,color,Primary UI text
+ui,muted,158;160;157,color,Secondary UI text
+ui,panel,28;31;31,color,Menu panel
+ui,panel_2,38;41;40,color,Secondary panel
+ui,accent,223;202;111,color,Highlight/accent
+ui,local,242;213;99,color,Local player marker
+ui,remote,112;181;211,color,Remote player marker
+ui,supplier,109;190;127,color,Supplier marker
+ui,customer,205;110;105,color,Customer marker
+sprite,outline,26;25;24,color,Character outline
+sprite,shadow,0;0;0,color,Character ground shadow
+vehicle,shadow,0;0;0,color,Vehicle ground shadow
+hot_reload,enabled,true,bool,Automatic art style reload
+hot_reload,poll_seconds,0.5,float,File watcher interval
+vehicle,pixelated,true,bool,Use crisp nearest-neighbour vehicle scaling
+environment,roof_detail,151;143;125,color,Rooftop furniture/highlight
+environment,tree_dark,41;67;48,color,Tree dark canopy
+environment,tree_mid,59;91;62,color,Tree mid canopy
+environment,tree_light,84;112;77,color,Tree highlight
+environment,tree_trunk,85;67;49,color,Tree trunk
+environment,bridge_edge,150;149;138,color,Bridge rail/edge
+environment,bridge_tower,120;124;121,color,Bridge tower/structure
+ui,panel_edge,92;92;84,color,Panel bevel/edge
+sprite,outline_px,1,int,Top-down character outline thickness
+sprite,shadow_alpha,105,int,Character shadow opacity
+vehicle,outline,24;24;22,color,Vehicle outline
+vehicle,outline_px,1,int,Vehicle outline thickness
+vehicle,shadow_alpha,100,int,Vehicle shadow opacity
+ui,minimap_background,64;67;63,color,Circular local minimap ground
+ui,minimap_road,124;125;118,color,Circular local minimap roads
+ui,minimap_water,54;78;89,color,Circular local minimap water
+ui,minimap_border,24;25;24,color,Circular local minimap heavy rim
+environment,roof_prop_density,6,int,Small rooftop vent/skylight density

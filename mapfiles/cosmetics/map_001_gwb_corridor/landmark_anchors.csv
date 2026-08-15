@@ -1,0 +1,7 @@
+﻿landmark_visual_id,source_landmark_id,archetype_id,x,y,rotation,scale,z_layer,notes
+gwb_tower_w,gwb,lan_gwb_tower_01,8256.5,6598.7,0,1.55,44,West GWB suspension tower cosmetic.
+gwb_tower_e,gwb,lan_gwb_tower_01,9296.5,6626.7,0,1.55,44,East GWB suspension tower cosmetic.
+gwb_truss_mid,gwb,lan_gwb_truss_02,8776.5,6612.7,0,2.15,41,Bridge steel/truss visual over semantic deck.
+gwb_pier_w,gwb,lan_gwb_pier_03,7906.5,6612.7,0,1.7,39,Bridge approach/pier visual.
+gwb_pier_e,gwb,lan_gwb_pier_03,9646.5,6612.7,0,1.7,39,Bridge approach/pier visual.
+little_red_lighthouse,little_red,lan_little_red_lighthouse_04,9090.7,6507.4,0,1.2,38,Little Red Lighthouse visual anchor.

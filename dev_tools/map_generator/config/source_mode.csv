@@ -1,0 +1,6 @@
+﻿key,value,type,description
+source_mode,reference_image_set,str,Primary map-layout source: aligned road/traffic/terrain/transit/biking screenshots.
+legacy_gis_command_available,false,bool,Removed after the screenshot-derived default map passed playability acceptance.
+reference_image_path,references/street_map_reference.png,str,Base normalized screenshot; usually the road-layout layer.
+reference_layer_directory,references/layers,str,Optional aligned roads traffic terrain transit biking screenshots.
+reference_manifest_path,working_reference/reference_image_manifest.csv,str,Image dimensions/hash/import metadata.

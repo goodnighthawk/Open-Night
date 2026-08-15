@@ -1,0 +1,3 @@
+camera_mode,art_direction,root,cell_width,cell_height
+isometric,three-quarter side-on for isometric play,isometric,256,256
+topdown,strict orthographic 90-degree overhead; actor rotates on ground plane,topdown,256,256

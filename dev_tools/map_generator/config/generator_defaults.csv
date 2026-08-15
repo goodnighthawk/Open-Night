@@ -1,0 +1,7 @@
+key,value,type,description
+default_preview_mode,night,str,Default preview/render mode. Night is the OPEN NIGHT default.
+default_lighting_profile,night_callback,str,Lighting profile stored in exported portable maps.
+street_lamps_enabled,true,bool,Include authored street lamps and their local light emitters.
+auto_export_map,true,bool,Automatically refresh the portable .map after a full cosmetic build.
+map_export_name,Map_001_GWB,str,Default portable map filename without extension.
+map_export_directory,exports,str,Output directory relative to the generator root.

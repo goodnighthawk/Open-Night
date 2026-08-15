@@ -1,0 +1,15 @@
+Python MMO Map + Sprite Generator v0.4
+=====================================
+
+1. Double-click MAP_GENERATOR.bat.
+2. Use option 1 for the fast cosmetic/layout rebuild.
+3. Use option 8 to export the portable map package:
+      Map_001_GWB.map
+      Map_001_GWB_assets\
+4. Move the .map and _assets folder together.
+5. Edit PNG files directly under the _assets folder for modding.
+
+The approved NYC/GWB art target is the primary visual reference.
+The GTA2 callback is qualitative: top-down readability, lighting, dense urban
+dressing, loops/cut-throughs and district identity. No literal GTA2 map or
+texture copying is performed.

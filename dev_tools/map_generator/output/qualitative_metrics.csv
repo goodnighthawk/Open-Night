@@ -1,0 +1,15 @@
+﻿criterion,current,target,status,why_it_matters
+Cosmetic archetype budget,100,<= 100,PASS,Hard cap preserves a small reusable art vocabulary.
+Gameplay buildings with cosmetic skin,506,506 expected,PASS,Every building should be skinnable without altering footprint/collision.
+Cosmetic families used,20,12+,PASS,Enough recurring families to create district identity without asset sprawl.
+3D sign anchors,19,20–120,REVIEW,Vertical road infrastructure should be visible but not clutter every road.
+Bespoke landmark anchors,6,4+,PASS,GWB and waterfront landmarks should not fall back to generic road/building art.
+Bridge cable definitions,4,2+,PASS,Suspension-cable visuals are independent cosmetic geometry over the semantic bridge deck.
+Independent light emitters,369,80–450,PASS,"Night mood should come from local light pools, not a single dark filter."
+Cosmetic building massing volumes,556,>= 506,PASS,Large semantic footprints should break into richer visual masses without changing collision.
+Authored layout overlays,65,20+,PASS,Alleys/lightwells/cut-through cues provide memorable top-down layout structure without copying another map.
+Cosmetic street dressing,1725,150+,PASS,Dense reusable dressing improves urban richness without increasing the 100-object archetype budget.
+Walkable-road sidewalk presence,100.0%,100% except motorways,PASS,Every non-motorway road should provide a pedestrian edge so road-walking is rarely necessary.
+Readable wide sidewalk coverage,94.4%,>= 70%,PASS,Most ordinary streets should retain a strong bright sidewalk/curb band; narrow trunk sidewalks may be intentionally slimmer.
+Major-road count,77,informational,INFO,"Road hierarchy is reviewed structurally, never by pixel registration."
+Placed street props,371,informational,INFO,Dense recurring props support the gritty callback atmosphere.
