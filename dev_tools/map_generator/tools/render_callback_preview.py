@@ -8,7 +8,7 @@ from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops, ImageEnhance
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -274,6 +274,35 @@ def load_sprite(aid, night=False):
     return Image.open(p).convert('RGBA') if p and p.exists() else None
 
 
+@lru_cache(maxsize=8)
+def load_building_atlas(name):
+    path=PACK/'building_atlases'/name
+    return Image.open(path).convert('RGBA') if path.exists() else None
+
+
+def draw_building_cosmetic_sprite(im, building, cx, cy, W, H, night):
+    atlas=load_building_atlas(building.get('cosmetic_atlas',''))
+    if atlas is None:return False
+    cols=4;rows=4;cell=i(building,'cosmetic_cell',0)%16
+    cw=atlas.width//cols;ch=atlas.height//rows
+    sprite=atlas.crop(((cell%cols)*cw,(cell//cols)*ch,(cell%cols+1)*cw,(cell//cols+1)*ch))
+    alpha=sprite.getchannel('A');box=alpha.getbbox()
+    if not box:return False
+    sprite=sprite.crop(box)
+    x0,y0=tf((f(building,'x'),f(building,'y')),cx,cy,W,H)
+    x1,y1=tf((f(building,'x')+f(building,'w'),f(building,'y')+f(building,'h')),cx,cy,W,H)
+    target_w=max(1,int(x1-x0));target_h=max(1,int(y1-y0))
+    scale=min(target_w/sprite.width,target_h/sprite.height)
+    nw=max(1,int(sprite.width*scale));nh=max(1,int(sprite.height*scale))
+    sprite=sprite.resize((nw,nh),Image.Resampling.LANCZOS)
+    if night:
+        a=sprite.getchannel('A');rgb=ImageEnhance.Brightness(sprite.convert('RGB')).enhance(.48)
+        sprite=rgb.convert('RGBA');sprite.putalpha(a)
+    px=int(x0+(target_w-nw)/2);py=int(y0+(target_h-nh)/2)
+    im.paste(sprite,(px,py),sprite)
+    return True
+
+
 def wall_color(fam, seed, night):
     groups = {
         'brick_midrise':[(159,78,54),(139,66,49),(172,91,60)],
@@ -292,6 +321,25 @@ def wall_color(fam, seed, night):
     arr = groups.get(fam, groups['brick_midrise'])
     c = arr[seed % len(arr)]
     return tuple(int(v * (.50 if night else 1)) for v in c)
+
+
+def roof_color(fam, seed, night):
+    groups={
+        'brick_midrise':[(116,109,96),(102,101,94),(132,116,98)],
+        'brownstone_row':[(119,91,73),(101,83,71),(137,105,79)],
+        'stone_midrise':[(157,151,134),(139,137,126),(173,159,132)],
+        'painted_walkup':[(123,128,119),(143,132,113),(106,119,116)],
+        'commercial_corner':[(111,119,119),(139,126,104),(101,108,110)],
+        'commercial_lowrise':[(105,113,114),(128,121,105),(91,102,105)],
+        'industrial':[(89,102,104),(110,105,91),(79,92,95)],
+        'warehouse':[(106,99,83),(86,99,101),(124,88,67)],
+        'concrete_tower':[(150,151,143),(129,135,134),(163,151,129)],
+        'art_deco':[(175,157,126),(148,141,122),(188,169,137)],
+        'parking_garage':[(100,108,108),(119,113,99),(86,97,99)],
+        'waterfront_midrise':[(128,116,98),(151,137,111),(105,115,112)],
+    }
+    arr=groups.get(fam,groups['brick_midrise']);c=arr[seed%len(arr)]
+    return tuple(int(v*(.52 if night else 1)) for v in c)
 
 
 def draw_brick_face(d, box, base, night=False):
@@ -323,9 +371,7 @@ def draw_building_volume(im, d, parent, mass, cr, cx, cy, W, H, P, night):
     seed = stable_int(f"{cr.get('archetype_id', parent['id'])}:{mass.get('massing_id','')}")
     fam = family(cr.get('archetype_id', ''))
     wall = wall_color(fam, seed, night)
-    roof = (142, 137, 121) if fam not in ('industrial','warehouse','parking_garage') else (108, 118, 116)
-    if night:
-        roof = tuple(int(v*.52) for v in roof)
+    roof = roof_color(fam,seed,night)
     hs = f(mass, 'height_scale', 1.0)
     ex = sc(12 * hs)
     ey = sc(22 * hs)
@@ -608,6 +654,19 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
             d.line(edge,fill=hi,width=max(1,sc(2)),joint='curve')
 
 
+def draw_authored_waterfront_edges(d, surface_polygons, cx, cy, W, H, night):
+    base=(66,72,72) if night else (111,112,103)
+    hi=(135,143,139) if night else (194,190,172)
+    for poly in (surface_polygons or {}).get('water',[]):
+        closed=list(poly)+[poly[0]]
+        for wa,wb in zip(closed,closed[1:]):
+            # Only trace the north-south shorelines; map-edge closures stay invisible.
+            if abs(wb[0]-wa[0]) > abs(wb[1]-wa[1])*1.5:continue
+            a=tf(wa,cx,cy,W,H);b=tf(wb,cx,cy,W,H)
+            d.line((a,b),fill=base,width=max(2,sc(10)))
+            d.line((a,b),fill=hi,width=max(1,sc(3)))
+
+
 def draw_authored_gwb_structure(d, roads, rp, cx, cy, W, H, night):
     """Top-down suspension structure derived from the authored bridge centerline."""
     bridge=next((r for r in roads if r.get('road_id')=='gwb_authored'),None)
@@ -707,9 +766,10 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
             for m in volumes:
                 draw_building_volume(im,ImageDraw.Draw(im),b,m,cos.get(f'building:{bid}',{}),cx,cy,W,H,P,night)
     for b in additional_buildings or []:
-        draw_building_volume(im, ImageDraw.Draw(im), b,
-                             dict(b, massing_id=f"iterated_{b['id']}", height_scale=b.get('height_scale', 1)),
-                             {'archetype_id': b.get('archetype_id', '')}, cx, cy, W, H, P, night)
+        if not draw_building_cosmetic_sprite(im,b,cx,cy,W,H,night):
+            draw_building_volume(im, ImageDraw.Draw(im), b,
+                                 dict(b, massing_id=f"iterated_{b['id']}", height_scale=b.get('height_scale', 1)),
+                                 {'archetype_id': b.get('archetype_id', '')}, cx, cy, W, H, P, night)
 
     # GTA2-style top-down readability gate: 2.5D facade/shadow extrusion is cosmetic
     # and must never paint over a traversable street. Re-apply the authoritative
@@ -764,6 +824,8 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     # Pass 34: fixed waterfront retaining rails + elevated bridge deck barriers.
     if not clean_authored_surfaces:
         draw_waterfront_edges(d,cx,cy,W,H,night)
+    else:
+        draw_authored_waterfront_edges(d,surface_polygons_override,cx,cy,W,H,night)
     draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night)
     if clean_authored_surfaces:
         draw_authored_gwb_structure(d,roads,rp,cx,cy,W,H,night)
@@ -824,12 +886,29 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     if night:
         im=Image.alpha_composite(im.convert('RGBA'),Image.new('RGBA',(W,H),(5,9,14,72)))
         lights=Image.new('RGBA',(W,H),(0,0,0,0));ld=ImageDraw.Draw(lights,'RGBA');colors={'warm':(255,184,82),'cool':(94,157,216),'amber':(247,159,70),'green':(94,180,109),'red':(226,68,65),'blue':(74,113,238)}
-        for l in read(COS/'light_emitters.csv'):
+        for l in ([] if clean_authored_surfaces else read(COS/'light_emitters.csv')):
             x,y=tf((f(l,'x'),f(l,'y')),cx,cy,W,H);rad=f(l,'radius_px',130)*VIEW_SCALE
             if x+rad<0 or y+rad<0 or x-rad>W or y-rad>H:continue
             if clean_authored_surfaces and over_water(x,y):continue
             col=colors.get(l.get('color_tag'),(235,176,90));alpha=int(72*min(1.25,max(.1,f(l,'intensity',.5))));ld.ellipse((x-rad,y-rad,x+rad,y+rad),fill=(*col,alpha))
-        lights=lights.filter(ImageFilter.GaussianBlur(max(12,sc(34))));im=Image.alpha_composite(im,lights).convert('RGB')
+        if clean_authored_surfaces:
+            # Late cosmetic lighting pass: derive compact pools from the final
+            # road geometry so lamps land consistently on sidewalk edges.
+            for road_index,r in enumerate(roads):
+                q=visual_road_points(r,rp,cx,cy,W,H)
+                if len(q)<2:continue
+                for a,b in zip(q,q[1:]):
+                    dx=b[0]-a[0];dy=b[1]-a[1];length=math.hypot(dx,dy)
+                    if length<20:continue
+                    ux,uy=dx/length,dy/length;nx,ny=-uy,ux
+                    samples=max(1,int(length/max(80,sc(620))))
+                    for j in range(samples+1):
+                        t=(j+.35)/(samples+1);side=-1 if (road_index+j)%2 else 1
+                        offset=sc(62 if str(r.get('bridge','')).lower()!='true' else 42)
+                        x=a[0]+dx*t+nx*side*offset;y=a[1]+dy*t+ny*side*offset
+                        if not (-40<x<W+40 and -40<y<H+40) or over_water(x,y):continue
+                        rad=max(10,sc(48));ld.ellipse((x-rad,y-rad,x+rad,y+rad),fill=(255,184,82,62))
+        lights=lights.filter(ImageFilter.GaussianBlur(max(7,sc(18 if clean_authored_surfaces else 34))));im=Image.alpha_composite(im,lights).convert('RGB')
     if annotate:
         dd=ImageDraw.Draw(im);dd.rectangle((12,12,520,54),fill=(10,13,14));dd.text((23,20),f'{view.upper()} — {"NIGHT" if night else "DAY"} — APPROVED NYC / GTA2 CALLBACK',font=font(15),fill=(244,242,228))
     target = Path(output_dir) if output_dir else OUT
