@@ -1,0 +1,7 @@
+style_zone,building_families,prop_density,vegetation_density,sign_density,night_light_density,notes
+commercial,commercial_lowrise|corner_store|brick_midrise,1.25,0.85,1.25,1.30,Bright storefronts and signage with dense sidewalk props
+bridge_highway,industrial|concrete_tower|warehouse,0.80,0.45,1.55,1.20,Gantries barriers signals bridge lights and strong road hierarchy
+dense_urban,brick_midrise|stone_midrise|painted_walkup|concrete_tower,1.15,0.75,1.10,1.25,Continuous street walls rooftop detail and mixed local lighting
+residential,brick_midrise|painted_walkup|stone_midrise,0.85,1.15,0.70,0.85,Trees stoops quieter roads and repeated neighborhood materials
+industrial,industrial|warehouse,1.30,0.35,0.95,0.75,Fences dumpsters utility clutter hard edges and darker unlit zones
+waterfront,warehouse|industrial|commercial_lowrise,1.20,0.70,0.90,1.00,Retaining walls docks railings fences service clutter and water-edge lights

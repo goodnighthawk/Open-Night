@@ -1,0 +1,20 @@
+﻿key,value
+source_mode,reference_image_set
+compiler,Open Night deterministic screenshot compiler v2
+gis_required,false
+projection,orthographic_topdown
+perspective_skew,0
+reference_transform,single rigid rotation + uniform contain/letterbox; no anisotropic stretch
+global_map_rotation_deg,-21.8
+orthogonalization_improvement_pct,24.02
+parking_regions,5
+full_reference_extent_preserved,true
+polish_pass,25
+road_trace_fragment_repair,true
+sidewalk_coverage_pct,100.00
+sidewalk_first_layout,true
+building_consolidation_merges,4
+frontage_saturation_added,0
+backlot_expanded,449
+outdoor_levels,0=ground;1=elevated
+cross_level_intersections,grade_separated_not_junctions

@@ -1,0 +1,12 @@
+weapon_id,hold_class,directional_sheet,columns,cell_width,cell_height,notes
+weapon_00,one_hand,weapons/directional/weapon_00_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_01,compact_two_hand,weapons/directional/weapon_01_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_02,long_low,weapons/directional/weapon_02_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_03,compact_two_hand,weapons/directional/weapon_03_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_04,compact_two_hand,weapons/directional/weapon_04_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_05,compact_two_hand,weapons/directional/weapon_05_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_06,compact_two_hand,weapons/directional/weapon_06_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_07,long_low,weapons/directional/weapon_07_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_08,compact_two_hand,weapons/directional/weapon_08_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_09,long_low,weapons/directional/weapon_09_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay
+weapon_10,compact_two_hand,weapons/directional/weapon_10_8dir.png,north;northeast;east;southeast;south;southwest;west;northwest,256,256,runtime-ready directional overlay

@@ -1,0 +1,6 @@
+﻿parking_id,name,x,y,w,h,level,access_road_id,access_x,access_y,dead_end_allowed
+carpark_01,Small Car Park 1,5378.6,8405.4,300,240,0,traffic_support_002,5737.1,8523.3,true
+carpark_02,Small Car Park 2,7318.1,8551.8,355,195,0,traffic_support_027,7488.4,8456.6,true
+carpark_03,Small Car Park 3,8096.4,8427.0,300,240,0,road_134,8060.3,8792.8,true
+carpark_04,Small Car Park 4,10656.4,7059.4,355,195,0,traffic_support_033,10616.3,7187.1,true
+carpark_05,Small Car Park 5,13029.2,5979.6,300,240,0,road_004,13233.5,5913.6,true

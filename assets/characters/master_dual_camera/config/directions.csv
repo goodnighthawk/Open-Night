@@ -1,0 +1,9 @@
+direction,column
+north,0
+northeast,1
+east,2
+southeast,3
+south,4
+southwest,5
+west,6
+northwest,7

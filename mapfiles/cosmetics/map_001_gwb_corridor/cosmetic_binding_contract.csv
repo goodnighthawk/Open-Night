@@ -1,0 +1,8 @@
+﻿game_type,semantic_subtype,visual_source,collision_from,notes
+building,*,cosmetic_instances.csv,game map,Skin can change without changing building ID or footprint.
+road,*,cosmetic_instances.csv + road geometry,game map,Road surface/marking look is independent from road graph.
+street_prop,*,cosmetic_instances.csv,game map or none,Reusable props; deterministic skin selection.
+road_sign,*,road_sign_anchors.csv + sign archetype,none by default,2.5D cosmetic structures generated from road semantics.
+landmark,*,landmark_anchors.csv + landmark archetype,game map landmark/bridge geometry,Bespoke GWB/lighthouse visuals remain cosmetic and replaceable.
+bridge_cable,*,bridge_cables.csv,none,Procedural suspension cables/suspenders are cosmetic-only and style-pack replaceable.
+lighting,*,light_emitters.csv,none,Lighting is an independent cosmetic/effects layer.

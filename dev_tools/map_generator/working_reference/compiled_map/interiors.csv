@@ -1,0 +1,11 @@
+﻿id,name,kind,entry_x,entry_y,building_id,door_hint
+starter_apartment,Starter Apartment,apartment,7079.0,7239.0,293,nearest_road_frontage
+corner_shop,Bridge Corner Store,shop,7263.3,7197.5,294,nearest_road_frontage
+night_diner,Open Night Diner,diner,6369.5,6759.8,279,nearest_road_frontage
+pharmacy,Hudson Pharmacy,shop,7829.5,8287.4,350,nearest_road_frontage
+laundromat,24 Hour Laundromat,shop,9592.2,7159.3,493,nearest_road_frontage
+pawn_shop,Pawn & Exchange,shop,9653.0,6205.3,249,nearest_road_frontage
+garage,Riverside Garage,garage,10305.3,6093.1,492,nearest_road_frontage
+nightclub,After Hours Club,club,10056.0,5868.2,497,nearest_road_frontage
+warehouse_office,Warehouse Office,office,11881.0,7096.1,499,nearest_road_frontage
+rooftop_loft,Washington Heights Loft,apartment,10852.0,5890.2,238,nearest_road_frontage

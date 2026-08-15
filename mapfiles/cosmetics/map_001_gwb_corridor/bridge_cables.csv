@@ -1,0 +1,5 @@
+﻿cable_id,source_landmark_id,x1,y1,x2,y2,sag_px,suspender_spacing_px,line_width_px,style
+gwb_north_main,gwb,8256.5,6547.7,9296.5,6560.7,38,92,3,steel_main
+gwb_south_main,gwb,8256.5,6677.7,9296.5,6664.7,38,92,3,steel_main
+gwb_west_north,gwb,7796.5,6577.7,8256.5,6547.7,24,92,2,steel_side
+gwb_east_north,gwb,9296.5,6560.7,9756.5,6592.7,24,92,2,steel_side

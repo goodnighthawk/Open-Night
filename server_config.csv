@@ -1,0 +1,13 @@
+﻿key,value
+server_name,Map 001 / Compact 2x
+port,8765
+max_players,128
+traffic_cars,12
+map_id,map_001_gwb_corridor
+lan_discovery,true
+db_host,127.0.0.1
+db_port,3306
+db_name,pymmo
+db_user,root
+mysql_service,MySQL84
+auto_start_mysql,true

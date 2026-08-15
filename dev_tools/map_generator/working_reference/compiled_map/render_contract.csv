@@ -1,0 +1,11 @@
+﻿key,value,type
+shadow_authority,viewer_runtime_primary,str
+runtime_building_shadows,true,bool
+runtime_elevated_shadows,true,bool
+runtime_dynamic_object_shadows,true,bool
+shadow_direction_tracks_camera,true,bool
+level_shadow_projection,true,bool
+baked_directional_shadows,false,bool
+baked_contact_ao,true,bool
+baked_contact_ao_radius_px,3,int
+render_pass,18,int

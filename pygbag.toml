@@ -1,0 +1,7 @@
+[project]
+name = "Python MMO v2.2"
+version = "2.2"
+title = "Fort Lee / GWB MMO v2.2"
+
+[build]
+icon = "assets/icon.png"

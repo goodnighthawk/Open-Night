@@ -1,0 +1,11 @@
+preset_id,body,head,top,bottom,footwear,accessory
+street_blue,neutral_body,curly_short,tshirt_blue,dark_jeans,black_sneakers,none
+street_rust,neutral_body,curly_short_rust,hoodie_rust,blue_jeans,black_sneakers_rust,none
+masked_olive,neutral_body,fade_mask,hoodie_olive,charcoal_jeans,black_high_tops,face_mask
+night_jacket,neutral_body,ponytail_shades,jacket_black,blue_jeans_femme,brown_boots,sunglasses
+cap_red,neutral_body,baseball_cap,tshirt_red,cargo_shorts,white_trainers,baseball_cap
+rider,neutral_body,motorcycle_helmet,motorcycle_jacket,reinforced_jeans,motorcycle_boots,none
+teal_casual,neutral_body,curly_short,tshirt_teal,blue_jeans,white_sneakers,none
+navy_street,neutral_body,fade_mask,hoodie_navy,black_jeans,black_high_tops,face_mask
+brown_jacket,neutral_body,ponytail_shades,jacket_brown,black_jeans_femme,black_boots,sunglasses
+gold_cap,neutral_body,baseball_cap,tshirt_gold,cargo_shorts_olive,white_trainers,baseball_cap

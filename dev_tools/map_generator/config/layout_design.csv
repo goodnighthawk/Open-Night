@@ -1,0 +1,10 @@
+key,value,type,notes
+reference_mode,qualitative,string,Use GTA2 layout references as design-language inspiration only; never copy map geometry.
+district_identity,1.0,float,Strength of recurring district-specific art/layout vocabulary.
+road_loop_bias,0.90,float,Prefer memorable looped navigation and return paths when authoring future semantic road edits.
+service_cutthrough_density,0.85,float,Density of cosmetic/service alleys where genuine building gaps exist.
+landmark_compound_strength,1.0,float,Reserve clear readable approach space around bridge/major landmarks.
+chokepoint_strength,0.60,float,Allow some memorable constrictions without breaking traffic flow.
+street_wall_strength,1.0,float,Visually subdivide large footprints into coherent street-wall building masses.
+cosmetic_dressing_density,1.0,float,Recurring trees furniture service clutter and signs; no extra archetype cost.
+reference_url,https://mapgenie.io/grand-theft-auto-2,string,User-supplied GTA2 interactive-map layout reference.

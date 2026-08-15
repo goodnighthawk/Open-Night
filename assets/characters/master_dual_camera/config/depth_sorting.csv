@@ -1,0 +1,3 @@
+camera_mode,sort_key,actor_anchor,same_depth_tiebreak,occlusion_rule
+topdown,ground_y,feet_ground_contact,stable_entity_id,larger ground_y draws later and may occlude smaller ground_y
+isometric,world_x_plus_world_y,feet_ground_contact,stable_entity_id,larger projected depth draws later; recompute after camera-quarter rotation

@@ -1,0 +1,5 @@
+camera_mode,action,sheet,row_meanings,direction_columns,cell_width,cell_height
+isometric,punch,isometric/actions/punch_8dir.png,guard;windup;contact;recovery,north;northeast;east;southeast;south;southwest;west;northwest,256,256
+isometric,gun_hold,isometric/actions/gun_hold_8dir.png,one_hand;compact_two_hand;long_low;long_aimed,north;northeast;east;southeast;south;southwest;west;northwest,256,256
+topdown,punch,topdown/actions/punch_8dir.png,guard;windup;contact;recovery,north;northeast;east;southeast;south;southwest;west;northwest,256,256
+topdown,gun_hold,topdown/actions/gun_hold_8dir.png,one_hand;compact_two_hand;long_low;long_aimed,north;northeast;east;southeast;south;southwest;west;northwest,256,256
