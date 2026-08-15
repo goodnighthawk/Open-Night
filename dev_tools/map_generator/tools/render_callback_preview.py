@@ -23,6 +23,7 @@ PACK = ROOT / 'cosmetic_packs' / 'nyc_gta2_callback'
 MAT = PACK / 'materials'
 CAT = {r['archetype_id']: r for r in load_catalog()}
 VIEW_SCALE = 1.0
+ORTHOGONAL_GRID_PX = 0.0
 
 DAY = {
     'land': (91, 95, 82), 'road': (48, 53, 57), 'sidewalk': (190, 182, 162),
@@ -176,8 +177,27 @@ def gta2_round_polyline(points, radius_px=48.0):
     return out
 
 
+def orthogonal_world_points(points, grid_px=0.0):
+    if not grid_px or len(points) < 2:
+        return list(points)
+    snapped=[]
+    for x,y in points:
+        p=(round(x/grid_px)*grid_px, round(y/grid_px)*grid_px)
+        if not snapped or p != snapped[-1]: snapped.append(p)
+    if len(snapped)<2:return snapped
+    out=[snapped[0]]
+    for b in snapped[1:]:
+        a=out[-1];dx=b[0]-a[0];dy=b[1]-a[1]
+        if dx and dy:
+            elbow=(b[0],a[1]) if abs(dx)>=abs(dy) else (a[0],b[1])
+            if elbow!=a and elbow!=b:out.append(elbow)
+        if b!=out[-1]:out.append(b)
+    return out
+
+
 def visual_road_points(r, rp, cx, cy, W, H):
-    q=[tf(z,cx,cy,W,H) for z in rp.get(r['road_id'],[])]
+    world=orthogonal_world_points(rp.get(r['road_id'],[]),ORTHOGONAL_GRID_PX)
+    q=[tf(z,cx,cy,W,H) for z in world]
     hw=(r.get('highway') or '').lower()
     base={'motorway':92,'trunk':82,'primary':70,'secondary':60,'tertiary':54,'residential':46,'service':36}.get(hw,48)
     return gta2_round_polyline(q,max(2.0,base*VIEW_SCALE))
@@ -382,14 +402,16 @@ def draw_arrow(d, a, b, P):
     d.polygon([(tip[0]+ux*sc(9),tip[1]+uy*sc(9)),(tip[0]-ux*sc(5)+vx*sc(8),tip[1]-uy*sc(5)+vy*sc(8)),(tip[0]-ux*sc(5)-vx*sc(8),tip[1]-uy*sc(5)-vy*sc(8))],fill=P['lane'])
 
 
-def surface_masks(W,H,cx,cy,P,night,road_ids=None,road_width_scale=1.0,sidewalk_scale=1.0):
+def surface_masks(W,H,cx,cy,P,night,road_ids=None,road_width_scale=1.0,sidewalk_scale=1.0,
+                  roads_override=None,rp_override=None):
     masks = {k: Image.new('L',(W,H),0) for k in ('water','green','sidewalk','curb','road','alley')}
     for fn,key in [('water_polygons.csv','water'),('green_polygons.csv','green')]:
         md=ImageDraw.Draw(masks[key])
         for poly in pts(fn,'polygon_id').values():
             q=[tf(z,cx,cy,W,H) for z in poly]
             if len(q)>=3: md.polygon(q,fill=255)
-    roads=read('roads.csv'); rp=pts('road_points.csv','road_id')
+    roads=list(roads_override) if roads_override is not None else read('roads.csv')
+    rp=dict(rp_override) if rp_override is not None else pts('road_points.csv','road_id')
     if road_ids is not None:
         roads=[r for r in roads if r['road_id'] in road_ids]
     for layer in ('sidewalk','curb','road'):
@@ -582,12 +604,14 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
             d.line(edge,fill=hi,width=max(1,sc(2)),joint='curve')
 
 def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
-           additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0):
-    global VIEW_SCALE
+           additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0,
+           orthogonal_grid_px=0.0, render_existing_buildings=True,roads_override=None,rp_override=None,
+           draw_source_crosswalks=True,crosswalks_override=None):
+    global VIEW_SCALE, ORTHOGONAL_GRID_PX
     views={r['view_id']:r for r in read(ROOT/'config'/'preview_views.csv')}
-    v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); P=NIGHT if night else DAY
+    v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); ORTHOGONAL_GRID_PX=float(orthogonal_grid_px or 0); P=NIGHT if night else DAY
     im=tiled_texture('land_night.png' if night else 'land_day.png',(W,H),P['land'])
-    masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale)
+    masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale,roads_override=roads_override,rp_override=rp_override)
     apply_mask(im,masks['water'],'water_night.png' if night else 'water_day.png',P['water'])
     apply_mask(im,masks['green'],'grass_night.png' if night else 'grass_day.png',P['green'])
     apply_mask(im,masks['sidewalk'],'sidewalk_night.png' if night else 'sidewalk_day.png',P['sidewalk'])
@@ -609,7 +633,8 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         if o.get('kind') not in {'roof_courtyard'}: continue
         # roof courtyards are drawn after building volumes; skip here
         pass
-    roads=read('roads.csv'); rp=pts('road_points.csv','road_id')
+    roads=list(roads_override) if roads_override is not None else read('roads.csv')
+    rp=dict(rp_override) if rp_override is not None else pts('road_points.csv','road_id')
     if road_ids is not None:
         roads=[r for r in roads if r['road_id'] in road_ids]
     for r in roads:
@@ -627,10 +652,11 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
             # Keep sparse arrows on the semantic direction while the visible ribbon is rounded.
             for a,b in zip(q[::max(1,len(q)//4)],q[1::max(1,len(q)//4)]): draw_arrow(d,a,b,P)
     cos=grouped_cosmetics(); mass=grouped_massing(); buildings={b['id']:b for b in read('buildings.csv')}
-    for bid,b in buildings.items():
-        volumes=mass.get(bid) or [dict(b, massing_id=f'm_{bid}_0',height_scale=1)]
-        for m in volumes:
-            draw_building_volume(im,ImageDraw.Draw(im),b,m,cos.get(f'building:{bid}',{}),cx,cy,W,H,P,night)
+    if render_existing_buildings:
+        for bid,b in buildings.items():
+            volumes=mass.get(bid) or [dict(b, massing_id=f'm_{bid}_0',height_scale=1)]
+            for m in volumes:
+                draw_building_volume(im,ImageDraw.Draw(im),b,m,cos.get(f'building:{bid}',{}),cx,cy,W,H,P,night)
     for b in additional_buildings or []:
         draw_building_volume(im, ImageDraw.Draw(im), b,
                              dict(b, massing_id=f"iterated_{b['id']}", height_scale=b.get('height_scale', 1)),
@@ -672,7 +698,8 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         d.rectangle((x0,y0,x1,y1),fill=(57,60,58) if not night else (27,31,31),outline=(29,33,33) if not night else (12,15,15),width=max(1,sc(2)))
         d.rectangle((x0+sc(5),y0+sc(5),x1-sc(5),y1-sc(5)),outline=(114,113,103) if not night else (55,57,54),width=1)
     # Authored crosswalks.
-    for c in read('crosswalks.csv'):
+    crossing_rows=list(crosswalks_override) if crosswalks_override is not None else (read('crosswalks.csv') if draw_source_crosswalks else [])
+    for c in crossing_rows:
         x,y=f(c,'x'),f(c,'y');ang=math.radians(f(c,'angle'));sx,sy=tf((x,y),cx,cy,W,H)
         if not (0 <= int(sx) < W and 0 <= int(sy) < H) or not masks['road'].getpixel((int(sx),int(sy))):
             continue
