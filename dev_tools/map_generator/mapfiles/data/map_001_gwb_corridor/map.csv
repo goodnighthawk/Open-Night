@@ -1,7 +1,7 @@
 ﻿key,value,type
 id,map_001_gwb_corridor,str
 name,Open Night — Fort Lee / GWB / Washington Heights,str
-description,Pass 18 reviewed unified corridor composition; the default and only playable map.,str
+description,Pass 19 balanced art-convergence corridor; the default and only playable map for Open Night v0.9.0.,str
 chunked,true,bool
 chunk_size,1024,int
 chunk_cols,16,int
@@ -26,22 +26,26 @@ default_render_mode,night,str
 default_lighting_profile,night_callback,str
 street_lamps_enabled,true,bool
 baked_composition,true,bool
-baked_composition_archive,assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip,str
+baked_composition_archive,assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip,str
 baked_composition_world_y,2048,int
 baked_composition_source_scale,0.5,float
-map_build_id,open_night_v0_8_0_pass18_default_only,str
+map_build_id,open_night_v0_9_0_pass19_default_only,str
 grid_enabled,true,bool
 grid_cell_size,32,int
 grid_chunk_cache_limit,30,int
 server_region_chunk_cols,8,int
 server_region_chunk_rows,4,int
 scalability_target_players,1000,int
-render_pass,18,int
+render_pass,19,int
 road_network_rule,terrain_aware_hierarchy_with_staggered_locals_v2,str
 surface_preservation_rule,filtered_reference_polygons_with_district_caps_v1,str
-building_cosmetic_rule,district_and_native_footprint_match_v2,str
+building_cosmetic_rule,pass19_native_scale_anti_repetition_v1,str
 building_sprite_scale_band,0.72..1.12,str
 building_layer_model,ground_upper_roof_v1,str
 outdoor_level_count,3,int
 default_player_level,0,int
 yellow_center_lines,false,bool
+vegetation_cosmetic_rule,retained_park_canopy_pass19_v2,str
+frontage_cosmetic_rule,district_frontage_cluster_pass19b_balanced_v1,str
+frontage_collision,false,bool
+release_version,0.9.0,str

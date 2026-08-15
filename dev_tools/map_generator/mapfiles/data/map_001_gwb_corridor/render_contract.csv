@@ -2,4 +2,4 @@
 camera_projection,orthographic_topdown,str
 outdoor_perspective_skew,0,float
 baked_composition,true,bool
-render_pass,18,int
+render_pass,19,int
