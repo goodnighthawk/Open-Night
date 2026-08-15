@@ -35,6 +35,12 @@ def main() -> int:
             problems.append("RUN_WEB_CLIENT.bat missing --disable-sound-format-error guard")
         if "prepare_web_stage.py" not in run_web:
             problems.append("RUN_WEB_CLIENT.bat does not use clean staging")
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8", errors="replace")
+        if "pygbag==0.9.2" not in requirements:
+            problems.append("Pygbag is not pinned to the known-working 0.9.2 browser runtime")
+        for token in ('"pygbag==0.9.2"', "--version 0.9.2", "--package open-night-v0-7-1", '--title "Open Night v0.7.1"'):
+            if token not in run_web:
+                problems.append(f"RUN_WEB_CLIENT.bat missing grey-screen/cache guard: {token}")
         staged_client = (stage / "client.py").read_text(encoding="utf-8", errors="replace")
         staged_directory = (stage / "server_directory.py").read_text(encoding="utf-8", errors="replace")
         if "choose_browser_server_uri" not in staged_client:
@@ -55,7 +61,7 @@ def main() -> int:
         print("WEB BUILD AUDIT PASSED")
         print(f" staged files: {sum(1 for p in stage.rglob('*') if p.is_file())}")
         print(f" staged bytes: {size}")
-        print(" .venv excluded; unsupported desktop audio excluded; required web client files present.")
+        print(" .venv excluded; Pygbag 0.9.2 pinned; unsupported audio excluded; required web files present.")
         return 0
     finally:
         shutil.rmtree(stage, ignore_errors=True)

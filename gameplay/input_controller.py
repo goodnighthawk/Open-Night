@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import pygame
 
 
@@ -15,11 +14,3 @@ def movement_vector(blocked: bool = False) -> tuple[float, float]:
     if mag > 1.0:
         x, y = x / mag, y / mag
     return x, y
-
-
-def aim_angle(player_world: tuple[float, float], mouse_world: tuple[float, float], fallback: float = 0.0) -> float:
-    dx = mouse_world[0] - player_world[0]
-    dy = mouse_world[1] - player_world[1]
-    if abs(dx) + abs(dy) < 1e-6:
-        return fallback
-    return math.atan2(dy, dx)
