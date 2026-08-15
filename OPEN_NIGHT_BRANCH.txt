@@ -1,4 +1,4 @@
-Open Night v0.7.0
+Open Night v0.7.1
 Default: screenshot-derived polished map
 Projection: orthographic top-down outdoors; isometric interiors
 Legacy GIS/Overpass path: removed
@@ -8,3 +8,5 @@ Web client: automatically uses the configured Railway WSS endpoint; ?server= rem
 Multiplayer: shared interiors, passengers, friends/minimap, local speech bubbles and whispers enabled
 Map iteration: all drivable asphalt at least 2x baseline width; 19 perimeter continuation tunnels
 Bicycles: compact top-down art, exposed-water route rejection, road sharing, solid car boundaries
+Feedback: /bug description saves a CSV row and screenshot in feedback/next_version
+Character facing: head follows the body; mouse movement is camera look-ahead only
