@@ -426,10 +426,11 @@ def surface_masks(W,H,cx,cy,P,night,road_ids=None,road_width_scale=1.0,sidewalk_
             width={'sidewalk':rw+2*(sw+cw),'curb':rw+2*cw,'road':rw}[layer]
             md.line(q,fill=255,width=max(1,sc(width)),joint='curve')
     md=ImageDraw.Draw(masks['alley'])
-    for o in read(COS/'layout_overlays.csv'):
-        if o.get('kind')!='service_alley': continue
-        x0,y0=tf((f(o,'x'),f(o,'y')),cx,cy,W,H); x1,y1=tf((f(o,'x')+f(o,'w'),f(o,'y')+f(o,'h')),cx,cy,W,H)
-        md.rectangle((x0,y0,x1,y1),fill=220)
+    if surface_polygons_override is None:
+        for o in read(COS/'layout_overlays.csv'):
+            if o.get('kind')!='service_alley': continue
+            x0,y0=tf((f(o,'x'),f(o,'y')),cx,cy,W,H); x1,y1=tf((f(o,'x')+f(o,'w'),f(o,'y')+f(o,'h')),cx,cy,W,H)
+            md.rectangle((x0,y0,x1,y1),fill=220)
     return masks
 
 
@@ -606,6 +607,47 @@ def draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night):
             d.line(edge,fill=base,width=max(2,sc(7)),joint='curve')
             d.line(edge,fill=hi,width=max(1,sc(2)),joint='curve')
 
+
+def draw_authored_gwb_structure(d, roads, rp, cx, cy, W, H, night):
+    """Top-down suspension structure derived from the authored bridge centerline."""
+    bridge=next((r for r in roads if r.get('road_id')=='gwb_authored'),None)
+    if bridge is None:return
+    points=rp.get('gwb_authored',[])
+    if len(points)<2:return
+    a=tf(points[0],cx,cy,W,H); b=tf(points[-1],cx,cy,W,H)
+    dx=b[0]-a[0];dy=b[1]-a[1];length=math.hypot(dx,dy)
+    if length<20:return
+    ux,uy=dx/length,dy/length;nx,ny=-uy,ux
+    tower_col=(85,91,91) if not night else (45,52,55)
+    tower_hi=(176,181,174) if not night else (101,111,113)
+    cable_col=(143,151,149) if not night else (77,89,92)
+    deck_half=max(sc(18),f(bridge,'width',160)*VIEW_SCALE*.5)
+    tower_positions=(.27,.73)
+    def point(t,off=0):return (a[0]+dx*t+nx*off,a[1]+dy*t+ny*off)
+    # Parallel suspension cables and regular hangers stay aligned with the deck.
+    for side in (-1,1):
+        offset=side*(deck_half+sc(12))
+        cable=[point(j/48,offset+side*sc(10)*4*(j/48)*(1-j/48)) for j in range(49)]
+        d.line(cable,fill=cable_col,width=max(1,sc(3)),joint='curve')
+        for j in range(3,46,3):
+            t=j/48
+            outer=cable[j]; inner=point(t,side*(deck_half-sc(2)))
+            d.line((outer,inner),fill=cable_col,width=max(1,sc(1)))
+    # Two portal towers with paired legs and crossbeams.
+    for t in tower_positions:
+        center=point(t)
+        for side in (-1,1):
+            px=center[0]+nx*side*(deck_half+sc(9));py=center[1]+ny*side*(deck_half+sc(9))
+            half_u=sc(8);half_n=sc(10)
+            corners=[(px-ux*half_u-nx*half_n,py-uy*half_u-ny*half_n),
+                     (px+ux*half_u-nx*half_n,py+uy*half_u-ny*half_n),
+                     (px+ux*half_u+nx*half_n,py+uy*half_u+ny*half_n),
+                     (px-ux*half_u+nx*half_n,py-uy*half_u+ny*half_n)]
+            d.polygon(corners,fill=tower_col,outline=tower_hi)
+        p1=point(t,-deck_half-sc(9));p2=point(t,deck_half+sc(9))
+        d.line((p1,p2),fill=tower_col,width=max(3,sc(8)))
+        d.line((p1,p2),fill=tower_hi,width=max(1,sc(2)))
+
 def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_lines=True,
            additional_buildings=None, road_ids=None, road_width_scale=1.0, sidewalk_scale=1.0,
            orthogonal_grid_px=0.0, render_existing_buildings=True,roads_override=None,rp_override=None,
@@ -615,6 +657,9 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     v=views[view]; W=i(v,'width',1280); H=i(v,'height',720); cx=f(v,'center_x'); cy=f(v,'center_y'); VIEW_SCALE=f(v,'scale',1.0); ORTHOGONAL_GRID_PX=float(orthogonal_grid_px or 0); P=NIGHT if night else DAY
     im=tiled_texture('land_night.png' if night else 'land_day.png',(W,H),P['land'])
     masks=surface_masks(W,H,cx,cy,P,night,road_ids=road_ids,road_width_scale=road_width_scale,sidewalk_scale=sidewalk_scale,roads_override=roads_override,rp_override=rp_override,surface_polygons_override=surface_polygons_override)
+    clean_authored_surfaces=surface_polygons_override is not None
+    def over_water(x,y):
+        return 0 <= int(x) < W and 0 <= int(y) < H and masks['water'].getpixel((int(x),int(y))) > 0
     apply_mask(im,masks['water'],'water_night.png' if night else 'water_day.png',P['water'])
     apply_mask(im,masks['green'],'grass_night.png' if night else 'grass_day.png',P['green'])
     apply_mask(im,masks['sidewalk'],'sidewalk_night.png' if night else 'sidewalk_day.png',P['sidewalk'])
@@ -626,6 +671,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     for lot in read('parking_regions.csv'):
         x0,y0=tf((f(lot,'x'),f(lot,'y')),cx,cy,W,H);x1,y1=tf((f(lot,'x')+f(lot,'w'),f(lot,'y')+f(lot,'h')),cx,cy,W,H)
         if x1<0 or y1<0 or x0>W or y0>H:continue
+        if clean_authored_surfaces and over_water((x0+x1)*.5,(y0+y1)*.5):continue
         d.rectangle((x0,y0,x1,y1),fill=(31,35,37) if night else (60,64,65),outline=P['curb'],width=max(1,sc(4)))
         # simple orthographic bay markings
         bay=max(sc(28),1);margin=sc(14);xx=x0+margin
@@ -716,8 +762,11 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
             p1=(mx-ux*length*VIEW_SCALE*.46,my-uy*length*VIEW_SCALE*.46);p2=(mx+ux*length*VIEW_SCALE*.46,my+uy*length*VIEW_SCALE*.46)
             d.line((p1,p2),fill=stop_col,width=max(2,sc(3)))
     # Pass 34: fixed waterfront retaining rails + elevated bridge deck barriers.
-    draw_waterfront_edges(d,cx,cy,W,H,night)
+    if not clean_authored_surfaces:
+        draw_waterfront_edges(d,cx,cy,W,H,night)
     draw_bridge_edge_barriers(d,roads,rp,cx,cy,W,H,night)
+    if clean_authored_surfaces:
+        draw_authored_gwb_structure(d,roads,rp,cx,cy,W,H,night)
     # Semantic props + denser cosmetic-only dressing, both reuse the 100-object pack.
     def paste_prop(aid,x,y,size):
         sp=load_sprite(aid,night)
@@ -726,6 +775,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     for p in read('street_props.csv'):
         x,y=tf((f(p,'x'),f(p,'y')),cx,cy,W,H)
         if not (-90<x<W+90 and -90<y<H+90):continue
+        if clean_authored_surfaces and over_water(x,y):continue
         cr=cos.get(f'prop:{p.get("id")}',{});kind=p.get('kind','')
         if kind=='edge_tunnel':
             angle=math.radians(f(p,'rotation'));ux,uy=math.cos(angle),math.sin(angle);nx,ny=-uy,ux
@@ -739,12 +789,14 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     for p in read(COS/'street_dressing.csv'):
         x,y=tf((f(p,'x'),f(p,'y')),cx,cy,W,H)
         if not (-90<x<W+90 and -90<y<H+90):continue
+        if clean_authored_surfaces and over_water(x,y):continue
         base=96 if p.get('kind')=='tree' else 48;paste_prop(p.get('archetype_id',''),x,y,base*f(p,'scale',.5))
     d=ImageDraw.Draw(im)
     # 2.5D sign anchors.
     for s in read(COS/'road_sign_anchors.csv'):
         x,y=tf((f(s,'x'),f(s,'y')),cx,cy,W,H)
         if not (-130<x<W+130 and -130<y<H+130):continue
+        if clean_authored_surfaces and over_water(x,y):continue
         h=sc(f(s,'height_px',40));ww=sc(98 if s['semantic_type']=='directional' else 60);metal=(93,101,100) if not night else (49,55,56);green=(30,100,65) if not night else (19,64,43)
         # Sign anchors are now roadside/verge points. Keep both physical support feet
         # tightly around that legal anchor instead of spanning the road surface.
@@ -753,7 +805,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         if label: d.text((x-ww/2+sc(4),y-h-sc(18)),label,font=font(max(7,sc(9))),fill=(245,245,228))
     # GWB cables.
     cable_col=(145,154,154) if not night else (73,84,87)
-    for cb in read(COS/'bridge_cables.csv'):
+    for cb in ([] if clean_authored_surfaces else read(COS/'bridge_cables.csv')):
         p1=tf((f(cb,'x1'),f(cb,'y1')),cx,cy,W,H);p2=tf((f(cb,'x2'),f(cb,'y2')),cx,cy,W,H);avg_world=(f(cb,'y1')+f(cb,'y2'))*.5;sag=f(cb,'sag_px',60)*VIEW_SCALE;curve=[]
         for j in range(33):
             t=j/32;x=p1[0]*(1-t)+p2[0]*t;basey=p1[1]*(1-t)+p2[1]*t;y=basey+sag*4*t*(1-t);curve.append((x,y))
@@ -764,6 +816,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
     for lm in read(COS/'landmark_anchors.csv'):
         x,y=tf((f(lm,'x'),f(lm,'y')),cx,cy,W,H)
         if not (-300<x<W+300 and -300<y<H+300):continue
+        if clean_authored_surfaces and over_water(x,y):continue
         sp=load_sprite(lm.get('archetype_id',''),night)
         if sp is None:continue
         size=max(40,int(128*f(lm,'scale',1)*VIEW_SCALE));sp=sp.resize((size,size),Image.Resampling.NEAREST);im.paste(sp,(int(x-size/2),int(y-size*.72)),sp)
@@ -774,6 +827,7 @@ def render(view, night=False, *, annotate=True, output_dir=None, yellow_center_l
         for l in read(COS/'light_emitters.csv'):
             x,y=tf((f(l,'x'),f(l,'y')),cx,cy,W,H);rad=f(l,'radius_px',130)*VIEW_SCALE
             if x+rad<0 or y+rad<0 or x-rad>W or y-rad>H:continue
+            if clean_authored_surfaces and over_water(x,y):continue
             col=colors.get(l.get('color_tag'),(235,176,90));alpha=int(72*min(1.25,max(.1,f(l,'intensity',.5))));ld.ellipse((x-rad,y-rad,x+rad,y+rad),fill=(*col,alpha))
         lights=lights.filter(ImageFilter.GaussianBlur(max(12,sc(34))));im=Image.alpha_composite(im,lights).convert('RGB')
     if annotate:
