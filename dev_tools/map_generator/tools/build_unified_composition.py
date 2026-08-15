@@ -25,9 +25,12 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_17"
+PASS_ID = "recovery_pass_18"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
+ATLAS_WORLD_UNITS_PER_PIXEL = 2.0
+MIN_BUILDING_SPRITE_SCALE = 0.72
+MAX_BUILDING_SPRITE_SCALE = 1.12
 # Pass 16 preserves a legible block structure without forcing every street onto
 # the same synthetic lattice. Authored points remain authoritative.
 ORTHOGONAL_GRID_PX = 0.0
@@ -43,6 +46,9 @@ SEMANTIC_FILES = (
     "water_boundaries.csv",
     "green_boundaries.csv",
     "layer_transitions.csv",
+    "building_layers.csv",
+    "building_stairwells.csv",
+    "building_sprite_scale_audit.csv",
     "urban_blocks.csv",
     "iterated_buildings.csv",
     "iterated_parcel_uses.csv",
@@ -420,6 +426,66 @@ def derive_urban_blocks(roads_override,rp_override):
     return len(blocks)
 
 
+def building_atlas_metrics(atlas_name):
+    audit = ROOT / "cosmetic_packs" / "nyc_gta2_callback" / "building_atlases" / f"{Path(atlas_name).stem}_scale_audit.csv"
+    rows = read_csv(audit)
+    if len(rows) != 16:
+        raise RuntimeError(f"Building atlas scale audit missing or incomplete: {audit}")
+    return {int(row["cell"]): (float(row["bbox_w"]), float(row["bbox_h"])) for row in rows}
+
+
+def choose_building_sprite(district, width, height, sequence, landmark=False):
+    """Select native-size art instead of stretching one block across every lot."""
+    fort_atlas = "fort_lee_blocks_v1.png"
+    heights_atlas = "washington_heights_blocks_v1.png"
+    compact_atlas = "compact_lot_blocks_v1.png"
+    metrics = {
+        fort_atlas: building_atlas_metrics(fort_atlas),
+        heights_atlas: building_atlas_metrics(heights_atlas),
+        compact_atlas: building_atlas_metrics(compact_atlas),
+    }
+    if district == "fort_lee":
+        candidates = [(fort_atlas, cell) for cell in range(16)]
+        candidates += [(compact_atlas, cell) for cell in range(8)]
+    elif landmark:
+        # Three roof-plan church/parish complexes in the Washington Heights
+        # sheet plus the compact-lot church in the companion sheet.
+        candidates = [(heights_atlas, cell) for cell in (7, 12, 14)] + [(compact_atlas, 15)]
+    else:
+        candidates = [(heights_atlas, cell) for cell in range(16) if cell not in {7, 12, 14}]
+        candidates += [(compact_atlas, cell) for cell in range(8, 15)]
+
+    scored = []
+    preferred = sequence % max(1, len(candidates))
+    for candidate_index, (atlas_name, cell) in enumerate(candidates):
+        source_width, source_height = metrics[atlas_name][cell]
+        fit_ratio = min(
+            width / (source_width * ATLAS_WORLD_UNITS_PER_PIXEL),
+            height / (source_height * ATLAS_WORLD_UNITS_PER_PIXEL),
+        )
+        # Prefer scale 1.0, heavily penalize an asset that must leave the
+        # accepted component-size band, and retain deterministic visual variety.
+        bounded_error = abs(1.0 - min(MAX_BUILDING_SPRITE_SCALE, max(MIN_BUILDING_SPRITE_SCALE, fit_ratio)))
+        outlier = max(0.0, MIN_BUILDING_SPRITE_SCALE - fit_ratio) * 8.0
+        oversize = max(0.0, fit_ratio - MAX_BUILDING_SPRITE_SCALE) * 0.35
+        aspect_error = abs(math.log(max(0.05, width / height) / max(0.05, source_width / source_height))) * 0.12
+        variety = abs(candidate_index - preferred) * 0.0015
+        scored.append((bounded_error + outlier + oversize + aspect_error + variety,
+                       atlas_name, cell, source_width, source_height, fit_ratio))
+    _, atlas_name, cell, source_width, source_height, fit_ratio = min(scored)
+    render_ratio = min(MAX_BUILDING_SPRITE_SCALE, fit_ratio)
+    status = "pass" if fit_ratio >= MIN_BUILDING_SPRITE_SCALE else "undersized_lot"
+    return {
+        "cosmetic_atlas": atlas_name,
+        "cosmetic_cell": cell,
+        "cosmetic_source_bbox_w": round(source_width, 2),
+        "cosmetic_source_bbox_h": round(source_height, 2),
+        "cosmetic_fit_scale_ratio": round(fit_ratio, 4),
+        "cosmetic_render_scale_ratio": round(render_ratio, 4),
+        "cosmetic_scale_status": status,
+    }
+
+
 def generate_iterated_buildings(roads_override,rp_override):
     """Create deterministic block-responsive street-wall infill.
 
@@ -429,6 +495,7 @@ def generate_iterated_buildings(roads_override,rp_override):
     """
     block_rows=read_csv(SEMANTIC/'urban_blocks.csv')
     additions=[];parcel_uses=[];parking_count=0;plaza_count=0
+    district_sequences={"fort_lee":0,"washington_heights":0}
     fort_lee_families=('bui_painted_walkup_04','bui_stone_midrise_15','bui_commercial_lowrise_18',
                        'bui_concrete_tower_21','bui_warehouse_20','bui_waterfront_midrise_24')
     manhattan_families=('bui_brick_midrise_01','bui_brownstone_row_14','bui_art_deco_22',
@@ -493,17 +560,72 @@ def generate_iterated_buildings(roads_override,rp_override):
                 continue
             district_families=fort_lee_families if building_right <= HUDSON_WEST_X else manhattan_families
             height_base=.48 if district_families is fort_lee_families else .68
+            sequence=district_sequences[district]
+            landmark=district=='washington_heights' and sequence in {5,21,37}
+            sprite=choose_building_sprite(district,pw*2,ph*2,sequence,landmark=landmark)
+            if sprite['cosmetic_scale_status']!='pass':
+                # A single very narrow residual face cannot carry a full building
+                # without miniaturizing every window and wall. Give it an explicit
+                # service/parking use instead of weakening the art-scale contract.
+                parcel_uses.append({'id':f'parking_scale_safe_{len(parcel_uses)+1:03d}','kind':'parking','district':district,
+                                    'x':round(building_left,2),'y':round(py*2+2048,2),
+                                    'w':round(pw*2,2),'h':round(ph*2,2),
+                                    'generation_rule':'scale_safe_narrow_service_yard_v1'})
+                continue
+            district_sequences[district]+=1
             additions.append({'id':f'block_building_{len(additions)+1:04d}',
                               'x':round(building_left,2),'y':round(py*2+2048,2),
                               'w':round(pw*2,2),'h':round(ph*2,2),
+                              'district':district,
+                              'building_kind':'church_landmark' if landmark else 'urban_block',
                               'archetype_id':district_families[(idx+part*2)%len(district_families)],
                               'height_scale':round(height_base+((idx*2+part)%6)*.09,2),
-                              'generation_rule':'terrain_aware_block_street_wall_v5',
-                              'cosmetic_atlas':'approved_courtyard_blocks_v1.png',
-                              'cosmetic_cell':(idx*3+part*5)%16,
-                              'render_mode':'late_cosmetic_sprite_v1'})
+                              'generation_rule':'terrain_aware_block_street_wall_v6_scale_locked',
+                              'cosmetic_world_units_per_pixel':ATLAS_WORLD_UNITS_PER_PIXEL,
+                              **sprite,
+                              'render_mode':'late_cosmetic_sprite_v2_scale_locked'})
+
+    layers=[];stairwells=[];scale_audit=[]
+    layer_specs=((0,'ground',0),(1,'upper',10),(2,'roof',20))
+    sides=('north','east','south','west')
+    for building_index,row in enumerate(additions):
+        for level_id,layer_kind,z_order in layer_specs:
+            layers.append({'building_id':row['id'],'level_id':level_id,'layer_kind':layer_kind,
+                           'z_order':z_order,'walkable':'true','visual_role':'top_layer' if layer_kind=='roof' else 'intermediate_layer',
+                           'transition_policy':'attached_stairwell_v1'})
+        side=sides[(building_index*3+int(row['cosmetic_cell']))%len(sides)]
+        x=float(row['x']);y=float(row['y']);w=float(row['w']);h=float(row['h']);offset=18
+        if side=='north':stair_x,stair_y=x+w*.5,y-offset
+        elif side=='south':stair_x,stair_y=x+w*.5,y+h+offset
+        elif side=='west':stair_x,stair_y=x-offset,y+h*.5
+        else:stair_x,stair_y=x+w+offset,y+h*.5
+        row.update({'layer_count':3,'roof_level':2,'stair_side':side,
+                    'stair_x':round(stair_x,2),'stair_y':round(stair_y,2),'interaction_keys':'SPACE;C'})
+        stairwells.append({'stairwell_id':f"stair_{building_index+1:04d}",'building_id':row['id'],
+                           'kind':'exterior_fire_stair','side':side,'x':round(stair_x,2),'y':round(stair_y,2),
+                           'from_level':0,'intermediate_level':1,'to_level':2,'interaction_keys':'SPACE;C',
+                           'transition_mode':'authored_manual_stairwell_v1'})
+        scale_audit.append({'building_id':row['id'],'district':row['district'],'building_kind':row['building_kind'],
+                            'target_w':row['w'],'target_h':row['h'],'cosmetic_atlas':row['cosmetic_atlas'],
+                            'cosmetic_cell':row['cosmetic_cell'],'source_bbox_w':row['cosmetic_source_bbox_w'],
+                            'source_bbox_h':row['cosmetic_source_bbox_h'],'fit_scale_ratio':row['cosmetic_fit_scale_ratio'],
+                            'render_scale_ratio':row['cosmetic_render_scale_ratio'],'status':row['cosmetic_scale_status']})
+    undersized=[row for row in scale_audit if row['status']!='pass']
+    if undersized:
+        sample=', '.join(f"{row['building_id']}({row['target_w']}x{row['target_h']} ratio={row['fit_scale_ratio']})" for row in undersized[:8])
+        raise RuntimeError(f'Building sprite scale audit failed for {len(undersized)} lots: {sample}')
     write_csv(SEMANTIC/'iterated_buildings.csv',
-              ('id','x','y','w','h','archetype_id','height_scale','generation_rule','cosmetic_atlas','cosmetic_cell','render_mode'),additions)
+              ('id','x','y','w','h','district','building_kind','archetype_id','height_scale','generation_rule',
+               'cosmetic_atlas','cosmetic_cell','cosmetic_world_units_per_pixel','cosmetic_source_bbox_w',
+               'cosmetic_source_bbox_h','cosmetic_fit_scale_ratio','cosmetic_render_scale_ratio','cosmetic_scale_status',
+               'layer_count','roof_level','stair_side','stair_x','stair_y','interaction_keys','render_mode'),additions)
+    write_csv(SEMANTIC/'building_layers.csv',
+              ('building_id','level_id','layer_kind','z_order','walkable','visual_role','transition_policy'),layers)
+    write_csv(SEMANTIC/'building_stairwells.csv',
+              ('stairwell_id','building_id','kind','side','x','y','from_level','intermediate_level','to_level','interaction_keys','transition_mode'),stairwells)
+    write_csv(SEMANTIC/'building_sprite_scale_audit.csv',
+              ('building_id','district','building_kind','target_w','target_h','cosmetic_atlas','cosmetic_cell',
+               'source_bbox_w','source_bbox_h','fit_scale_ratio','render_scale_ratio','status'),scale_audit)
     write_csv(SEMANTIC/'iterated_parcel_uses.csv',
               ('id','kind','district','x','y','w','h','generation_rule'),parcel_uses)
     collision=[]
@@ -757,8 +879,17 @@ def write_manifest(masters, block_count, tile_count, infill_count, road_count, h
         {"key": "source_surface_preservation", "value": "filtered_reference_polygons_with_district_caps_v1"},
         {"key": "sprite_map_iteration", "value": "terrain_aware_block_mask_street_wall_v2"},
         {"key": "late_building_cosmetic_pass", "value": "true"},
-        {"key": "building_cosmetic_atlas", "value": "approved_courtyard_blocks_v1.png"},
-        {"key": "building_cosmetic_assignment", "value": "deterministic_after_geometry_lock_v1"},
+        {"key": "fort_lee_building_atlas", "value": "fort_lee_blocks_v1.png"},
+        {"key": "washington_heights_building_atlas", "value": "washington_heights_blocks_v1.png"},
+        {"key": "compact_lot_building_atlas", "value": "compact_lot_blocks_v1.png"},
+        {"key": "building_cosmetic_assignment", "value": "district_and_native_footprint_match_v2"},
+        {"key": "building_sprite_world_units_per_source_pixel", "value": str(ATLAS_WORLD_UNITS_PER_PIXEL)},
+        {"key": "building_sprite_scale_band", "value": f"{MIN_BUILDING_SPRITE_SCALE:.2f}..{MAX_BUILDING_SPRITE_SCALE:.2f}"},
+        {"key": "building_sprite_scale_outliers", "value": "0"},
+        {"key": "building_layer_rows", "value": str(infill_count*3)},
+        {"key": "building_stairwells", "value": str(infill_count)},
+        {"key": "building_layer_model", "value": "ground_upper_roof_v1"},
+        {"key": "building_stair_interaction_keys", "value": "SPACE;C"},
         {"key": "late_vegetation_cosmetic_pass", "value": "true"},
         {"key": "vegetation_cosmetic_atlas", "value": "approved_sidewalk_trees_v1.png"},
         {"key": "iterated_vegetation", "value": str(len(vegetation))},
