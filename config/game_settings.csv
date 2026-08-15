@@ -6,11 +6,9 @@ camera,deadzone_px,70,float,Mouse distance before look-ahead begins
 camera,full_lookahead_mouse_distance_px,480,float,Mouse distance that reaches full look-ahead
 camera,smoothing_per_second,8.5,float,Camera response rate
 camera,return_smoothing_per_second,11.0,float,Camera recentering rate
-controls,mouse_aim,true,bool,Mouse controls local head-look direction only; not networked
 controls,movement_aim_independent,true,bool,WASD movement is independent of aim
 controls,local_player_camera_facing,true,bool,Idle body visually realigns to camera; moving body follows camera-relative walking direction
 controls,camera_relative_movement,true,bool,On-foot WASD rotates with the camera so W stays screen-forward; vehicle controls remain vehicle-relative
-controls,head_tracks_mouse,true,bool,Head direction follows mouse independently of body direction
 controls,body_follows_movement,true,bool,Body facing changes only while movement is active
 controls,idle_body_realign_camera,true,bool,When movement stops local body settles back to camera-facing idle orientation
 debug,show_camera_lookahead,false,bool,Draw camera debug indicator
@@ -37,10 +35,16 @@ bicycle,player_brake_px_s2,260,float,Player bicycle braking
 bicycle,player_turn_rate,3.6,float,Player bicycle steering rate
 bicycle,collision_length_px,42,float,Server-authoritative top-down bicycle body length used against cars water and buildings
 bicycle,collision_width_px,18,float,Server-authoritative top-down bicycle body width used against cars water and buildings
-movement,sprint_multiplier,3.0,float,Double-tap directional or Shift sprint multiplier on foot
-movement,sprint_double_tap_window_seconds,0.30,float,Maximum interval between two presses of the same movement direction
+movement,walk_speed_px_per_second,185,float,Shared preview and server-authoritative on-foot walking speed
+movement,sprint_multiplier,3.0,float,Hold either Shift key while moving to run on foot
 movement,sprint_animation_rate_multiplier,1.85,float,Run-cycle playback multiplier while sprinting
 movement,sprint_gait_width_multiplier,1.48,float,Maximum authored leg-separation multiplier at the peak run frames
+movement,jump_forward_speed_px_per_second,570,float,Server-authoritative initial single-jump forward propulsion
+movement,jump_duration_seconds,0.75,float,Server-authoritative single-jump airborne duration
+movement,double_jump_window_seconds,0.55,float,Maximum time after first launch for a second Space press
+movement,double_jump_forward_speed_px_per_second,940,float,Server-authoritative second-launch propulsion
+movement,double_jump_duration_seconds,0.95,float,Server-authoritative double-jump airborne duration
+movement,movement_stand_delay_seconds,1.0,float,Continuous directional input required before movement resumes from crouch or prone
 vehicle,mph_per_px_s,0.18,float,Display/physics conversion used for mph
 vehicle,player_cruise_max_mph,62,float,Normal W throttle top speed
 vehicle,player_boost_max_mph,88,float,Shift full-throttle top speed
@@ -53,6 +57,8 @@ vehicle,player_drag_px_s2,92,float,Player coasting drag
 render,player_scale,1,int,Walking player sprite scale
 render,jump_scale_multiplier,1.35,float,Enlarge local and remote player sprites during the jump pose
 render,jump_lift_px,10,int,Lift jumping player sprites upward in screen pixels before camera zoom
+render,double_jump_scale_multiplier,1.50,float,Make a double jump slightly larger than a single jump for every client
+render,double_jump_lift_px,14,int,Lift double-jumping player sprites slightly higher than a single jump
 render,npc_scale,1,int,Pedestrian NPC sprite scale
 render,cyclist_rider_scale,1,int,Cyclist rider sprite scale
 render,fractional_zoom_filter,smooth,str,Use filtered one-pass downscale below 1x to suppress fractional-zoom aliasing
@@ -74,7 +80,7 @@ vehicle,passenger_capacity,3,int,Maximum player passengers in a car in addition 
 vehicle,passenger_board_max_speed_px_s,35,float,Maximum car speed at which a nearby player can board as passenger
 vehicle,passenger_exit_max_speed_px_s,70,float,Passengers and drivers must slow below this speed before exiting
 engine,ai_profile_version,2,int,v2.0 directional-flow AI tuning migration marker
-engine,client_profile_version,250,int,"v2.5 open-asset adaptation, eight-direction characters and 3x running"
+engine,client_profile_version,260,int,"v2.6 shared preview/server movement, held-Shift running and authoritative double jump"
 render,fast_rotation_while_dragging,true,bool,Use fast whole-scene rotation during active middle-mouse drag; filtered final frame resumes on release
 render,defer_25d_rotation_while_dragging,true,bool,Do not rebuild camera-aware 2.5D chunk art during every mouse movement; apply final 30-degree extrusion bucket on release
 engine,interest_manager_version,2,int,Chunk-bucket snapshot interest manager with logical server regions

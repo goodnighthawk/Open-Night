@@ -163,8 +163,50 @@ class InventoryDatabase:
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS open_night_deployment (
+                    setting_key VARCHAR(64) PRIMARY KEY,
+                    setting_value VARCHAR(128) NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
             conn.commit()
             cur.close()
+        finally:
+            conn.close()
+
+    def reset_for_patch(self, patch_id: str) -> bool:
+        """Clear prototype persistence once when the deployed patch ID changes."""
+        clean_patch = str(patch_id).strip()
+        if not clean_patch or len(clean_patch) > 128:
+            raise ValueError("Patch ID must contain 1 to 128 characters.")
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT setting_value FROM open_night_deployment "
+                "WHERE setting_key='persistence_patch_id' FOR UPDATE"
+            )
+            row = cur.fetchone()
+            previous = str(row[0]) if row else None
+            if previous == clean_patch:
+                conn.commit();cur.close();return False
+            # Child rows are removed first for compatibility with the explicit
+            # foreign key, even though account deletion also cascades.
+            cur.execute("DELETE FROM inventory_slots")
+            cur.execute("DELETE FROM player_accounts")
+            cur.execute(
+                "INSERT INTO open_night_deployment (setting_key, setting_value) "
+                "VALUES ('persistence_patch_id', %s) "
+                "ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)",
+                (clean_patch,),
+            )
+            conn.commit();cur.close();return True
+        except Exception:
+            conn.rollback();raise
         finally:
             conn.close()
 

@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 checks = {
     "launcher": ROOT / "open_night_launcher.py",
     "start": ROOT / "START_OPEN_NIGHT.bat",
+    "updater": ROOT / "UPDATE_OPEN_NIGHT.bat",
     "map_generator": ROOT / "dev_tools" / "map_generator" / "MAP_GENERATOR.bat",
     "quick_test": ROOT / "QUICK_LOCAL_TEST.bat",
     "server": ROOT / "RUN_SERVER.bat",
@@ -24,6 +25,13 @@ source = checks["launcher"].read_text(encoding="utf-8")
 for token in ("MAP GENERATOR", "QUICK TEST", "START SERVER", "DESKTOP CLIENT", "WEB CLIENT", "MOVEMENT PREVIEW", "MAP VIEWER"):
     if token not in source:
         raise SystemExit(f"Launcher action missing: {token}")
+start_source = checks["start"].read_text(encoding="utf-8", errors="replace")
+updater_source = checks["updater"].read_text(encoding="utf-8", errors="replace")
+if "call UPDATE_OPEN_NIGHT.bat" not in start_source:
+    raise SystemExit("Start launcher does not invoke the safe GitHub updater")
+for token in ("git.exe", "fetch", "merge-base --is-ancestor", "pull --ff-only", "OPEN_NIGHT_SKIP_UPDATE"):
+    if token not in updater_source:
+        raise SystemExit(f"Safe GitHub updater contract missing: {token}")
 client_source = (ROOT / "client.py").read_text(encoding="utf-8")
 for token in ("load_public_servers", "probe_public_servers", "AVAILABLE SERVERS", "INTERNET:"):
     if token not in client_source:
@@ -34,8 +42,18 @@ if "wss://open-night-production.up.railway.app" not in public_config:
 tester = checks["movement_preview"].read_text(encoding="utf-8")
 if 'assets" / "characters" / "master_dual_camera"' not in tester:
     raise SystemExit("Movement preview is not wired to the authoritative game character pack")
+for token in ("run_held = bool(", "self.sprint_active = run_held and moving", "Hold Shift + W/A/S/D = 3× run"):
+    if token not in tester:
+        raise SystemExit(f"Movement preview Shift-to-run integration missing: {token}")
+for obsolete in ("register_direction_tap", "last_direction_tap", "Double-tap W/A/S/D"):
+    if obsolete in tester:
+        raise SystemExit(f"Movement preview still contains obsolete double-tap running: {obsolete}")
+viewer = checks["map_viewer"].read_text(encoding="utf-8")
+for token in ("DEFAULT_MAP_ID", "default_map_path", "Map_001_GWB.map", "--choose"):
+    if token not in viewer:
+        raise SystemExit(f"Map Viewer default-map integration missing: {token}")
 map_bat = checks["map_generator"].read_text(encoding="utf-8", errors="replace")
 if "OPEN_NIGHT_GAME_ROOT" not in map_bat:
     raise SystemExit("Map generator does not recognize the OPEN NIGHT export target")
 print("OPEN NIGHT launcher audit: PASS")
-print("7 launcher actions present; map generator, movement preview, portable .map viewer, and Railway auto-detection are wired.")
+print("7 launcher actions present; safe GitHub update, map tools, Railway detection and clients are wired.")

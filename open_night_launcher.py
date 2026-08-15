@@ -8,7 +8,11 @@ import subprocess
 import sys
 import time
 
-APP_TITLE = "OPEN NIGHT // Launcher"
+APP_TITLE = (
+    "OPEN NIGHT // WORK IN PROGRESS MAP"
+    if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()
+    else "OPEN NIGHT // Launcher"
+)
 WINDOW = (1120, 820)
 FPS = 60
 
@@ -182,7 +186,7 @@ class OpenNightLauncher:
     def launch_map_viewer(self):
         try:
             self._python_process(self.root/'map_viewer.py')
-            self._set_status('MAP VIEWER // choose any compatible portable .map file')
+            self._set_status('MAP VIEWER // opened the current default playable map')
         except Exception as exc:
             self._set_status(f'MAP VIEWER FAILED // {exc}', 'error')
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BATCH = ROOT / "DEPLOY_OPEN_NIGHT_SERVER.bat"
+RAILWAY = ROOT / "railway.toml"
 
 
 def main() -> int:
@@ -33,8 +34,16 @@ def main() -> int:
     if bare_calls:
         raise SystemExit("Railway command would terminate parent batch:\n" + "\n".join(bare_calls))
 
+    railway = RAILWAY.read_text(encoding="utf-8", errors="strict").lower()
+    railway_required = ("pymmo_reset_db_on_patch=true", "pymmo_patch_id=", "--no-discovery")
+    railway_missing = [token for token in railway_required if token not in railway]
+    if "--memory-db" in railway:
+        raise SystemExit("Railway still uses --memory-db; MySQL persistence would be disabled.")
+    if railway_missing:
+        raise SystemExit("Railway MySQL patch-reset config missing: " + ", ".join(railway_missing))
+
     print("RAILWAY BATCH AUDIT: PASS")
-    print("All npm railway.cmd commands use CALL; unified exit-code pause is present.")
+    print("All railway.cmd calls return safely; Railway MySQL patch-reset mode is enabled.")
     return 0
 
 

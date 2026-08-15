@@ -15,10 +15,9 @@ The current sprite pack is bundled under `sprite_packs/`. Use **Open sprite ZIP*
 | Control | Result |
 | --- | --- |
 | WASD | Camera-relative eight-direction walking; combine keys for diagonals |
-| Double-tap W, A, S or D | Run at 3.0× while the twice-tapped direction remains held; other held directions may form diagonals |
-| Hold Shift + WASD | Slow walk |
+| Hold Shift + WASD | Run at 3.0× with the dedicated wider gait; combine directions for diagonal running |
 | Space | Forward-propelled jump with twice the previous range; stands up if prone |
-| Space twice | Double jump with twice the previous range; lands prone |
+| Space twice | Double jump with twice the previous range; appears slightly larger than a single jump and lands prone |
 | Hold C | Crouch; movement input stands after a one-second delay |
 | X | Toggle prone or stand; movement input stands after a one-second delay |
 | T | Turn/pivot animation |
@@ -48,7 +47,7 @@ The movement arena now loads the converted user-created Unity assets under `asse
 
 Camera behavior matches the game client: the local player stays exactly screen-centered, WASD remains screen-relative at every camera angle, mouse aim is independently transformed into world space, active camera dragging front-locks the player sprite, rotated screen depth controls occlusion, and the minimap remains north-up. Mouse-wheel zoom uses the game's 1.0× default, 0.55×–2.0× range and 0.10 step while keeping the customization panel unscaled.
 
-After a double-jump landing, press either `Space` or `X` to stand immediately. Holding a movement direction while crouched or prone starts a one-second stand-up transition; movement resumes only after it completes. Hold Shift while moving for slow walk. Double-tap the same direction within 0.30 seconds and keep the second press held to run at 3.0× speed with the dedicated wider gait; releasing that direction, pressing Shift, crouching, going prone, jumping or starting an action cancels running.
+After a double-jump landing, press either `Space` or `X` to stand immediately. Holding a movement direction while crouched or prone starts a one-second stand-up transition; movement resumes only after it completes. Hold either Shift key while moving to run at 3.0× speed with the dedicated wider gait. Releasing Shift, stopping, crouching, going prone, jumping or starting an action stops running.
 
 Punching and gun holding currently display the pack's dedicated action masters; the panel clearly identifies those frames as action masters rather than pretending they are modular outfit combinations.
 

@@ -63,19 +63,26 @@ def main() -> int:
     assert all((ROOT / "assets/characters/master_dual_camera" / row["sheet"]).is_file() for row in run_rows)
 
     settings = {(row["section"], row["key"]): row["value"] for row in rows(ROOT / "config/game_settings.csv")}
+    assert settings[("movement", "walk_speed_px_per_second")] == "185"
     assert settings[("movement", "sprint_multiplier")] == "3.0"
-    assert settings[("movement", "sprint_double_tap_window_seconds")] == "0.30"
     assert settings[("movement", "sprint_animation_rate_multiplier")] == "1.85"
     assert settings[("movement", "sprint_gait_width_multiplier")] == "1.48"
+    assert settings[("movement", "double_jump_forward_speed_px_per_second")] == "940"
+    assert settings[("render", "double_jump_scale_multiplier")] == "1.50"
 
-    client_tree = ast.parse((ROOT / "client.py").read_text(encoding="utf-8"), filename="client.py")
+    client_source = (ROOT / "client.py").read_text(encoding="utf-8")
+    client_tree = ast.parse(client_source, filename="client.py")
     server_tree = ast.parse((ROOT / "server.py").read_text(encoding="utf-8"), filename="server.py")
-    assert any(isinstance(node, ast.FunctionDef) and node.name == "register_direction_tap" for node in ast.walk(client_tree))
+    assert "register_direction_tap" not in client_source
+    assert "prone_toggle" in client_source
+    assert "shift_boost" in client_source
+    server_functions = {node.name for node in ast.walk(server_tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert {"request_player_jump", "request_player_prone_toggle", "finish_expired_player_jump"} <= server_functions
     assert any(isinstance(node, ast.FunctionDef) and node.name == "_traffic_asset" for node in ast.walk(server_tree))
 
     print("OPEN ASSET AUDIT PASSED")
     print("  5 vehicles / 2 building views / 8-frame dust / 10 dedicated wide-gait run sheets")
-    print("  user_created catalog / 3.0x server-authoritative run settings")
+    print("  user_created catalog / held-Shift run / server-authoritative double jump")
     return 0
 
 

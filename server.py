@@ -78,7 +78,7 @@ PORT = 8765
 SERVER_NAME = "Map 001 / Compact 2x"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
-SERVER_VERSION = "0.7.0"
+SERVER_VERSION = "0.7.2"
 
 ACTIVE_MAP_ID = DEFAULT_MAP_ID
 ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
@@ -96,6 +96,12 @@ VEHICLE_SETTINGS = SETTINGS.get("vehicle", {})
 ENGINE_SETTINGS = SETTINGS.get("engine", {})
 MAP_ROSTER_RATE = max(0.25, float(ENGINE_SETTINGS.get("world_map_player_roster_hz", 2.0)))
 LAYER_TRANSITION_JUMP_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.65)))
+JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("jump_duration_seconds", 0.75)))
+DOUBLE_JUMP_WINDOW_SECONDS = max(0.05, float(MOVEMENT_SETTINGS.get("double_jump_window_seconds", 0.55)))
+DOUBLE_JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("double_jump_duration_seconds", 0.95)))
+JUMP_FORWARD_SPEED = max(0.0, float(MOVEMENT_SETTINGS.get("jump_forward_speed_px_per_second", 570.0)))
+DOUBLE_JUMP_FORWARD_SPEED = max(0.0, float(MOVEMENT_SETTINGS.get("double_jump_forward_speed_px_per_second", 940.0)))
+MOVEMENT_STAND_DELAY_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("movement_stand_delay_seconds", 1.0)))
 PASSENGER_CAPACITY = max(1, int(VEHICLE_SETTINGS.get("passenger_capacity", 3)))
 PASSENGER_BOARD_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_board_max_speed_px_s", 35.0)))
 PASSENGER_EXIT_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_exit_max_speed_px_s", 70.0)))
@@ -237,9 +243,99 @@ class ClientSession:
     passenger_vehicle_id: str = ""
     riding_bicycle_id: str = ""
     boost: bool = False
+    crouch_requested: bool = False
     crouching: bool = False
+    crouch_cancel_latched: bool = False
+    prone: bool = False
+    stand_delay_remaining: float = 0.0
     jump_until: float = 0.0
+    jump_started_at: float = 0.0
+    jump_kind: str = ""
+    jump_velocity_x: float = 0.0
+    jump_velocity_y: float = 0.0
     last_chat_time: float = 0.0
+
+
+def reset_on_foot_actions(session: ClientSession) -> None:
+    """Clear pedestrian-only actions when entering a vehicle or interior."""
+    session.crouch_requested = False
+    session.crouching = False
+    session.crouch_cancel_latched = False
+    session.prone = False
+    session.stand_delay_remaining = 0.0
+    session.jump_until = 0.0
+    session.jump_started_at = 0.0
+    session.jump_kind = ""
+    session.jump_velocity_x = 0.0
+    session.jump_velocity_y = 0.0
+
+
+def request_player_prone_toggle(session: ClientSession, now: float | None = None) -> bool:
+    """Apply the preview's X-to-prone/stand rule on the authoritative server."""
+    timestamp = time.monotonic() if now is None else float(now)
+    if session.jump_kind and timestamp < session.jump_until:
+        return False
+    session.prone = not session.prone
+    session.crouching = False
+    session.crouch_cancel_latched = bool(session.crouch_requested)
+    session.stand_delay_remaining = 0.0
+    return True
+
+
+def request_player_jump(session: ClientSession, now: float | None = None) -> str:
+    """Start, advance, or consume Space according to the movement-preview contract."""
+    timestamp = time.monotonic() if now is None else float(now)
+    if session.prone:
+        session.prone = False
+        session.crouching = False
+        session.crouch_cancel_latched = bool(session.crouch_requested)
+        session.stand_delay_remaining = 0.0
+        return "stand"
+    if session.jump_kind == "jump" and timestamp < session.jump_until:
+        if timestamp - session.jump_started_at <= DOUBLE_JUMP_WINDOW_SECONDS:
+            session.jump_kind = "double_jump"
+            session.jump_started_at = timestamp
+            session.jump_until = timestamp + DOUBLE_JUMP_DURATION_SECONDS
+            speed = DOUBLE_JUMP_FORWARD_SPEED
+        else:
+            return "ignored"
+    elif session.jump_kind and timestamp < session.jump_until:
+        return "ignored"
+    else:
+        session.jump_kind = "jump"
+        session.jump_started_at = timestamp
+        session.jump_until = timestamp + JUMP_DURATION_SECONDS
+        speed = JUMP_FORWARD_SPEED
+
+    heading_x, heading_y = session.input_x, session.input_y
+    length = math.hypot(heading_x, heading_y)
+    if length <= 0.05:
+        heading_x, heading_y = math.cos(session.aim), math.sin(session.aim)
+        length = 1.0
+    session.jump_velocity_x = heading_x / length * speed
+    session.jump_velocity_y = heading_y / length * speed
+    session.crouching = False
+    session.prone = False
+    session.stand_delay_remaining = 0.0
+    session.boost = False
+    return session.jump_kind
+
+
+def finish_expired_player_jump(session: ClientSession, now: float | None = None) -> str:
+    """Finish an authored jump and apply the preview's double-jump prone landing."""
+    timestamp = time.monotonic() if now is None else float(now)
+    if not session.jump_kind or timestamp < session.jump_until:
+        return ""
+    landed = session.jump_kind
+    session.jump_kind = ""
+    session.jump_until = 0.0
+    session.jump_started_at = 0.0
+    session.jump_velocity_x = 0.0
+    session.jump_velocity_y = 0.0
+    if landed == "double_jump":
+        session.prone = True
+        session.crouching = False
+    return landed
 
 
 @dataclass
@@ -1526,7 +1622,8 @@ async def process_interior_action(session: ClientSession, action: str, message: 
         player.interior_x, player.interior_y = INTERIOR_START_TILE
         player.interior_aim = -math.pi / 2.0
         session.input_x = session.input_y = 0.0
-        session.boost = session.crouching = False
+        session.boost = False
+        reset_on_foot_actions(session)
         await send_json(session.websocket, _interior_state_payload(player))
         return
 
@@ -1951,15 +2048,24 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         session.input_y = max(-1.0, min(1.0, iy))
         session.aim = aim
         session.boost = bool(message.get("boost", False))
-        session.crouching = bool(message.get("crouch", False))
+        session.crouch_requested = bool(message.get("crouch", False))
+        if not session.crouch_requested:
+            session.crouch_cancel_latched = False
         if session.passenger_vehicle_id:
             session.boost = False
-            session.crouching = False
-        if bool(message.get("jump", False)) and not session.driving_vehicle_id and not session.passenger_vehicle_id and not session.riding_bicycle_id:
-            session.jump_until = time.monotonic() + 0.75
-            session.crouching = False
-        if not session.driving_vehicle_id and not session.passenger_vehicle_id and not session.riding_bicycle_id:
-            if session.crouching or time.monotonic() < session.jump_until:
+        on_foot = not session.driving_vehicle_id and not session.passenger_vehicle_id and not session.riding_bicycle_id
+        if on_foot:
+            now = time.monotonic()
+            if bool(message.get("prone_toggle", False)):
+                request_player_prone_toggle(session, now)
+            if bool(message.get("jump", False)):
+                request_player_jump(session, now)
+            airborne = bool(session.jump_kind and now < session.jump_until)
+            if airborne or session.prone or session.stand_delay_remaining > 0.0:
+                session.crouching = False
+            else:
+                session.crouching = session.crouch_requested and not session.crouch_cancel_latched
+            if session.crouching or session.prone or airborne:
                 session.boost = False
         session.last_input_time = time.monotonic()
     elif msg_type == "interact":
@@ -2223,10 +2329,12 @@ async def simulation_loop() -> None:
                 session.input_x = session.input_y = 0.0
                 session.boost = False
             p = session.player
+            finish_expired_player_jump(session, current)
 
             if p.interior_id:
                 session.input_x = session.input_y = 0.0
-                session.boost = session.crouching = False
+                session.boost = False
+                reset_on_foot_actions(session)
                 continue
 
             if session.passenger_vehicle_id:
@@ -2238,6 +2346,7 @@ async def simulation_loop() -> None:
                     p.vehicle_kind = ""
                     p.vehicle_role = ""
                 else:
+                    reset_on_foot_actions(session)
                     p.x, p.y = car.x, car.y
                     p.aim = car.angle
                     p.level = 0
@@ -2252,6 +2361,7 @@ async def simulation_loop() -> None:
                     p.vehicle_kind = ""
                     p.vehicle_role = ""
                 else:
+                    reset_on_foot_actions(session)
                     steer = max(-1.0, min(1.0, session.input_x))
                     throttle = max(-1.0, min(1.0, -session.input_y))
                     max_forward = float(BICYCLE_AI.get("player_max_speed_px_s", 190.0))
@@ -2290,6 +2400,7 @@ async def simulation_loop() -> None:
                     p.vehicle_kind = ""
                     p.vehicle_role = ""
                 else:
+                    reset_on_foot_actions(session)
                     # Arcade car physics: acceleration, braking, reverse, speed-
                     # dependent steering and inertia. The server remains authoritative.
                     steer = max(-1.0, min(1.0, session.input_x))
@@ -2343,14 +2454,54 @@ async def simulation_loop() -> None:
                     p.x, p.y = car.x, car.y
                     p.aim = car.angle
                     continue
-            sprint_mult = float(MOVEMENT_SETTINGS.get("sprint_multiplier", 3.0)) if session.boost else 1.0
-            dx = session.input_x * PLAYER_SPEED * sprint_mult * dt
-            dy = session.input_y * PLAYER_SPEED * sprint_mult * dt
+            input_moving = math.hypot(session.input_x, session.input_y) > 0.05
+            airborne = bool(session.jump_kind and current < session.jump_until)
+            movement_blocked_for_stand = False
+            if not airborne:
+                if not session.prone and session.stand_delay_remaining <= 0.0:
+                    session.crouching = session.crouch_requested and not session.crouch_cancel_latched
+                if input_moving and (session.prone or session.crouching):
+                    if session.stand_delay_remaining <= 0.0:
+                        session.stand_delay_remaining = MOVEMENT_STAND_DELAY_SECONDS
+                    session.stand_delay_remaining = max(0.0, session.stand_delay_remaining - dt)
+                    if session.stand_delay_remaining <= 0.0:
+                        session.prone = False
+                        session.crouching = False
+                        session.crouch_cancel_latched = bool(session.crouch_requested)
+                    else:
+                        movement_blocked_for_stand = True
+                        session.boost = False
+                elif not session.prone and not session.crouching:
+                    session.stand_delay_remaining = 0.0
+
+            if airborne:
+                dx = session.jump_velocity_x * dt
+                dy = session.jump_velocity_y * dt
+                drag = 0.85 if session.jump_kind == "double_jump" else 1.15
+                velocity_decay = max(0.0, 1.0 - dt * drag)
+                session.jump_velocity_x *= velocity_decay
+                session.jump_velocity_y *= velocity_decay
+                session.boost = False
+            elif movement_blocked_for_stand:
+                dx = dy = 0.0
+            else:
+                walk_speed = max(0.0, float(MOVEMENT_SETTINGS.get("walk_speed_px_per_second", PLAYER_SPEED)))
+                sprint_mult = float(MOVEMENT_SETTINGS.get("sprint_multiplier", 3.0)) if session.boost else 1.0
+                dx = session.input_x * walk_speed * sprint_mult * dt
+                dy = session.input_y * walk_speed * sprint_mult * dt
+            movement_start_x, movement_start_y = p.x, p.y
             p.x, p.y = move_with_collisions(
                 p.x, p.y, dx, dy, ACTIVE_MAP, level=int(getattr(p, "level", 0))
             )
             previous_level = int(getattr(p, "level", 0))
-            next_level = resolve_level_transition(p.x, p.y, previous_level, ACTIVE_MAP)
+            next_level = resolve_level_transition(
+                p.x,
+                p.y,
+                previous_level,
+                ACTIVE_MAP,
+                previous_x=movement_start_x,
+                previous_y=movement_start_y,
+            )
             p.level = next_level
             if next_level != previous_level:
                 # Connector transitions should read as a deliberate hop rather
@@ -2429,7 +2580,9 @@ async def snapshot_loop() -> None:
                         if other.player.in_vehicle:
                             pdata["pose"] = "idle"
                         elif time.monotonic() < other.jump_until:
-                            pdata["pose"] = "jump"
+                            pdata["pose"] = other.jump_kind if other.jump_kind in {"jump", "double_jump"} else "jump"
+                        elif other.prone:
+                            pdata["pose"] = "prone"
                         elif other.crouching:
                             pdata["pose"] = "crouch"
                         elif other.boost and math.hypot(other.input_x, other.input_y) > 0.05:
@@ -2637,11 +2790,11 @@ def cli_main() -> None:
     parser.add_argument("--map-file", default="", help="Load a portable .map file and distribute its data/textures to client caches")
     parser.add_argument("--no-discovery", action="store_true")
     parser.add_argument("--memory-db", action="store_true", help="Development-only: disable MySQL persistence")
-    parser.add_argument("--db-host", default=os.getenv("PYMMO_DB_HOST", "127.0.0.1"))
-    parser.add_argument("--db-port", type=int, default=int(os.getenv("PYMMO_DB_PORT", "3306")))
-    parser.add_argument("--db-name", default=os.getenv("PYMMO_DB_NAME", "pymmo"))
-    parser.add_argument("--db-user", default=os.getenv("PYMMO_DB_USER", "root"))
-    parser.add_argument("--db-password", default=os.getenv("PYMMO_DB_PASSWORD", ""))
+    parser.add_argument("--db-host", default=os.getenv("PYMMO_DB_HOST", os.getenv("MYSQLHOST", "127.0.0.1")))
+    parser.add_argument("--db-port", type=int, default=int(os.getenv("PYMMO_DB_PORT", os.getenv("MYSQLPORT", "3306"))))
+    parser.add_argument("--db-name", default=os.getenv("PYMMO_DB_NAME", os.getenv("MYSQLDATABASE", "pymmo")))
+    parser.add_argument("--db-user", default=os.getenv("PYMMO_DB_USER", os.getenv("MYSQLUSER", "root")))
+    parser.add_argument("--db-password", default=os.getenv("PYMMO_DB_PASSWORD", os.getenv("MYSQLPASSWORD", "")))
     args = parser.parse_args()
 
     if not 1 <= args.port <= 65535:
@@ -2680,6 +2833,12 @@ def cli_main() -> None:
         print("\nConnecting to MySQL and checking schema...")
         try:
             DB.initialize()
+            if str(os.getenv("PYMMO_RESET_DB_ON_PATCH", "false")).lower() in {"1","true","yes","on"}:
+                patch_id=os.getenv("PYMMO_PATCH_ID", SERVER_VERSION)
+                if DB.reset_for_patch(patch_id):
+                    print(f"Prototype persistence reset for new patch {patch_id}.")
+                else:
+                    print(f"Prototype persistence retained for patch {patch_id} restart.")
         except Exception as exc:
             print(f"MySQL startup failed: {mysql_error_text(exc)}")
             print("Check the MySQL service, host/port, username/password, and CREATE DATABASE permissions.")

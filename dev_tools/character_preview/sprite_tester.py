@@ -361,11 +361,7 @@ class SpriteTester:
         self.camera_zoom = max(self.camera_zoom_min, min(self.camera_zoom_max, self.camera_zoom))
         self.animation_time = 0.0
         self.idle_time = 0.0
-        self.slow_walking = False
-        self.sprinting = False
         self.sprint_active = False
-        self.sprint_trigger_key: int | None = None
-        self.last_direction_tap: dict[int, float] = {}
         self.one_shot: str | None = None
         self.one_shot_time = 0.0
         self.jump_velocity = self.pg.Vector2()
@@ -429,37 +425,7 @@ class SpriteTester:
         self.set_status(f"Preset: {self.pack.preset_name(self.preset_index)}")
 
     def cancel_sprint(self) -> None:
-        self.sprinting = False
         self.sprint_active = False
-        self.sprint_trigger_key = None
-
-    def register_direction_tap(self, key: int, now: float | None = None) -> bool:
-        """Arm sprint when the same direction is pressed twice inside the configured window."""
-        direction_keys = (self.pg.K_w, self.pg.K_a, self.pg.K_s, self.pg.K_d)
-        if key not in direction_keys:
-            return False
-        timestamp = time.monotonic() if now is None else now
-        keys = self.pg.key.get_pressed()
-        blocked = (
-            self.prone
-            or self.one_shot is not None
-            or bool(keys[self.pg.K_c])
-            or bool(keys[self.pg.K_LSHIFT] or keys[self.pg.K_RSHIFT])
-        )
-        if blocked:
-            self.last_direction_tap.pop(key, None)
-            return False
-        previous = self.last_direction_tap.get(key)
-        self.last_direction_tap[key] = timestamp
-        window = float(self.pack.movement_settings.get("sprint_double_tap_window_seconds", 0.30))
-        if previous is not None and 0.0 <= timestamp - previous <= window:
-            self.sprinting = True
-            self.sprint_trigger_key = key
-            self.last_direction_tap.pop(key, None)
-            self.idle_time = 0.0
-            self.set_status("RUNNING 3×: release the twice-tapped direction to stop")
-            return True
-        return False
 
     def trigger(self, action: str) -> None:
         self.cancel_sprint()
@@ -553,7 +519,6 @@ class SpriteTester:
         self.selected = new_pack.preset(0)
         self.idle_time = 0.0
         self.cancel_sprint()
-        self.last_direction_tap.clear()
         self.set_status(f"Loaded: {path.name}", 5.0)
 
     def screenshot(self) -> Path:
@@ -606,11 +571,7 @@ class SpriteTester:
             self.direction = 0
         if event.type == self.pg.MOUSEWHEEL and self.pg.Rect(WORLD_RECT).collidepoint(self.pg.mouse.get_pos()):
             self.adjust_camera_zoom(event.y)
-        if event.type == self.pg.KEYUP and event.key == self.sprint_trigger_key:
-            self.cancel_sprint()
         if event.type == self.pg.KEYDOWN:
-            if event.key in (self.pg.K_w, self.pg.K_a, self.pg.K_s, self.pg.K_d) and not getattr(event, "repeat", False):
-                self.register_direction_tap(event.key)
             if event.key == self.pg.K_ESCAPE:
                 return False
             if event.key == self.pg.K_TAB:
@@ -694,13 +655,10 @@ class SpriteTester:
         if not crouch_requested:
             self.crouch_cancel_latched = False
         crouching = crouch_requested and not self.crouch_cancel_latched
-        slow_held = bool(keys[self.pg.K_LSHIFT] or keys[self.pg.K_RSHIFT])
+        run_held = bool(keys[self.pg.K_LSHIFT] or keys[self.pg.K_RSHIFT])
         airborne = self.one_shot in {"jump", "double_jump"}
-        sprint_blocked = slow_held or crouching or self.prone or airborne or self.one_shot is not None
-        trigger_held = self.sprint_trigger_key is not None and bool(keys[self.sprint_trigger_key])
-        if self.sprinting and (sprint_blocked or not moving or not trigger_held):
-            self.cancel_sprint()
-        self.sprint_active = self.sprinting and moving and trigger_held and not sprint_blocked
+        sprint_blocked = crouching or self.prone or airborne or self.one_shot is not None
+        self.sprint_active = run_held and moving and not sprint_blocked
         if moving and not airborne and self.one_shot != "punch":
             if self.prone or crouching:
                 delay = float(self.pack.movement_settings.get("movement_stand_delay_seconds", 1.0))
@@ -719,9 +677,7 @@ class SpriteTester:
                 screen_move = move.normalize()
                 world_move = self.screen_to_world_delta(screen_move)
                 speed = float(self.pack.movement_settings.get("walk_speed_px_per_second", 185.0))
-                if slow_held:
-                    speed *= float(self.pack.movement_settings.get("slow_walk_multiplier", 0.55))
-                elif self.sprint_active:
+                if self.sprint_active:
                     speed *= float(self.pack.movement_settings.get("sprint_speed_multiplier", 3.0))
                 self.position += world_move * speed * dt
                 self.world_heading = world_move
@@ -747,11 +703,8 @@ class SpriteTester:
         mouse_delta = self.pg.Vector2(self.pg.mouse.get_pos()) - actor_center
         if mouse_delta.length_squared() > 1:
             self.aim_world = self.screen_to_world_delta(mouse_delta.normalize())
-        self.slow_walking = moving and not airborne and slow_held
         if self.sprint_active:
             animation_rate = float(self.pack.movement_settings.get("sprint_animation_rate_multiplier", 1.85))
-        elif self.slow_walking:
-            animation_rate = float(self.pack.movement_settings.get("slow_walk_multiplier", 0.55))
         else:
             animation_rate = 1.0
         self.animation_time += dt * animation_rate
@@ -865,10 +818,18 @@ class SpriteTester:
             )
 
         sprite, source_label = self.current_frame(moving, crouching)
-        target_size = max(1, int(CELL * self.sprite_scale * self.camera_zoom))
+        visual_scale = 1.0
+        lift_px = 0.0
+        if self.one_shot == "jump":
+            visual_scale = max(1.0, float(self.pack.movement_settings.get("jump_scale_multiplier", 1.35)))
+            lift_px = float(self.pack.movement_settings.get("jump_lift_px", 10.0))
+        elif self.one_shot == "double_jump":
+            visual_scale = max(1.0, float(self.pack.movement_settings.get("double_jump_scale_multiplier", 1.50)))
+            lift_px = float(self.pack.movement_settings.get("double_jump_lift_px", 14.0))
+        target_size = max(1, int(CELL * self.sprite_scale * self.camera_zoom * visual_scale))
         sprite = pg.transform.smoothscale(sprite, (target_size, target_size))
         actor_center = pg.Vector2(left + width / 2, top + height / 2)
-        sprite_rect = sprite.get_rect(center=actor_center)
+        sprite_rect = sprite.get_rect(center=(actor_center.x, actor_center.y - lift_px * self.camera_zoom))
 
         tree_world = pg.Vector2(WORLD_SIZE[0] / 2 - 260, WORLD_SIZE[1] / 2 - 165)
         planter_world = pg.Vector2(WORLD_SIZE[0] / 2 + 310, WORLD_SIZE[1] / 2 + 225)
@@ -974,7 +935,7 @@ class SpriteTester:
         self.screen.blit(self.small.render(f"Preset match: {preset or 'custom combination'}", True, (221, 205, 137)), (914, 628))
         self.screen.blit(self.small.render(reason, True, status_color), (914, 649))
         controls = (
-            "Double-tap W/A/S/D = 3× run | Shift = slow walk",
+            "Hold Shift + W/A/S/D = 3× run",
             "WASD stands after 1s from crouch/prone",
             "Space jump | Space twice = 2×-range double jump",
             "Space/X stand | Middle drag rotate | Wheel zoom",
@@ -1021,7 +982,6 @@ def headless_smoke_test(pg, pack: SpritePack, output: Path) -> None:
     app.camera_angle = math.radians(32)
     app.direction = 1  # Show the northeast diagonal contract in the QA preview.
     app.animation_time = 2 / 12  # Peak wide-gait run frame.
-    app.sprinting = True
     app.sprint_active = True
     app.draw(moving=True, crouching=False)
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -269,7 +269,15 @@ def point_near_level_connector(
     return False
 
 
-def resolve_level_transition(x: float, y: float, current_level: int, map_config: dict) -> int:
+def resolve_level_transition(
+    x: float,
+    y: float,
+    current_level: int,
+    map_config: dict,
+    *,
+    previous_x: float | None = None,
+    previous_y: float | None = None,
+) -> int:
     """Resolve a completed map-level transition at a connector endpoint.
 
     The switch occurs only near the *opposite* endpoint of a connector.  A
@@ -277,6 +285,9 @@ def resolve_level_transition(x: float, y: float, current_level: int, map_config:
     the ramp, then changes level once the ramp has actually been traversed.
     """
     current = int(current_level)
+    movement_known = previous_x is not None and previous_y is not None
+    move_x = float(x) - float(previous_x) if movement_known else 0.0
+    move_y = float(y) - float(previous_y) if movement_known else 0.0
     for connector in map_config.get("level_connectors", []) or []:
         from_level = _feature_level(connector.get("from_level", 0))
         to_level = _feature_level(connector.get("to_level", 0))
@@ -289,9 +300,28 @@ def resolve_level_transition(x: float, y: float, current_level: int, map_config:
         except (TypeError, ValueError, IndexError):
             continue
         endpoint_radius = max(24.0, min(72.0, width * 0.42))
-        if current == from_level and math.hypot(x - ex, y - ey) <= endpoint_radius:
+        # Some compact authored ramps have endpoint trigger circles that overlap.
+        # Position alone then alternates levels every server tick and makes a
+        # quick turn-back feel locked or unpredictable.  When movement is
+        # supplied, require travel along the connector in the appropriate
+        # direction.  Reversing input can therefore reverse the transition on
+        # the very next movement tick, while standing still never flickers.
+        connector_x = ex - sx
+        connector_y = ey - sy
+        directional_progress = move_x * connector_x + move_y * connector_y
+        moving_forward = not movement_known or directional_progress > 1e-6
+        moving_backward = not movement_known or directional_progress < -1e-6
+        if (
+            current == from_level
+            and moving_forward
+            and math.hypot(x - ex, y - ey) <= endpoint_radius
+        ):
             return to_level
-        if current == to_level and math.hypot(x - sx, y - sy) <= endpoint_radius:
+        if (
+            current == to_level
+            and moving_backward
+            and math.hypot(x - sx, y - sy) <= endpoint_radius
+        ):
             return from_level
     return current
 

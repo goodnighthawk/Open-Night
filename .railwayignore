@@ -3,3 +3,5 @@
 *.py[cod]
 *.log
 stress_results/
+feedback/next_version/next_version_feedback.csv
+feedback/next_version/screenshots/*.png

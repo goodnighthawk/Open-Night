@@ -20,7 +20,7 @@ exit /b %DEPLOY_RC%
 
 :main
 echo ============================================================
-echo   OPEN NIGHT v0.7.0 // RAILWAY SERVER UPDATE
+echo   OPEN NIGHT v0.7.2 // RAILWAY SERVER UPDATE
 echo ============================================================
 echo.
 
@@ -43,8 +43,9 @@ if errorlevel 1 goto :link_failed
 
 :deploy
 echo.
-echo Uploading the current Open Night v0.7.0 folder to Railway...
+echo Uploading the current Open Night v0.7.2 folder to Railway...
 echo This updates the existing internet server and keeps its public domain.
+echo Patch v0.7.2 resets prototype MySQL data once, then preserves it across restarts.
 echo.
 pause
 call railway.cmd up

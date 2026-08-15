@@ -179,3 +179,13 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Open Night local/runtime output (keep authored map data and approved previews tracked)
+client_crash.log
+server_crash.log
+*.bak
+*.tmp
+*.zip
+bug_reports/*/screenshot*.png
+map_generator_backups/
+dev_tools/map_generator/working_reference/pre_reference_install_backup/

@@ -1,1 +1,1 @@
-Open Night v0.7.0 - wide-road, edge-tunnel and bicycle safety map iteration over v0.6.4
+Open Night v0.7.2 - pass-17 map, unified multiplayer movement, and Railway patch-reset persistence

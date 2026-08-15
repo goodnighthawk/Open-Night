@@ -34,19 +34,23 @@ DEFAULTS = {
         "center_player_when_rotated": True,
     },
     "controls": {
-        "mouse_aim": True,
         "movement_aim_independent": True,
         "local_player_camera_facing": True,
         "camera_relative_movement": False,
-        "head_tracks_mouse": True,
         "body_follows_movement": True,
         "idle_body_realign_camera": True,
     },
     "movement": {
+        "walk_speed_px_per_second": 185.0,
         "sprint_multiplier": 3.0,
-        "sprint_double_tap_window_seconds": 0.30,
         "sprint_animation_rate_multiplier": 1.85,
         "sprint_gait_width_multiplier": 1.48,
+        "jump_forward_speed_px_per_second": 570.0,
+        "jump_duration_seconds": 0.75,
+        "double_jump_window_seconds": 0.55,
+        "double_jump_forward_speed_px_per_second": 940.0,
+        "double_jump_duration_seconds": 0.95,
+        "movement_stand_delay_seconds": 1.0,
     },
     "vehicle": {
         "mph_per_px_s": 0.18,
@@ -64,6 +68,10 @@ DEFAULTS = {
     "debug": {"show_camera_lookahead": False},
     "render": {
         "player_scale": 1,
+        "jump_scale_multiplier": 1.35,
+        "jump_lift_px": 10,
+        "double_jump_scale_multiplier": 1.50,
+        "double_jump_lift_px": 14,
         "npc_scale": 1,
         "cyclist_rider_scale": 1,
         "fractional_zoom_filter": "smooth",
@@ -157,11 +165,12 @@ def _migrate_v2_ai_profile(shared_path: Path) -> None:
 
 
 
-def _migrate_v25_client_profile(shared_path: Path) -> None:
-    """Apply v2.5 camera/movement defaults once to persistent shared settings.
+def _migrate_v26_client_profile(shared_path: Path) -> None:
+    """Apply v2.6 camera/movement defaults once to persistent shared settings.
 
     The migration preserves unrelated user settings while retaining the camera-rotation
-    performance controls and switching on camera-relative walking. Vehicle controls remain raw.
+    performance controls, camera-relative walking, and the shared preview/server
+    action contract. Vehicle controls remain raw.
     """
     if shared_path == LOCAL_CONFIG_PATH:
         return
@@ -174,14 +183,18 @@ def _migrate_v25_client_profile(shared_path: Path) -> None:
             except ValueError:
                 revision = 0
             break
-    if revision >= 250:
+    if revision >= 260:
         return
+    shared_rows = [
+        row for row in shared_rows
+        if (str(row.get("section", "")).strip(), str(row.get("key", "")).strip())
+        != ("movement", "sprint_double_tap_window_seconds")
+    ]
     local_rows = _csv_rows(LOCAL_CONFIG_PATH)
     migrate_keys = {
         ("camera", "zoom_default"),
         ("controls", "local_player_camera_facing"),
         ("controls", "camera_relative_movement"),
-        ("controls", "head_tracks_mouse"),
         ("controls", "body_follows_movement"),
         ("controls", "idle_body_realign_camera"),
         ("render", "fractional_zoom_filter"),
@@ -189,9 +202,20 @@ def _migrate_v25_client_profile(shared_path: Path) -> None:
         ("render", "filtered_rotation"),
         ("render", "fast_rotation_while_dragging"),
         ("render", "defer_25d_rotation_while_dragging"),
+        ("movement", "walk_speed_px_per_second"),
         ("movement", "sprint_multiplier"),
-        ("movement", "sprint_double_tap_window_seconds"),
         ("movement", "sprint_animation_rate_multiplier"),
+        ("movement", "sprint_gait_width_multiplier"),
+        ("movement", "jump_forward_speed_px_per_second"),
+        ("movement", "jump_duration_seconds"),
+        ("movement", "double_jump_window_seconds"),
+        ("movement", "double_jump_forward_speed_px_per_second"),
+        ("movement", "double_jump_duration_seconds"),
+        ("movement", "movement_stand_delay_seconds"),
+        ("render", "jump_scale_multiplier"),
+        ("render", "jump_lift_px"),
+        ("render", "double_jump_scale_multiplier"),
+        ("render", "double_jump_lift_px"),
         ("engine", "client_profile_version"),
     }
     desired = [r for r in local_rows if (str(r.get("section", "")).strip(), str(r.get("key", "")).strip()) in migrate_keys]
@@ -222,7 +246,7 @@ def load_settings(path: Path = CONFIG_PATH) -> dict:
     """
     settings = deepcopy(DEFAULTS)
     _migrate_v2_ai_profile(Path(path))
-    _migrate_v25_client_profile(Path(path))
+    _migrate_v26_client_profile(Path(path))
     try:
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)

@@ -52,6 +52,45 @@ for c in connectors:
         raise SystemExit(f"Connector {c.get('id')} does not transition {fid}->{tid} at its end")
     if resolve_level_transition(float(a[0]), float(a[1]), tid, m) != fid:
         raise SystemExit(f"Connector {c.get('id')} does not transition {tid}->{fid} at its start")
+    sx, sy = float(a[0]), float(a[1])
+    ex, ey = float(b[0]), float(b[1])
+    dx, dy = ex - sx, ey - sy
+    length = math.hypot(dx, dy)
+    if length <= 0.001:
+        raise SystemExit(f"Connector {c.get('id')} has coincident endpoints")
+    ux, uy = dx / length, dy / length
+
+    # Runtime direction contract: entering the far endpoint while moving
+    # forward ascends; continuing forward or standing cannot bounce back; a
+    # reverse movement at an overlapping compact connector may descend
+    # immediately. Longer ramps descend once their lower endpoint is reached.
+    step = min(8.0, length * 0.4)
+    if resolve_level_transition(
+        ex, ey, fid, m, previous_x=ex - ux * step, previous_y=ey - uy * step
+    ) != tid:
+        raise SystemExit(f"Connector {c.get('id')} ignores forward traversal direction")
+    if resolve_level_transition(
+        ex, ey, tid, m, previous_x=ex - ux * step, previous_y=ey - uy * step
+    ) != tid:
+        raise SystemExit(f"Connector {c.get('id')} bounces down while movement continues forward")
+    if resolve_level_transition(ex, ey, tid, m, previous_x=ex, previous_y=ey) != tid:
+        raise SystemExit(f"Connector {c.get('id')} flickers while the player is stationary")
+    reverse_x, reverse_y = ex - ux * step, ey - uy * step
+    expected_reverse_level = (
+        fid
+        if math.hypot(reverse_x - sx, reverse_y - sy)
+        <= max(24.0, min(72.0, float(c.get("width", 80)) * 0.42))
+        else tid
+    )
+    if resolve_level_transition(
+        reverse_x,
+        reverse_y,
+        tid,
+        m,
+        previous_x=ex,
+        previous_y=ey,
+    ) != expected_reverse_level:
+        raise SystemExit(f"Connector {c.get('id')} does not respond correctly to immediate reversal")
     mx, my = (float(a[0])+float(b[0]))*.5, (float(a[1])+float(b[1]))*.5
     if not point_near_level_connector(mx, my, m, level=fid):
         raise SystemExit(f"Connector {c.get('id')} is not walkable from level {fid}")
@@ -87,7 +126,7 @@ if p.public_dict().get("level") != max(walkable_levels):
 server_src = (ROOT / "server.py").read_text(encoding="utf-8")
 client_src = (ROOT / "client.py").read_text(encoding="utf-8")
 viewer_src = (ROOT / "map_viewer.py").read_text(encoding="utf-8")
-for token in ("resolve_level_transition", "level=int(getattr(p", "move_with_collisions"):
+for token in ("resolve_level_transition", "previous_x=movement_start_x", "previous_y=movement_start_y", "level=int(getattr(p", "move_with_collisions"):
     if token not in server_src:
         raise SystemExit(f"Server multi-level integration missing token: {token}")
 for token in ("next_level != previous_level", "LAYER_TRANSITION_JUMP_SECONDS", "session.jump_until = max"):

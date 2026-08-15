@@ -246,14 +246,19 @@ def build_character_surface(
     scale: float = 1.0,
     animation: str = "idle",
     anim_time: float = 0.0,
-    head_aim_radians: float | None = None,
 ) -> pygame.Surface:
     appearance = normalize_character(appearance)
     direction = _direction_index(aim_radians)
-    head_direction = _direction_index(aim_radians if head_aim_radians is None else head_aim_radians)
+    head_direction = direction
     scale_key = max(50, min(800, int(round(float(scale) * 100.0))))
     profile = matching_profile(appearance, mode)
-    fluid_name = {"walk": "walk_8", "run": "run_wide_8", "jump": "jump_9", "crouch": "crouch_3"}.get(animation, animation)
+    fluid_name = {
+        "walk": "walk_8",
+        "run": "run_wide_8",
+        "jump": "jump_9",
+        "crouch": "crouch_3",
+        "prone": "prone_3",
+    }.get(animation, animation)
     playback_time = float(anim_time) * (RUN_ANIMATION_RATE if animation == "run" else 1.0)
     fluid_row = catalog()["fluid"].get((mode, profile, fluid_name)) if profile else None
     if fluid_row and head_direction == direction:
@@ -332,7 +337,6 @@ def draw_character(
     action: str | None = None,
     action_phase: int = 0,
     weapon_id: str | None = None,
-    head_aim_radians: float | None = None,
 ) -> pygame.Rect:
     if action:
         sprite = build_action_surface(appearance, action, mode=mode, aim_radians=aim_radians, phase=action_phase, scale=scale, weapon_id=weapon_id)
@@ -343,7 +347,7 @@ def draw_character(
             aim_radians=aim_radians,
             scale=scale,
             animation=animation or ("walk" if moving else "idle"),
-            anim_time=anim_time, head_aim_radians=head_aim_radians,
+            anim_time=anim_time,
         )
     rect = sprite.get_rect(center=center)
     if (animation or "") == "run":

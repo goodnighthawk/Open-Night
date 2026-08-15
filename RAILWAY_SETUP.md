@@ -1,4 +1,4 @@
-# Open Night v0.7.0 — Railway internet server
+# Open Night v0.7.2 — Railway internet server with MySQL
 
 The desktop client automatically checks the configured Open Night Railway server when it starts. If the server answers the real game-protocol probe, it appears at the top of `AVAILABLE SERVERS`, is selected automatically, and can be joined with one click.
 
@@ -19,7 +19,25 @@ Do not add `:8080` or `:8765` to this public address.
 
 The deployment window deliberately remains open on success or failure. Railway is installed by npm as `railway.cmd`; the helper invokes it with `call` so control always returns to the visible deployment script.
 
-The included `railway.toml` starts the server with Railway's assigned `$PORT`, in-memory prototype accounts, and LAN discovery disabled.
+The included `railway.toml` starts the server with Railway's assigned `$PORT`, Railway MySQL persistence, patch-reset mode, and LAN discovery disabled.
+
+## One-time MySQL setup
+
+1. In the existing `open-night` Railway project, click **+ New → Database → MySQL**.
+2. Open the `open-night` game service, then open **Variables**.
+3. Add these reference variables, replacing `MySQL` below only if the database service has a different name:
+
+```text
+MYSQLHOST=${{MySQL.MYSQLHOST}}
+MYSQLPORT=${{MySQL.MYSQLPORT}}
+MYSQLUSER=${{MySQL.MYSQLUSER}}
+MYSQLPASSWORD=${{MySQL.MYSQLPASSWORD}}
+MYSQLDATABASE=${{MySQL.MYSQLDATABASE}}
+```
+
+4. Deploy the staged Railway changes, then run `DEPLOY_OPEN_NIGHT_SERVER.bat`.
+
+The server uses Railway's private service variables; do not paste database passwords into the repository.
 
 ## Joining
 
@@ -32,8 +50,10 @@ LAN discovery and Direct Connect remain available as fallbacks. Use made-up acco
 
 The Pygbag web client also reads the same public-server CSV and connects to this Railway address automatically. Each browser launch receives a synthetic prototype account identifier so multiple web players do not collide on one fixed login.
 
-v0.7.0 changes the authoritative map, bicycle safety rules and car–bicycle collision. Run `DEPLOY_OPEN_NIGHT_SERVER.bat` from this version before testing it with friends so the existing `open-night` service serves the same map as every client.
+Run `DEPLOY_OPEN_NIGHT_SERVER.bat` from this version before testing it with friends so the existing `open-night` service serves the same map and database policy as every client.
 
-## Persistence limitation
+## Prototype patch-reset policy
 
-Railway currently runs with `--memory-db`. Accounts, inventory, and position reset when Railway restarts or redeploys the service. Database persistence can be added after internet playtesting is stable.
+Accounts and inventory persist across ordinary Railway restarts. The server stores the active patch ID in MySQL. When `PYMMO_PATCH_ID` changes, it clears prototype accounts and inventories once, then records the new ID. Restarting or redeploying the same patch does not clear data again.
+
+For every future patch, update `PYMMO_PATCH_ID` in `railway.toml`. Remove `PYMMO_RESET_DB_ON_PATCH=true` only when permanent persistence is ready.

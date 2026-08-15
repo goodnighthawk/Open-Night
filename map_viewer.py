@@ -4,12 +4,34 @@ import argparse
 import csv
 import json
 import math
+import os
 from pathlib import Path
 
-import pygame
+from common import DEFAULT_MAP_ID
 
 BG=(12,15,17); LAND=(29,35,33); ROAD=(49,53,57); ROAD_EDGE=(84,88,84); SIDE=(108,104,94); WATER=(13,55,78); GREEN=(36,67,42)
 BUILDING=(72,66,61); BUILDING_EDGE=(111,98,83); YELLOW=(226,182,66); TRAFFIC=(214,76,62); BIKE=(74,183,101); TRANSIT=(102,139,226); DOOR=(244,207,80); LIGHT=(236,184,89); SHADOW=(0,0,0,72)
+ROOT = Path(__file__).resolve().parent
+
+
+def default_map_path() -> Path | None:
+    """Resolve the portable export for the game's authoritative default map."""
+    configured = os.getenv("OPEN_NIGHT_DEFAULT_MAP", "").strip()
+    candidates = []
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.extend(
+        [
+            ROOT / "dev_tools" / "map_generator" / "exports" / "Map_001_GWB.map",
+            ROOT / "dev_tools" / "map_generator" / "exports" / f"{DEFAULT_MAP_ID}.map",
+            ROOT / "mapfiles" / "exports" / f"{DEFAULT_MAP_ID}.map",
+        ]
+    )
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_file():
+            return resolved
+    return None
 
 
 def choose_map() -> Path | None:
@@ -236,10 +258,31 @@ class Viewer:
 
 
 def main():
+    global pygame
     ap=argparse.ArgumentParser(description='Open Night portable .map viewer')
-    ap.add_argument('map_file',nargs='?');a=ap.parse_args()
-    p=Path(a.map_file).expanduser().resolve() if a.map_file else choose_map()
-    if not p:return 0
+    ap.add_argument('map_file',nargs='?')
+    ap.add_argument('--choose',action='store_true',help='open the portable-map file picker instead of the default game map')
+    ap.add_argument('--print-default',action='store_true',help='print the resolved default map path and exit')
+    a=ap.parse_args()
+    p=(
+        Path(a.map_file).expanduser().resolve()
+        if a.map_file
+        else (choose_map() if a.choose else default_map_path())
+    )
+    if a.print_default:
+        if p:
+            print(p)
+            return 0
+        print(f'Default portable map for {DEFAULT_MAP_ID} was not found')
+        return 2
+    if not p:
+        print(f'Default portable map for {DEFAULT_MAP_ID} was not found. Use --choose to browse manually.')
+        return 2
+    try:
+        import pygame
+    except ImportError:
+        print('Map Viewer requires Pygame. Run START_OPEN_NIGHT.bat once to install the game requirements.')
+        return 2
     try:data=load_map(p)
     except Exception as exc:
         print('Could not open map:',exc);return 2

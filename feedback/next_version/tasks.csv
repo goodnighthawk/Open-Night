@@ -1,0 +1,11 @@
+priority,area,request,status,target_version,acceptance_check,notes
+1,infrastructure,"Use Railway MySQL and reset prototype persistence once per patch",implemented,v0.7.2,"Railway audit and patch-reset test pass","Keep PYMMO_PATCH_ID synchronized with each patch"
+2,map_art,"Keep streetlights on sidewalks and remove decorative yellow road lines",implemented,v0.7.2,"Art-rule audit has zero errors; inspect night preview","Latest authored lighting pass"
+3,map_art,"Continue converging the Fort Lee crop on the approved unified top-down composition",next,v0.7.2,"User approves Fort Lee night crop","Change only the largest visible mismatch per pass"
+4,release,"Run full QA and create the next playable checkpoint",queued,v0.7.2,"BUILD_RELEASE.bat passes","Run only after preview approval"
+1,multilevel,"Make immediate reverse traversal after a level change responsive",implemented,v0.7.2,"Directional multilevel audit passes","Movement direction disambiguates overlapping connector endpoints without a cooldown"
+1,map_tooling,"Provide an isolated auto-updating playable WIP map channel",implemented,v0.7.2,"Preview launcher creates/follows map-preview without modifying stable main","Feedback stored outside worktree; /mapfeedback captures screenshot and context"
+2,map_tooling,"Make Map Viewer open the default playable map without prompting",implemented,v0.7.2,"map_viewer.py --print-default resolves Map_001_GWB.map","Use --choose to inspect a different portable map"
+2,character_preview,"Use held Shift to run and remove double-tap run activation",implemented,v0.7.2,"Launcher audit verifies Shift-to-run and rejects obsolete double-tap state","Control contract is now shared with the multiplayer client and server"
+1,multiplayer_movement,"Use the Movement Preview movement system in multiplayer",implemented,v0.7.2,"multiplayer_movement_audit.py passes","Server owns held-Shift run, jump/double-jump propulsion, prone landing and stand delay; clients render shared poses"
+2,character_preview,"Make double jump slightly larger than single jump",implemented,v0.7.2,"Movement audit verifies double-jump scale setting in preview and game","1.50x double jump versus 1.35x single jump"
