@@ -25,7 +25,9 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_03"
+PASS_ID = "recovery_pass_06"
+ROAD_WIDTH_SCALE = 0.78
+SIDEWALK_SCALE = 0.85
 
 SEMANTIC_FILES = (
     "buildings.csv",
@@ -37,6 +39,28 @@ SEMANTIC_FILES = (
     "layer_transitions.csv",
     "urban_blocks.csv",
 )
+
+
+def selected_gameplay_roads():
+    """Keep connected reference roads while removing synthetic support overlays."""
+    point_rows = read_csv(SOURCE / 'road_points.csv')
+    grouped = {}
+    for row in point_rows:
+        grouped.setdefault(row['road_id'], []).append(row)
+    selected = set()
+    stats = []
+    for road in read_csv(SOURCE / 'roads.csv'):
+        ordered = sorted(grouped.get(road['road_id'], []), key=lambda r: int(float(r['point_order'])))
+        length = sum(((float(b['x'])-float(a['x']))**2 + (float(b['y'])-float(a['y']))**2)**.5
+                     for a,b in zip(ordered, ordered[1:]))
+        highway = (road.get('highway') or 'residential').lower()
+        rid = road['road_id']
+        keep = not rid.startswith('traffic_support_')
+        if keep:
+            selected.add(road['road_id'])
+            stats.append({'road_id':road['road_id'],'highway':highway,'length':round(length,2),'selection_rule':'connected_reference_without_support_overlays_v1'})
+    write_csv(SEMANTIC / 'selected_roads.csv', ('road_id','highway','length','selection_rule'), stats)
+    return selected
 
 
 def read_csv(path: Path):
@@ -58,7 +82,7 @@ def world_to_master(x, y):
     return round(float(x) * 0.5, 2), round((float(y) - 2048.0) * 0.5, 2)
 
 
-def export_semantics():
+def export_semantics(road_ids):
     buildings = []
     for row in read_csv(SOURCE / "buildings.csv"):
         x, y = world_to_master(row["x"], row["y"])
@@ -70,10 +94,12 @@ def export_semantics():
     points = {}
     for row in read_csv(SOURCE / "road_points.csv"):
         points.setdefault(row["road_id"], []).append(row)
-    roads = {row["road_id"]: row for row in read_csv(SOURCE / "roads.csv")}
+    roads = {row["road_id"]: row for row in read_csv(SOURCE / "roads.csv") if row['road_id'] in road_ids}
     lanes = []
     walks = []
     for road_id, rows in points.items():
+        if road_id not in road_ids:
+            continue
         road = roads.get(road_id, {})
         for row in rows:
             x, y = world_to_master(row["x"], row["y"])
@@ -123,10 +149,10 @@ def export_polygons(source_name, target_name):
     write_csv(SEMANTIC / target_name, fields, rows)
 
 
-def derive_urban_blocks():
+def derive_urban_blocks(road_ids):
     old_scale = callback.VIEW_SCALE
     callback.VIEW_SCALE = 0.0625
-    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False)
+    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False, road_ids=road_ids, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
     callback.VIEW_SCALE = old_scale
     blocked = masks["road"].resize((256, 128), Image.Resampling.NEAREST)
     water = masks["water"].resize((256, 128), Image.Resampling.NEAREST)
@@ -153,7 +179,7 @@ def derive_urban_blocks():
     return len(blocks)
 
 
-def generate_iterated_buildings():
+def generate_iterated_buildings(road_ids):
     """Create deterministic block-responsive street-wall infill.
 
     This is intentionally coupled to the current road/water/green masks. A change
@@ -162,7 +188,7 @@ def generate_iterated_buildings():
     """
     old_scale = callback.VIEW_SCALE
     callback.VIEW_SCALE = 0.125
-    masks = callback.surface_masks(2048, 1024, 8192, 6144, callback.DAY, False)
+    masks = callback.surface_masks(2048, 1024, 8192, 6144, callback.DAY, False, road_ids=road_ids, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
     callback.VIEW_SCALE = old_scale
     forbidden = Image.new('L', masks['road'].size, 0)
     for key in ('road', 'water', 'green'):
@@ -191,10 +217,10 @@ def generate_iterated_buildings():
     families = ('bui_brick_midrise_01', 'bui_brownstone_row_02', 'bui_stone_midrise_03',
                 'bui_painted_walkup_04', 'bui_commercial_lowrise_06', 'bui_art_deco_10')
     # 32 master px = 64 world px. Candidate modules combine into long street walls.
-    candidates = ((64, 32), (48, 32), (32, 48), (32, 32), (24, 32))
-    for gy in range(12, 1012, 28):
-        for gx in range(12, 2036, 28):
-            if len(additions) >= 720:
+    candidates = ((48, 28), (40, 28), (28, 40), (32, 28), (24, 28), (24, 24))
+    for gy in range(12, 1012, 20):
+        for gx in range(12, 2036, 20):
+            if len(additions) >= 500:
                 break
             if fp[gx, gy] or op[gx, gy] or not has_road_near(gx, gy):
                 continue
@@ -214,7 +240,7 @@ def generate_iterated_buildings():
             if not legal:
                 continue
             idx = len(additions)
-            family = families[(gx//28 + 3*(gy//28)) % len(families)]
+            family = families[(gx//20 + 3*(gy//20)) % len(families)]
             row = {'id': f'infill_{idx+1:04d}', 'x': round(x0/0.125, 2),
                    'y': round(y0/0.125 + 2048, 2), 'w': round((x1-x0)/0.125, 2),
                    'h': round((y1-y0)/0.125, 2), 'archetype_id': family,
@@ -227,11 +253,13 @@ def generate_iterated_buildings():
     return additions
 
 
-def render_masters(additional_buildings):
+def render_masters(additional_buildings, road_ids):
     day = callback.render("unified_master", False, annotate=False, output_dir=OUT,
-                          yellow_center_lines=False, additional_buildings=additional_buildings)
+                          yellow_center_lines=False, additional_buildings=additional_buildings, road_ids=road_ids,
+                          road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
     night = callback.render("unified_master", True, annotate=False, output_dir=OUT,
-                            yellow_center_lines=False, additional_buildings=additional_buildings)
+                            yellow_center_lines=False, additional_buildings=additional_buildings, road_ids=road_ids,
+                            road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
     targets = []
     for source, final in ((day, OUT / "unified_composition_day.png"),
                           (night, OUT / "unified_composition_night.png")):
@@ -270,7 +298,7 @@ def git_source():
         return "unknown"
 
 
-def write_manifest(masters, block_count, tile_count, infill_count):
+def write_manifest(masters, block_count, tile_count, infill_count, road_count):
     rows = [
         {"key": "pass_id", "value": PASS_ID},
         {"key": "generator_architecture", "value": "block_first_unified_composition_v1"},
@@ -281,6 +309,10 @@ def write_manifest(masters, block_count, tile_count, infill_count):
         {"key": "visual_tiles", "value": str(tile_count)},
         {"key": "semantic_csvs", "value": str(len(SEMANTIC_FILES))},
         {"key": "iterated_infill_buildings", "value": str(infill_count)},
+        {"key": "selected_gameplay_roads", "value": str(road_count)},
+        {"key": "road_selection_rule", "value": "connected_reference_without_support_overlays_v1"},
+        {"key": "road_width_scale", "value": str(ROAD_WIDTH_SCALE)},
+        {"key": "sidewalk_scale", "value": str(SIDEWALK_SCALE)},
         {"key": "sprite_map_iteration", "value": "block_mask_street_wall_v1"},
         {"key": "yellow_center_lines", "value": "false"},
     ]
@@ -296,13 +328,14 @@ def main():
     if args.clean and OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True, exist_ok=True)
-    export_semantics()
-    block_count = derive_urban_blocks()
-    infill = generate_iterated_buildings()
-    masters = render_masters(infill)
+    road_ids = selected_gameplay_roads()
+    export_semantics(road_ids)
+    block_count = derive_urban_blocks(road_ids)
+    infill = generate_iterated_buildings(road_ids)
+    masters = render_masters(infill, road_ids)
     tile_count = tile_masters(masters)
-    write_manifest(masters, block_count, tile_count, len(infill))
-    print(f"PASS={PASS_ID} masters=2 tiles={tile_count} blocks={block_count} infill={len(infill)} semantic_csvs={len(SEMANTIC_FILES)}")
+    write_manifest(masters, block_count, tile_count, len(infill), len(road_ids))
+    print(f"PASS={PASS_ID} masters=2 tiles={tile_count} roads={len(road_ids)} blocks={block_count} infill={len(infill)} semantic_csvs={len(SEMANTIC_FILES)}")
 
 
 if __name__ == "__main__":
