@@ -56,6 +56,7 @@ def main() -> int:
     client_source = (ROOT / "client.py").read_text(encoding="utf-8")
     server_source = (ROOT / "server.py").read_text(encoding="utf-8")
     tester_source = (ROOT / "dev_tools/character_preview/sprite_tester.py").read_text(encoding="utf-8")
+    input_controller_source = (ROOT / "gameplay/input_controller.py").read_text(encoding="utf-8")
     assert "register_direction_tap" not in client_source
     assert "sprint_trigger_key" not in client_source
     assert "and shift_boost" in client_source
@@ -64,6 +65,8 @@ def main() -> int:
     assert 'MOVEMENT_SETTINGS.get("walk_speed_px_per_second", PLAYER_SPEED)' in server_source
     assert 'self.one_shot == "double_jump"' in tester_source
     assert 'double_jump_scale_multiplier' in tester_source
+    assert "import math" in input_controller_source
+    assert "math.hypot" in input_controller_source
 
     print("MULTIPLAYER MOVEMENT AUDIT: PASS")
     print("Shift run, authoritative jump/double-jump, prone landing, stand controls and preview scaling are integrated.")
