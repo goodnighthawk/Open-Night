@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build-pass19-preview:
+  build-pass19b-preview:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -30,8 +30,8 @@ jobs:
       - name: Install map renderer dependency
         run: python -m pip install 'Pillow>=10,<13'
 
-      - name: Build Pass 19 unified composition
-        run: python dev_tools/map_generator/tools/build_pass19_art_convergence.py
+      - name: Build Pass 19b unified composition
+        run: python dev_tools/map_generator/tools/build_pass19b_frontage_release_candidate.py
 
       - name: Verify release-candidate outputs
         shell: bash
@@ -42,7 +42,8 @@ jobs:
           test -f dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
           test -f dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_buildings.csv
           test -f dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_vegetation.csv
-          grep -q 'art_convergence_pass_19' dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+          test -f dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_frontage_dressing.csv
+          grep -q 'art_convergence_pass_19b_frontage' dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
           python - <<'PY'
           import csv
           from pathlib import Path
@@ -52,18 +53,23 @@ jobs:
                   return list(csv.DictReader(f))
           buildings = rows('iterated_buildings.csv')
           vegetation = rows('iterated_vegetation.csv')
+          frontage = rows('iterated_frontage_dressing.csv')
           scales = rows('building_sprite_scale_audit.csv')
           park = [r for r in vegetation if r.get('placement_rule') == 'retained_park_canopy_pass19_v2']
+          obvious = [r for r in frontage if r.get('kind') not in {'frontage_wear', 'litter_cluster'}]
+          dressed = {r.get('building_id') for r in obvious}
           assert len(buildings) == 95, f'expected 95 buildings, got {len(buildings)}'
           assert all(r.get('status') == 'pass' for r in scales), 'building scale audit contains failures'
           assert len(park) >= 20, f'park canopy unexpectedly sparse: {len(park)} trees'
-          print(f'V090_RC_GATE buildings={len(buildings)} vegetation={len(vegetation)} park_trees={len(park)} scale_failures=0')
+          assert len(frontage) >= 190, f'frontage layer unexpectedly sparse: {len(frontage)} rows'
+          assert len(dressed) >= 40, f'too few visibly dressed facades: {len(dressed)}'
+          print(f'V090_RC_GATE buildings={len(buildings)} vegetation={len(vegetation)} park_trees={len(park)} frontage_rows={len(frontage)} dressed_facades={len(dressed)} scale_failures=0')
           PY
 
-      - name: Upload Pass 19 visual-review bundle
+      - name: Upload Pass 19b visual-review bundle
         uses: actions/upload-artifact@v4
         with:
-          name: open-night-v0.9.0-pass19-visual-review
+          name: open-night-v0.9.0-pass19b-visual-review
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -72,4 +78,5 @@ jobs:
             dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
             dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_buildings.csv
             dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_vegetation.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_frontage_dressing.csv
             dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_sprite_scale_audit.csv
