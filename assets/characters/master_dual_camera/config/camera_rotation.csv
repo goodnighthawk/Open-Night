@@ -4,7 +4,6 @@ drag_sensitivity_degrees_per_pixel,0.35,float,Continuous rotation sensitivity us
 pivot,local_player,string,World rotation is centered exactly on the local player
 movement_reference,screen,string,WASD remains camera-relative after rotation
 active_drag_facing_lock,north,string,Local player remains screen-forward while camera drag is active
-aim_reference,cursor_to_world,string,Mouse aim is transformed separately from movement
 minimap_orientation,north_up,string,Minimap never rotates with the camera
 depth_reference,rotated_ground_contact_y,string,Occlusion is recomputed from projected ground-contact depth
 keyboard_snap_degrees,15,float,Optional Q and E accessibility rotation step
