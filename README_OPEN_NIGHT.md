@@ -71,6 +71,8 @@ The desktop client probes `wss://open-night-production.up.railway.app` in the ba
 
 The web client reads the same CSV and uses the Railway endpoint by default. If the CSV has no enabled public endpoint, it falls back to the page host on port `8765`. Appending `?server=192.168.1.5:8765` or a complete WebSocket URI to the webpage URL overrides automatic selection.
 
+`RUN_WEB_CLIENT.bat` pins and, when necessary, installs Pygbag 0.9.2 because the 0.9.3 browser loader can stop at a plain grey page. The tab/package title should read **Open Night v0.7.1** after the corrected build starts.
+
 ## Multiplayer controls
 
 - Friends: Esc > Friends, then add/remove an online name. Friends alone appear on the compact minimap.
