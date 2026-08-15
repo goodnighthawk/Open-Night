@@ -64,7 +64,7 @@ from interior_art import IsometricInterior
 from bicycle_art import draw_bicycle
 from gameplay.settings import load_settings, set_setting_value, CONFIG_PATH as GAME_SETTINGS_PATH
 from gameplay.camera_controller import LookAheadCamera
-from gameplay.input_controller import movement_vector, aim_angle as compute_aim_angle
+from gameplay.input_controller import movement_vector
 from gameplay.issue_reporter import save_issue_report
 from portable_paths import describe as shared_data_description
 from portable_map_runtime import cached_map_hashes, install_transfer_bundle, load_cached_map
@@ -1205,6 +1205,18 @@ class Game:
         self.chat_text = ""
         if not raw:
             return
+        command = raw.casefold()
+        if command == "/bug" or command.startswith("/bug "):
+            description = raw[4:].strip()
+            if not description:
+                self.notice = "Bug format: /bug describe what went wrong"
+                self.notice_until = time.monotonic() + 3.5
+                return
+            self.issue_report_category = "bug"
+            self.issue_report_note = description
+            self.issue_report_snapshot = self.screen.copy()
+            self.save_current_issue_report(source="chat_/bug")
+            return
         if raw.casefold().startswith("/w "):
             rest = raw[3:].strip()
             target = next(
@@ -1232,7 +1244,7 @@ class Game:
             self.submit_chat()
         elif event.key == pygame.K_BACKSPACE:
             self.chat_text = self.chat_text[:-1]
-        elif event.unicode and event.unicode.isprintable() and len(self.chat_text) < 140:
+        elif event.unicode and event.unicode.isprintable() and len(self.chat_text) < (400 if self.chat_text.casefold().startswith("/bug") else 140):
             self.chat_text += event.unicode
         return True
 
@@ -1298,7 +1310,7 @@ class Game:
         distance, kind, entity_id = min(candidates, key=lambda row: row[0])
         return kind, entity_id, distance
 
-    def save_current_issue_report(self) -> None:
+    def save_current_issue_report(self, source: str = "f10") -> None:
         local = self.players.get(self.local_id or "")
         if local is None:
             self.notice = "Cannot report yet — local player position unavailable"
@@ -1311,6 +1323,11 @@ class Game:
         local_y = y - cy * chunk_size
         ai_kind, ai_id, ai_distance = self._nearest_ai_context(x, y)
         payload = {
+            "source": source,
+            "reporter": str(getattr(self.network, "name", ""))[:24],
+            "description": self.issue_report_note.strip(),
+            "target_version": "next",
+            "duplicate_of": "",
             "build_version": self._build_version(),
             "status": "open",
             "category": self.issue_report_category,
@@ -1334,7 +1351,7 @@ class Game:
         }
         try:
             capture = self.issue_report_snapshot if self.issue_report_snapshot is not None else self.screen
-            _, shot_path = save_issue_report(capture, payload)
+            _, shot_path, feedback_csv, feedback_shot = save_issue_report(capture, payload)
         except Exception as exc:
             self.notice = f"Issue report failed: {exc}"
             self.notice_until = time.monotonic() + 3.0
@@ -1342,7 +1359,10 @@ class Game:
         self.issue_report_open = False
         self.issue_report_note = ""
         self.issue_report_snapshot = None
-        self.notice = f"Flagged {payload['category'].upper()} issue in {payload['chunk_id']} — {shot_path.name}"
+        if feedback_csv is not None and feedback_shot is not None:
+            self.notice = f"Bug saved — feedback\\next_version\\screenshots\\{feedback_shot.name}"
+        else:
+            self.notice = f"Flagged {payload['category'].upper()} issue in {payload['chunk_id']} — {shot_path.name}"
         self.notice_until = time.monotonic() + 3.0
 
     def handle_issue_report_key(self, event: pygame.event.Event) -> bool:
@@ -1770,14 +1790,6 @@ class Game:
         c, sn = math.cos(theta), math.sin(theta)
         return c * x - sn * y, sn * x + c * y
 
-    def aim_angle(self) -> float:
-        local = self.players.get(self.local_id or "")
-        if local is None:
-            return 0.0
-        mx, my = pygame.mouse.get_pos()
-        mouse_world = self.screen_to_world(mx, my)
-        return compute_aim_angle((local.render_x, local.render_y), mouse_world, fallback=float(local.aim))
-
     def send_input(self) -> None:
         now = time.monotonic()
         if now - self.last_send < 1.0 / NETWORK_SEND_RATE:
@@ -1788,8 +1800,8 @@ class Game:
         blocked_actions = self.pause_menu_open or self.issue_report_open or self.inventory_open or self.map_open or self.interior.active or self.chat_active
         crouch = bool(keys[pygame.K_c]) and not blocked_actions
 
-        # Multiplayer aim is BODY/world heading only. Mouse/head aim is deliberately
-        # client-side cosmetic state and is never sent to the server.
+        # Multiplayer aim is the authoritative body/world heading. Mouse movement
+        # affects camera look-ahead only and never changes the character pose.
         local = self.players.get(self.local_id or "")
         in_vehicle = bool(getattr(local, "in_vehicle", False)) if local is not None else False
         trigger_held = self.sprint_trigger_key is not None and bool(keys[self.sprint_trigger_key])
@@ -1890,7 +1902,9 @@ class Game:
         self.map_open = False
         self.network.send({"type": "interior_enter", "interior_id": str(info.get("id", "room"))})
         # Immediately send zero movement so the authoritative outside avatar stops.
-        self.network.send({"type": "input", "x": 0.0, "y": 0.0, "aim": self.aim_angle()})
+        local = self.players.get(self.local_id or "")
+        body_aim = float(getattr(local, "move_heading", getattr(local, "aim", 0.0))) if local is not None else 0.0
+        self.network.send({"type": "input", "x": 0.0, "y": 0.0, "aim": body_aim})
         self.notice = f"Entering {str(info.get('name', 'building'))}..."
         self.notice_until = time.monotonic() + 1.5
         return True
@@ -2464,9 +2478,6 @@ class Game:
         elif local and not moving and bool(self.settings.get("controls", {}).get("idle_body_realign_camera", True)):
             body_aim = math.radians(self.camera_rotation_degrees) - math.pi * 0.5
 
-        # Head is an independent paper-doll layer. Local head aim follows the
-        # mouse; body pose is not changed by mouse movement.
-        head_aim = self.aim_angle() if (local and bool(self.settings.get("controls", {}).get("head_tracks_mouse", True))) else float(player.aim)
         pose = str(getattr(player, "pose", "idle"))
         animation = pose if pose in {"jump", "crouch", "run"} else ("walk" if moving else "idle")
         render_scale = float(player_scale)
@@ -2475,7 +2486,7 @@ class Game:
             sy -= int(round(float(self.settings.get("render", {}).get("jump_lift_px", 10))))
         draw_character(
             self.screen, (sx, sy), body_aim, player.appearance, scale=render_scale, local_ring=None,
-            moving=moving, animation=animation, anim_time=time.monotonic() - player.anim_epoch, head_aim_radians=head_aim,
+            moving=moving, animation=animation, anim_time=time.monotonic() - player.anim_epoch,
         )
 
     def draw_blood_stain(self, stain: dict) -> None:
@@ -2586,7 +2597,7 @@ class Game:
         prompt = self.chat_text + ("_" if int(time.monotonic() * 2) % 2 == 0 else "")
         shown = self.font.render(prompt[-90:], True, TEXT_COLOR)
         self.screen.blit(shown, (rect.x + 14, rect.y + 11))
-        hint = self.tiny_font.render("ENTER send local chat   /w FriendName message   ESC cancel", True, MUTED_TEXT)
+        hint = self.tiny_font.render("ENTER send   /bug description   /w FriendName message   ESC cancel", True, MUTED_TEXT)
         self.screen.blit(hint, (rect.x + 8, rect.y - 18))
 
     def inventory_geometry(self) -> tuple[pygame.Rect, list[pygame.Rect]]:
@@ -2736,7 +2747,6 @@ class Game:
             ("Mouse camera look-ahead", bool(self.settings.get("camera", {}).get("lookahead_enabled", True)), "lookahead", "camera", "lookahead_enabled"),
             ("Camera look-ahead debug", bool(self.settings.get("debug", {}).get("show_camera_lookahead", False)), "camera_debug", "debug", "show_camera_lookahead"),
             ("Camera-relative walking", bool(self.settings.get("controls", {}).get("camera_relative_movement", True)), "camera_relative", "controls", "camera_relative_movement"),
-            ("Head follows mouse", bool(self.settings.get("controls", {}).get("head_tracks_mouse", True)), "head_mouse", "controls", "head_tracks_mouse"),
             ("Middle-mouse camera rotation", bool(self.settings.get("camera", {}).get("rotation_enabled", True)), "rotation", "camera", "rotation_enabled"),
             ("Center player while rotated", bool(self.settings.get("camera", {}).get("center_player_when_rotated", True)), "center_rotated", "camera", "center_player_when_rotated"),
         ]
@@ -2832,7 +2842,7 @@ class Game:
         controls = [
             "WASD / arrows    Move / drive",
             "SHIFT            Sprint on foot / full throttle in car (up to 88 mph)",
-            "Mouse            Aim + bounded camera look-ahead",
+            "Mouse            Bounded camera look-ahead",
             "Space            Jump",
             "C                Crouch (hold)",
             "Middle mouse     Hold + drag to rotate camera",
@@ -2846,7 +2856,7 @@ class Game:
             "F7               Rebuild nearby 3x3 visual chunks",
             "F8               Clear/rebuild all rendered chunks on demand",
             "F9               Toggle A1 chunk debug overlay",
-            "F10              Flag current area for next-version art/AI fix",
+            "F10 or /bug      Save screenshot + next-version feedback",
             "ESC              Open/close this menu",
         ]
         y = panel.y + 122
