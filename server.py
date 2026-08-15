@@ -79,10 +79,10 @@ from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Map 001 / Compact 2x"
+SERVER_NAME = "Open Night v0.8 / Pass 18"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
-SERVER_VERSION = "0.7.3"
+SERVER_VERSION = "0.8.0"
 BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
 BUG_REPORT_COOLDOWN_SECONDS = 45.0
 BUG_REPORT_SOURCE_COOLDOWN_SECONDS = 15.0
@@ -2441,6 +2441,14 @@ async def client_handler(websocket: ServerConnection) -> None:
             return
         if hello.get("type") != "hello":
             await websocket.close(code=1008, reason="hello required")
+            return
+
+        client_version = str(hello.get("client_version", "")).strip()
+        if client_version != SERVER_VERSION:
+            shown = client_version or "pre-0.8.0"
+            await send_json(websocket, {"type": "login_error", "text":
+                            f"Version mismatch: client {shown}; server {SERVER_VERSION}. Update Open Night and reconnect."})
+            await websocket.close(code=1008, reason="version mismatch")
             return
 
         phone = normalize_phone(hello.get("phone"))

@@ -178,6 +178,41 @@ def load_map_folder(folder: Path, *, attach_grid: bool = True) -> dict:
             "penthouses": max(0, _int(row.get("penthouses"), 1)),
             "shadow_scale": max(0.4, _float(row.get("shadow_scale"), 1.0)),
         }
+    cfg["building_sprites"] = {}
+    for row in _rows(folder / "building_sprites.csv"):
+        bid = str(row.get("building_id", "")).strip()
+        if not bid:
+            continue
+        cfg["building_sprites"][bid] = {
+            "district": str(row.get("district", "")).strip(),
+            "building_kind": str(row.get("building_kind", "")).strip(),
+            "atlas": str(row.get("atlas", "")).strip(),
+            "cell": max(0, _int(row.get("cell"), 0)),
+            "world_units_per_source_pixel": max(0.01, _float(row.get("world_units_per_source_pixel"), 2.0)),
+            "render_scale_ratio": max(0.01, _float(row.get("render_scale_ratio"), 1.0)),
+            "scale_status": str(row.get("scale_status", "")).strip(),
+        }
+    cfg["building_layers"] = [{
+        "building_id": str(r.get("building_id", "")).strip(),
+        "level_id": _int(r.get("level_id"), 0),
+        "layer_kind": str(r.get("layer_kind", "")).strip(),
+        "z_order": _int(r.get("z_order"), 0),
+        "walkable": _bool(r.get("walkable"), False),
+        "visual_role": str(r.get("visual_role", "")).strip(),
+        "transition_policy": str(r.get("transition_policy", "")).strip(),
+    } for r in _rows(folder / "building_layers.csv") if str(r.get("building_id", "")).strip()]
+    cfg["building_stairwells"] = [{
+        "id": str(r.get("stairwell_id", "")).strip(),
+        "building_id": str(r.get("building_id", "")).strip(),
+        "kind": str(r.get("kind", "exterior_fire_stair")).strip(),
+        "side": str(r.get("side", "")).strip(),
+        "pos": [_float(r.get("x")), _float(r.get("y"))],
+        "from_level": _int(r.get("from_level"), 0),
+        "intermediate_level": _int(r.get("intermediate_level"), 1),
+        "to_level": _int(r.get("to_level"), 2),
+        "interaction_keys": str(r.get("interaction_keys", "")).strip(),
+        "transition_mode": str(r.get("transition_mode", "")).strip(),
+    } for r in _rows(folder / "building_stairwells.csv") if str(r.get("stairwell_id", "")).strip()]
 
     road_points = _group_points(_rows(folder / "road_points.csv"), "road_id")
     cfg["roads"] = []
@@ -236,6 +271,7 @@ def load_map_folder(folder: Path, *, attach_grid: bool = True) -> dict:
     # curb cuts, and stop bars remain stable even when signal art changes.
     cfg["crosswalks"] = [{
         "id": str(r.get("id", "")).strip(),
+        "road_id": str(r.get("road_id", "")).strip(),
         "pos": [_float(r.get("x")), _float(r.get("y"))],
         "angle": _float(r.get("angle"), 0.0),
         "length": max(24.0, _float(r.get("length"), 96.0)),

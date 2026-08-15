@@ -719,7 +719,8 @@ class NetworkClient:
         while not self.stop_event.is_set():
             try:
                 async with connect(self.uri, ping_interval=20, ping_timeout=20) as websocket:
-                    hello = {"type": "hello", "name": self.name, "phone": self.phone, "map_cache_hashes": cached_map_hashes()}
+                    hello = {"type": "hello", "name": self.name, "phone": self.phone,
+                             "client_version": "0.8.0", "map_cache_hashes": cached_map_hashes()}
                     if self.appearance_changed:
                         hello["appearance"] = self.appearance
                         hello["appearance_changed"] = True
@@ -791,7 +792,8 @@ class BrowserNetworkClient:
                 self._connecting = False
                 if self._stopped:
                     return
-                hello = {"type": "hello", "name": self.name, "phone": self.phone, "map_cache_hashes": cached_map_hashes()}
+                hello = {"type": "hello", "name": self.name, "phone": self.phone,
+                         "client_version": "0.8.0", "map_cache_hashes": cached_map_hashes()}
                 if self.appearance_changed:
                     hello["appearance"] = self.appearance
                     hello["appearance_changed"] = True

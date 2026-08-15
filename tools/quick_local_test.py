@@ -29,7 +29,7 @@ async def websocket_probe(timeout: float = 1.5) -> tuple[bool, str]:
     try:
         async with asyncio.timeout(timeout):
             async with connect(URI, ping_interval=None) as ws:
-                await ws.send(json.dumps({"type": "hello", "name": "QuickProbe", "phone": "+15550000023"}))
+                await ws.send(json.dumps({"type": "hello", "name": "QuickProbe", "phone": "+15550000023", "client_version": "0.8.0"}))
                 while True:
                     raw = await ws.recv()
                     msg = json.loads(raw)

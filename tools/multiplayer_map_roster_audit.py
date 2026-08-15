@@ -61,9 +61,9 @@ async def _exercise_two_clients() -> None:
 
     uri = f"ws://127.0.0.1:{PORT}"
     async with connect(uri, ping_interval=None) as first, connect(uri, ping_interval=None) as second:
-        await first.send(json.dumps({"type": "hello", "name": "MapFriendA", "phone": "15556660001"}))
+        await first.send(json.dumps({"type": "hello", "name": "MapFriendA", "phone": "15556660001", "client_version": "0.8.0"}))
         welcome_a = await _recv_kind(first, "welcome")
-        await second.send(json.dumps({"type": "hello", "name": "MapFriendB", "phone": "15556660002"}))
+        await second.send(json.dumps({"type": "hello", "name": "MapFriendB", "phone": "15556660002", "client_version": "0.8.0"}))
         welcome_b = await _recv_kind(second, "welcome")
         expected = {str(welcome_a["id"]), str(welcome_b["id"])}
 

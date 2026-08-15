@@ -63,9 +63,11 @@ from mapfiles.grid import BUILDING as GRID_BUILDING, WATER as GRID_WATER, ROAD a
 
 
 def _load_map_sources() -> dict[str, dict]:
-    # v1.2 ships one curated authoritative map. Persistent shared data is used
-    # for reusable assets/settings/results, never to silently replace map geometry.
-    return _load_all_csv_maps()
+    # v0.8.0 deliberately exposes one curated authoritative map. Extra folders
+    # may exist in developer worktrees, but they can never become playable maps.
+    loaded = _load_all_csv_maps()
+    selected = loaded.get(DEFAULT_MAP_ID)
+    return {DEFAULT_MAP_ID: selected} if selected is not None else {}
 
 
 def reload_maps() -> dict[str, dict]:

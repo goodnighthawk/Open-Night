@@ -101,7 +101,7 @@ def authored_crossings(roads, rp):
     """
     crossings=[];seen_junctions=set();seen_crossings=set();serial=0
     weights={'primary':3,'secondary':2,'tertiary':1,'residential':0,'service':0}
-    depth_by_class={'primary':34,'secondary':30,'tertiary':28,'residential':26,'service':24}
+    depth_by_class={'primary':30,'secondary':30,'tertiary':28,'residential':26,'service':24}
     def carriageway(road):
         n=max(1,int(float(road.get('lanes',1))))
         return max(38,n*38+10)*ROAD_WIDTH_SCALE
@@ -146,10 +146,29 @@ def authored_crossings(roads, rp):
                             crossing_key=(round(x/12),round(y/12),round(math.degrees(math.atan2(dy,dx))/5))
                             if crossing_key in seen_crossings:continue
                             seen_crossings.add(crossing_key);serial+=1
-                            crossings.append({'id':f'cross_authored_{serial:03d}','x':round(x,2),'y':round(y,2),
+                            crossings.append({'id':f'cross_authored_{serial:03d}','road_id':target['road_id'],
+                                              'x':round(x,2),'y':round(y,2),
                                               'angle':round(math.degrees(math.atan2(dy,dx)),2),
                                               'length':round(span,2),'width':depth,
                                               'stripe_width':'5','stripe_gap':'10','stop_bar_gap':'14'})
+    # A crossing offset from a multi-segment approach can land closest to the
+    # next curved segment. Snap to that final centerline and inherit its tangent
+    # so every zebra remains visibly parallel to the lane markings it occupies.
+    for crossing in crossings:
+        px, py = float(crossing['x']), float(crossing['y'])
+        best = None
+        for a, b in zip(rp[crossing['road_id']], rp[crossing['road_id']][1:]):
+            dx, dy = b[0]-a[0], b[1]-a[1]
+            den = dx*dx + dy*dy
+            t = 0.0 if den <= 1e-9 else max(0.0, min(1.0, ((px-a[0])*dx+(py-a[1])*dy)/den))
+            qx, qy = a[0]+t*dx, a[1]+t*dy
+            distance = math.hypot(px-qx, py-qy)
+            if best is None or distance < best[0]:
+                best = (distance, qx, qy, math.degrees(math.atan2(dy, dx)))
+        if best is not None:
+            _, qx, qy, angle = best
+            crossing['x'], crossing['y'] = round(qx, 2), round(qy, 2)
+            crossing['angle'] = round(angle, 2)
     return crossings
 
 

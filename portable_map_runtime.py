@@ -125,13 +125,18 @@ def _portable_visual_bindings(data: dict, asset_root: Path) -> dict[str, Any]:
     for key, name in material_names.items():
         p = asset_root / "textures" / "materials" / name
         if p.is_file(): materials[key] = str(p)
-    return {
+    bindings = {
         "portable_prop_sprites": prop_sprites,
         "portable_archetype_sprites": archetype_sprites,
         "portable_materials": materials,
         "portable_light_emitters": cosmetics.get("light_emitters", []),
         "portable_cosmetics": cosmetics,
     }
+    composition_archive = asset_root / "composition" / "composition_tiles_v18.zip"
+    if composition_archive.is_file():
+        bindings["baked_composition"] = True
+        bindings["baked_composition_archive"] = str(composition_archive)
+    return bindings
 
 
 def load_portable_map(map_path: Path, *, verify_hashes: bool = True) -> dict:

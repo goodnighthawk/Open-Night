@@ -1,4 +1,4 @@
-# Open Night — v0.7.3
+# Open Night — v0.8.0 unified corridor preview
 
 ## Start
 
@@ -26,11 +26,15 @@ v0.7.2 integrates the movement-preview controls into the authoritative multiplay
 
 v0.7.3 replaces direct Git feedback writes with a moderated Railway queue. `/bug description`, `/mapfeedback description`, and F10 captures keep a private local backup and upload bounded report data plus a PNG to MySQL as `pending`. Reports are rate-limited, account identifiers are salted, and player text is treated as untrusted evidence. Only a token-authenticated human using `REVIEW_BUG_REPORTS.bat` can approve a report and export it into `feedback/approved/` for ChatGPT or another development agent.
 
+v0.8.0 promotes the reviewed Pass 18 Fort Lee → GWB → Washington Heights composition as the default and only playable map. The game renders the approved day/night composition directly from chunked packaged art while collision, routing and navigation use CSV geometry produced by that same pass. The release has 38 terrain-aware roads, 242 road-tangent zebras, 95 scale-audited district buildings, a continuous Hudson crossed only by the GWB, and filtered source-derived parks/green space.
+
+Every building retains ground/upper/roof metadata and an exterior stairwell record. The GWB deck has playable ramps at both ends. v0.8.0 clients and servers exchange an exact version string at login, preventing older packaged maps from silently joining the new world.
+
 Bicycles now use compact **0.72×**, strict top-down body art. The map compiler rejects bicycle loops that touch exposed water, while bridge-deck cycling remains valid. Bicycles may share the road surface and do not hard-block one another; cars and bicycles use full rotated body boundaries and cannot occupy the same space.
 
 Movement transitions now trigger an automatic jump that renders at 1.35× scale with a small lift. Vehicle/world and car-to-car contacts use rotated body boundaries. Moving vehicles can run over NPC pedestrians, leaving a temporary stylized red stain before a replacement NPC respawns on the route. Point-based selling is removed: sell directly to nearby NPCs, or make a player offer that the buyer accepts with E.
 
-`LOCAL_QA.bat` runs 24 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social, moderated-feedback, collision, traffic, multi-level, launcher, internet-discovery and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate.
+`LOCAL_QA.bat` runs 24 repeatable asset, map-scale, bicycle-water, multiplayer, movement, social, moderated-feedback, collision, traffic, multi-level, launcher, internet-discovery and portable-map checks. `tools\pass38_playability_smoke.py` adds a real local server + portable-map protocol gate, and `tools\render_default_map_preview.py` verifies packaged composition art against the approved master.
 
 ## v2.5 changes
 

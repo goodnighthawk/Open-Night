@@ -6,8 +6,8 @@ truth.
 
 ## Current checkpoint
 
-- Release under development: **Open Night v0.7.3**
-- Working branch: `agent/v0.7.3-moderated-bug-reports`
+- Release under development: **Open Night v0.8.0**
+- Working branch: `agent/v0.8.0-pass18-default`
 - Integration base: latest accepted `main` map checkpoint
 - Playable map: `map_001_gwb_corridor` only
 - Map corridor: Fort Lee / GWB approaches / George Washington Bridge /
