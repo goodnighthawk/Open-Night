@@ -23,7 +23,7 @@ The gameplay/collision map remains simple and server-authoritative. v1.3 adds a 
 
 Map layers: roads + road points, buildings, water/green polygons, authored street props, traffic routes/signals, pedestrian routes, bicycle lanes/routes, parked vehicles/bicycles, landmarks/interiors/spawns. `roads.csv` owns explicit asphalt width, lanes, sidewalk width, curb width and building setback.
 
-The camera keeps authoritative world coordinates unrotated. Gameplay is composed into an oversized logical surface, rotated as one scene for middle-mouse camera rotation, then cropped/scaled to the display. Mouse aiming and camera-relative WASD are inverse-transformed back into world coordinates. The M-map remains north-up.
+The camera keeps authoritative world coordinates unrotated. Gameplay is composed into an oversized logical surface, rotated as one scene for middle-mouse camera rotation, then cropped/scaled to the display. Camera-relative WASD is inverse-transformed back into world coordinates. Mouse movement affects bounded camera look-ahead only; character head and body share the authoritative movement heading. The M-map remains north-up.
 
 Persistent assets/config are separate from versioned code in `PythonMMO_SharedData`. The curated map stays release-authoritative to prevent an old shared map cache from silently replacing it.
 
