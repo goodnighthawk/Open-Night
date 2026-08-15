@@ -14,6 +14,8 @@ The desktop client now automatically probes `wss://open-night-production.up.rail
 
 The web client uses the same configured Railway endpoint automatically. Opening the local Pygbag page at `http://127.0.0.1:8000` now connects to the internet server instead of assuming a local game server. An explicit `?server=host:port` query remains available for development overrides.
 
+The local browser build pins the known-working Pygbag 0.9.2 runtime. `RUN_WEB_CLIENT.bat` automatically corrects an existing 0.9.3 install, whose browser loader can stall on a solid grey page, and builds under a stable versioned package name to avoid stale-package confusion.
+
 v0.6.4 makes the Railway world substantially more social: all online players reach the world map, friends appear on the minimap, Enter opens nearby speech-bubble chat, `/w FriendName message` whispers, cars support passengers with persistent occupant names, and building interiors now show and synchronize every player in the same room.
 
 v0.7.0 is the next map iteration. Every generated drivable road now has at least **2×** its former asphalt width. Ordinary streets retain left/right sidewalks, nearby buildings are regenerated against the complete road/curb/furnishing/sidewalk/frontage envelope, and outward-facing perimeter roads terminate in 19 visible continuation tunnels rather than abrupt dead ends. The world boundary remains solid behind the portals.
