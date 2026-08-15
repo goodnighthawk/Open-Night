@@ -6,11 +6,9 @@ camera,deadzone_px,70,float,Mouse distance before look-ahead begins
 camera,full_lookahead_mouse_distance_px,480,float,Mouse distance that reaches full look-ahead
 camera,smoothing_per_second,8.5,float,Camera response rate
 camera,return_smoothing_per_second,11.0,float,Camera recentering rate
-controls,mouse_aim,true,bool,Mouse controls local head-look direction only; not networked
 controls,movement_aim_independent,true,bool,WASD movement is independent of aim
 controls,local_player_camera_facing,true,bool,Idle body visually realigns to camera; moving body follows camera-relative walking direction
 controls,camera_relative_movement,true,bool,On-foot WASD rotates with the camera so W stays screen-forward; vehicle controls remain vehicle-relative
-controls,head_tracks_mouse,true,bool,Head direction follows mouse independently of body direction
 controls,body_follows_movement,true,bool,Body facing changes only while movement is active
 controls,idle_body_realign_camera,true,bool,When movement stops local body settles back to camera-facing idle orientation
 debug,show_camera_lookahead,false,bool,Draw camera debug indicator
