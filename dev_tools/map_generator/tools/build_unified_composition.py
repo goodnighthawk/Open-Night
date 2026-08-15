@@ -24,7 +24,7 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_14"
+PASS_ID = "recovery_pass_15"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
 ORTHOGONAL_GRID_PX = 192.0
@@ -228,18 +228,21 @@ def generate_iterated_buildings(roads_override,rp_override):
     """
     block_rows=read_csv(SEMANTIC/'urban_blocks.csv')
     additions=[]
-    families=('bui_brick_midrise_01','bui_brownstone_row_02','bui_stone_midrise_03',
-              'bui_painted_walkup_04','bui_commercial_lowrise_06','bui_art_deco_10')
+    fort_lee_families=('bui_painted_walkup_04','bui_stone_midrise_15','bui_commercial_lowrise_18',
+                       'bui_concrete_tower_21','bui_warehouse_20','bui_waterfront_midrise_24')
+    manhattan_families=('bui_brick_midrise_01','bui_brownstone_row_14','bui_art_deco_22',
+                        'bui_concrete_tower_09','bui_commercial_corner_17','bui_painted_walkup_28')
     for idx,block in enumerate(block_rows):
         x=float(block['x']);y=float(block['y']);w=float(block['w']);h=float(block['h']);cells=int(block['sample_cells'])
         if w<128 or h<128 or w>640 or h>640 or cells>420:
             continue
-        margin=max(28,min(52,min(w,h)*.16))
+        margin=max(16,min(30,min(w,h)*.10))
         bw=w-2*margin;bh=h-2*margin
         if bw<80 or bh<80:continue
         base_x=x+margin;base_y=y+margin
-        long=max(bw,bh)
-        part_count=3 if long>=500 else (2 if long>=300 else 1)
+        # Cosmetic atlases contain complete courtyard/perimeter complexes, so the
+        # final art pass assigns one detailed sprite to each authoritative block.
+        part_count=1
         split_x=bw>=bh
         gap=20
         span=(bw if split_x else bh)-gap*(part_count-1)
@@ -256,14 +259,19 @@ def generate_iterated_buildings(roads_override,rp_override):
             building_left=px*2;building_right=(px+pw)*2
             if building_left < HUDSON_EAST_X and building_right > HUDSON_WEST_X:
                 continue
+            district_families=fort_lee_families if building_right <= HUDSON_WEST_X else manhattan_families
+            height_base=.48 if district_families is fort_lee_families else .68
             additions.append({'id':f'block_building_{len(additions)+1:04d}',
                               'x':round(building_left,2),'y':round(py*2+2048,2),
                               'w':round(pw*2,2),'h':round(ph*2,2),
-                              'archetype_id':families[(idx+part*2)%len(families)],
-                              'height_scale':round(.58+((idx*2+part)%6)*.08,2),
-                              'generation_rule':'block_polygon_street_wall_subdivision_v3'})
+                              'archetype_id':district_families[(idx+part*2)%len(district_families)],
+                              'height_scale':round(height_base+((idx*2+part)%6)*.09,2),
+                              'generation_rule':'district_block_street_wall_v4',
+                              'cosmetic_atlas':'approved_courtyard_blocks_v1.png',
+                              'cosmetic_cell':(idx*3+part*5)%16,
+                              'render_mode':'late_cosmetic_sprite_v1'})
     write_csv(SEMANTIC/'iterated_buildings.csv',
-              ('id','x','y','w','h','archetype_id','height_scale','generation_rule'),additions)
+              ('id','x','y','w','h','archetype_id','height_scale','generation_rule','cosmetic_atlas','cosmetic_cell','render_mode'),additions)
     collision=[]
     for row in additions:
         x,y=world_to_master(row['x'],row['y'])
@@ -361,6 +369,9 @@ def write_manifest(masters, block_count, tile_count, infill_count, road_count, h
         {"key": "orthogonal_grid_px", "value": str(ORTHOGONAL_GRID_PX)},
         {"key": "legacy_scattered_buildings_rendered", "value": "false"},
         {"key": "sprite_map_iteration", "value": "block_mask_street_wall_v1"},
+        {"key": "late_building_cosmetic_pass", "value": "true"},
+        {"key": "building_cosmetic_atlas", "value": "approved_courtyard_blocks_v1.png"},
+        {"key": "building_cosmetic_assignment", "value": "deterministic_after_geometry_lock_v1"},
         {"key": "yellow_center_lines", "value": "false"},
     ]
     for master in masters:
