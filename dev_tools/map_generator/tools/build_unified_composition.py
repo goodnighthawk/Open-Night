@@ -9,8 +9,7 @@ import sys
 from collections import deque
 from pathlib import Path
 
-import numpy as np
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -25,9 +24,10 @@ TILES = OUT / "tiles"
 MASTER_W = 8192
 MASTER_H = 4096
 TILE_SIZE = 1024
-PASS_ID = "recovery_pass_06"
+PASS_ID = "recovery_pass_08"
 ROAD_WIDTH_SCALE = 0.78
 SIDEWALK_SCALE = 0.85
+ORTHOGONAL_GRID_PX = 192.0
 
 SEMANTIC_FILES = (
     "buildings.csv",
@@ -63,6 +63,32 @@ def selected_gameplay_roads():
     return selected
 
 
+def authored_block_network():
+    roads=[]; rp={}; crossings=[]
+    west_x=[768,1536,2304,3072,3840,4608,5376,6144,6912]
+    east_x=[9472,10240,11008,11776,12544,13312,14080,14848,15616]
+    ys=[2304,3072,3840,4608,5376,6144,6912,7680,8448,9216,9984]
+    def add(rid,points,major=False,bridge=False):
+        roads.append({'road_id':rid,'highway':'primary' if major else 'residential',
+                      'lanes':'4' if major else '2','width':'160' if major else '96',
+                      'sidewalk_width':'52' if major else '38','curb_width':'5',
+                      'level':'1' if bridge else '0','bridge':'true' if bridge else 'false'})
+        rp[rid]=points
+    for side,xs in (('west',west_x),('east',east_x)):
+        for idx,x in enumerate(xs):add(f'block_{side}_v_{idx:02d}',[(x,2048),(x,10240)],major=idx in {2,5,8})
+        x0,x1=(0,7488) if side=='west' else (8896,16384)
+        for idx,y in enumerate(ys):add(f'block_{side}_h_{idx:02d}',[(x0,y),(x1,y)],major=idx in {2,5,8})
+        for xi,x in enumerate(xs):
+            for yi,y in enumerate(ys):
+                if (xi+yi)%2:continue
+                crossings.append({'id':f'cross_{side}_{xi:02d}_{yi:02d}','x':x,'y':y,'angle':'0',
+                                  'length':'92','width':'34','stripe_width':'5','stripe_gap':'6','stop_bar_gap':'12'})
+    add('gwb_authored',[(6912,6144),(9472,6144)],major=True,bridge=True)
+    add('hudson_west_arterial',[(7488,2048),(7488,10240)],major=True)
+    add('hudson_east_arterial',[(8896,2048),(8896,10240)],major=True)
+    return roads,rp,crossings
+
+
 def read_csv(path: Path):
     if not path.exists():
         return []
@@ -82,28 +108,20 @@ def world_to_master(x, y):
     return round(float(x) * 0.5, 2), round((float(y) - 2048.0) * 0.5, 2)
 
 
-def export_semantics(road_ids):
-    buildings = []
-    for row in read_csv(SOURCE / "buildings.csv"):
-        x, y = world_to_master(row["x"], row["y"])
-        buildings.append({"building_id": row["id"], "x": x, "y": y,
-                          "w": round(float(row["w"]) * 0.5, 2),
-                          "h": round(float(row["h"]) * 0.5, 2)})
-    write_csv(SEMANTIC / "buildings.csv", ("building_id", "x", "y", "w", "h"), buildings)
+def export_semantics(roads_override,rp_override,crossings_override):
+    write_csv(SEMANTIC / "buildings.csv", ("building_id", "x", "y", "w", "h"), [])
 
-    points = {}
-    for row in read_csv(SOURCE / "road_points.csv"):
-        points.setdefault(row["road_id"], []).append(row)
-    roads = {row["road_id"]: row for row in read_csv(SOURCE / "roads.csv") if row['road_id'] in road_ids}
+    points = {rid:[{'point_order':idx,'x':x,'y':y} for idx,(x,y) in enumerate(values)] for rid,values in rp_override.items()}
+    roads = {row["road_id"]: row for row in roads_override}
     lanes = []
     walks = []
     for road_id, rows in points.items():
-        if road_id not in road_ids:
-            continue
         road = roads.get(road_id, {})
-        for row in rows:
-            x, y = world_to_master(row["x"], row["y"])
-            base = {"road_id": road_id, "point_order": row["point_order"], "x": x, "y": y,
+        ordered=sorted(rows,key=lambda r:int(float(r['point_order'])))
+        world_points=callback.orthogonal_world_points([(float(r['x']),float(r['y'])) for r in ordered],ORTHOGONAL_GRID_PX)
+        for order,(wx,wy) in enumerate(world_points):
+            x, y = world_to_master(wx, wy)
+            base = {"road_id": road_id, "point_order": order, "x": x, "y": y,
                     "level": road.get("level", "0")}
             lanes.append(dict(base, width=round(float(road.get("width", 0)) * 0.5, 2),
                               lanes=road.get("lanes", "1")))
@@ -113,7 +131,7 @@ def export_semantics(road_ids):
     write_csv(SEMANTIC / "sidewalk_navigation.csv", ("road_id", "point_order", "x", "y", "level", "sidewalk_width"), walks)
 
     crossings = []
-    for row in read_csv(SOURCE / "crosswalks.csv"):
+    for row in crossings_override:
         x, y = world_to_master(row["x"], row["y"])
         crossings.append({"crossing_id": row.get("id", row.get("crosswalk_id", "")), "x": x, "y": y,
                           "angle": row.get("angle", "0"), "length": round(float(row.get("length", 0)) * 0.5, 2),
@@ -149,10 +167,10 @@ def export_polygons(source_name, target_name):
     write_csv(SEMANTIC / target_name, fields, rows)
 
 
-def derive_urban_blocks(road_ids):
+def derive_urban_blocks(roads_override,rp_override):
     old_scale = callback.VIEW_SCALE
-    callback.VIEW_SCALE = 0.0625
-    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False, road_ids=road_ids, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
+    callback.VIEW_SCALE = 0.0625; callback.ORTHOGONAL_GRID_PX = ORTHOGONAL_GRID_PX
+    masks = callback.surface_masks(1024, 512, 8192, 6144, callback.DAY, False, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,roads_override=roads_override,rp_override=rp_override)
     callback.VIEW_SCALE = old_scale
     blocked = masks["road"].resize((256, 128), Image.Resampling.NEAREST)
     water = masks["water"].resize((256, 128), Image.Resampling.NEAREST)
@@ -179,87 +197,50 @@ def derive_urban_blocks(road_ids):
     return len(blocks)
 
 
-def generate_iterated_buildings(road_ids):
+def generate_iterated_buildings(roads_override,rp_override):
     """Create deterministic block-responsive street-wall infill.
 
     This is intentionally coupled to the current road/water/green masks. A change
     to road geometry therefore regenerates legal building footprints instead of
     leaving an unrelated fixed sprite scatter behind.
     """
-    old_scale = callback.VIEW_SCALE
-    callback.VIEW_SCALE = 0.125
-    masks = callback.surface_masks(2048, 1024, 8192, 6144, callback.DAY, False, road_ids=road_ids, road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
-    callback.VIEW_SCALE = old_scale
-    forbidden = Image.new('L', masks['road'].size, 0)
-    for key in ('road', 'water', 'green'):
-        forbidden = ImageChops.lighter(forbidden, masks[key])
-    # Reference-driven frontage band: infill may only appear near an existing
-    # street, never in arbitrary undeveloped land. At this sampling scale the
-    # 81px dilation reaches roughly 320 world pixels from the asphalt edge.
-    road_pixels = np.asarray(masks['road'], dtype=np.uint8) > 0
-    road_integral = road_pixels.cumsum(axis=0).cumsum(axis=1)
-    def has_road_near(x, y, radius=40):
-        x0=max(0,x-radius); y0=max(0,y-radius); x1=min(2047,x+radius); y1=min(1023,y+radius)
-        total=int(road_integral[y1,x1])
-        if x0: total-=int(road_integral[y1,x0-1])
-        if y0: total-=int(road_integral[y0-1,x1])
-        if x0 and y0: total+=int(road_integral[y0-1,x0-1])
-        return total>0
-    occupancy = Image.new('L', forbidden.size, 0)
-    od = ImageDraw.Draw(occupancy)
-    existing = read_csv(SOURCE / 'buildings.csv')
-    for row in existing:
-        x0 = int(float(row['x']) * .125); y0 = int((float(row['y']) - 2048) * .125)
-        x1 = int((float(row['x']) + float(row['w'])) * .125); y1 = int((float(row['y']) + float(row['h']) - 2048) * .125)
-        od.rectangle((x0-4, y0-4, x1+4, y1+4), fill=255)
-    fp = forbidden.load(); op = occupancy.load()
-    additions = []
-    families = ('bui_brick_midrise_01', 'bui_brownstone_row_02', 'bui_stone_midrise_03',
-                'bui_painted_walkup_04', 'bui_commercial_lowrise_06', 'bui_art_deco_10')
-    # 32 master px = 64 world px. Candidate modules combine into long street walls.
-    candidates = ((48, 28), (40, 28), (28, 40), (32, 28), (24, 28), (24, 24))
-    for gy in range(12, 1012, 20):
-        for gx in range(12, 2036, 20):
-            if len(additions) >= 500:
-                break
-            if fp[gx, gy] or op[gx, gy] or not has_road_near(gx, gy):
-                continue
-            shape = candidates[(gx * 17 + gy * 31) % len(candidates)]
-            w, h = shape
-            x0, y0 = gx - w//2, gy - h//2; x1, y1 = gx + w//2, gy + h//2
-            if x0 < 2 or y0 < 2 or x1 >= 2046 or y1 >= 1022:
-                continue
-            # Corners plus a regular interior sample prevent roads/water/parks
-            # from crossing large candidate footprints.
-            legal = True
-            for yy in range(y0, y1+1, 6):
-                for xx in range(x0, x1+1, 6):
-                    if fp[xx, yy] or op[xx, yy]:
-                        legal = False; break
-                if not legal: break
-            if not legal:
-                continue
-            idx = len(additions)
-            family = families[(gx//20 + 3*(gy//20)) % len(families)]
-            row = {'id': f'infill_{idx+1:04d}', 'x': round(x0/0.125, 2),
-                   'y': round(y0/0.125 + 2048, 2), 'w': round((x1-x0)/0.125, 2),
-                   'h': round((y1-y0)/0.125, 2), 'archetype_id': family,
-                   'height_scale': round(.55 + ((gx+gy) % 5)*.08, 2),
-                   'generation_rule': 'block_mask_street_wall_v1'}
-            additions.append(row)
-            od.rectangle((x0-5, y0-5, x1+5, y1+5), fill=255)
-    write_csv(SEMANTIC / 'iterated_buildings.csv',
-              ('id','x','y','w','h','archetype_id','height_scale','generation_rule'), additions)
+    block_rows=read_csv(SEMANTIC/'urban_blocks.csv')
+    additions=[]
+    families=('bui_brick_midrise_01','bui_brownstone_row_02','bui_stone_midrise_03',
+              'bui_painted_walkup_04','bui_commercial_lowrise_06','bui_art_deco_10')
+    for idx,block in enumerate(block_rows):
+        x=float(block['x']);y=float(block['y']);w=float(block['w']);h=float(block['h']);cells=int(block['sample_cells'])
+        if w<128 or h<128 or w>640 or h>640 or cells>420:
+            continue
+        margin=max(28,min(52,min(w,h)*.16))
+        bw=w-2*margin;bh=h-2*margin
+        if bw<80 or bh<80:continue
+        additions.append({'id':f'block_building_{len(additions)+1:04d}',
+                          'x':round((x+margin)*2,2),'y':round((y+margin)*2+2048,2),
+                          'w':round(bw*2,2),'h':round(bh*2,2),
+                          'archetype_id':families[idx%len(families)],
+                          'height_scale':round(.62+(idx%5)*.08,2),
+                          'generation_rule':'block_polygon_street_wall_v2'})
+    write_csv(SEMANTIC/'iterated_buildings.csv',
+              ('id','x','y','w','h','archetype_id','height_scale','generation_rule'),additions)
+    collision=[]
+    for row in additions:
+        x,y=world_to_master(row['x'],row['y'])
+        collision.append({'building_id':row['id'],'x':x,'y':y,'w':round(float(row['w'])*.5,2),'h':round(float(row['h'])*.5,2)})
+    write_csv(SEMANTIC/'buildings.csv',('building_id','x','y','w','h'),collision)
     return additions
 
-
-def render_masters(additional_buildings, road_ids):
+def render_masters(additional_buildings, roads_override, rp_override, crossings_override):
     day = callback.render("unified_master", False, annotate=False, output_dir=OUT,
-                          yellow_center_lines=False, additional_buildings=additional_buildings, road_ids=road_ids,
-                          road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
+                          yellow_center_lines=False, additional_buildings=additional_buildings,
+                          road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,
+                          render_existing_buildings=False,roads_override=roads_override,rp_override=rp_override,
+                          draw_source_crosswalks=False,crosswalks_override=crossings_override)
     night = callback.render("unified_master", True, annotate=False, output_dir=OUT,
-                            yellow_center_lines=False, additional_buildings=additional_buildings, road_ids=road_ids,
-                            road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE)
+                            yellow_center_lines=False, additional_buildings=additional_buildings,
+                            road_width_scale=ROAD_WIDTH_SCALE, sidewalk_scale=SIDEWALK_SCALE,
+                            render_existing_buildings=False,roads_override=roads_override,rp_override=rp_override,
+                            draw_source_crosswalks=False,crosswalks_override=crossings_override)
     targets = []
     for source, final in ((day, OUT / "unified_composition_day.png"),
                           (night, OUT / "unified_composition_night.png")):
@@ -310,9 +291,11 @@ def write_manifest(masters, block_count, tile_count, infill_count, road_count):
         {"key": "semantic_csvs", "value": str(len(SEMANTIC_FILES))},
         {"key": "iterated_infill_buildings", "value": str(infill_count)},
         {"key": "selected_gameplay_roads", "value": str(road_count)},
-        {"key": "road_selection_rule", "value": "connected_reference_without_support_overlays_v1"},
+        {"key": "road_selection_rule", "value": "authored_reference_anchor_block_grid_v1"},
         {"key": "road_width_scale", "value": str(ROAD_WIDTH_SCALE)},
         {"key": "sidewalk_scale", "value": str(SIDEWALK_SCALE)},
+        {"key": "orthogonal_grid_px", "value": str(ORTHOGONAL_GRID_PX)},
+        {"key": "legacy_scattered_buildings_rendered", "value": "false"},
         {"key": "sprite_map_iteration", "value": "block_mask_street_wall_v1"},
         {"key": "yellow_center_lines", "value": "false"},
     ]
@@ -328,14 +311,14 @@ def main():
     if args.clean and OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True, exist_ok=True)
-    road_ids = selected_gameplay_roads()
-    export_semantics(road_ids)
-    block_count = derive_urban_blocks(road_ids)
-    infill = generate_iterated_buildings(road_ids)
-    masters = render_masters(infill, road_ids)
+    roads,rp,crossings=authored_block_network()
+    export_semantics(roads,rp,crossings)
+    block_count = derive_urban_blocks(roads,rp)
+    infill = generate_iterated_buildings(roads,rp)
+    masters = render_masters(infill,roads,rp,crossings)
     tile_count = tile_masters(masters)
-    write_manifest(masters, block_count, tile_count, len(infill), len(road_ids))
-    print(f"PASS={PASS_ID} masters=2 tiles={tile_count} roads={len(road_ids)} blocks={block_count} infill={len(infill)} semantic_csvs={len(SEMANTIC_FILES)}")
+    write_manifest(masters, block_count, tile_count, len(infill), len(roads))
+    print(f"PASS={PASS_ID} masters=2 tiles={tile_count} roads={len(roads)} blocks={block_count} infill={len(infill)} semantic_csvs={len(SEMANTIC_FILES)}")
 
 
 if __name__ == "__main__":
