@@ -93,8 +93,10 @@ jobs:
           set -euo pipefail
           git config user.name 'Open Night Release Bot'
           git config user.email 'actions@users.noreply.github.com'
+          # ZIPs are ignored globally; v18 is already tracked but v19 is a new
+          # release asset, so force-add only that archive and stage normal data.
+          git add -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip
           git add VERSION.txt \
-            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v19.zip \
             assets/environment/approved/map_001_gwb_corridor/composition_tiles_v18.zip \
             mapfiles/data/map_001_gwb_corridor \
             dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor
