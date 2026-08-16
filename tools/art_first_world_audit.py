@@ -79,11 +79,14 @@ def main():
           f"infill={len(infill)} solid={solid} open_use={open_use} infill_kinds={len(kinds)} blank={blank_before}->{blank_after} "
           f"base_crossings={len(base)} added_crossings={len(mobility)} shared_cycle={shared} total_crossings={total_crossings} "
           f"major_gap_failures={len(gap_fail)} worst_major_gap={worst:.1f} collision_crossings={len(collision_cross)} "
-          f"mask_tiles={dict(tile_counts)} collision_share={collision_share:.3f} solid_share={solid_share:.3f} size_fail={len(size_fail)} missing_tiles={len(missing_tiles)}")
+          f"mask_tiles={dict(tile_counts)} collision_share={collision_share:.3f} solid_share={solid_share:.3f} size_fail={len(size_fail)} missing_tiles={len(missing_tiles)} "
+          f"detailed_massing={manifest.get('pass26_detailed_massing_art','false')}")
     if not args.strict:return 0
     problems=[]
-    if manifest.get("pass_id")!="pass_26_art_first_world_rc3":problems.append("Pass 26 RC3 manifest id missing")
+    if manifest.get("pass_id")!="pass_26_art_first_world_rc4":problems.append("Pass 26 RC4 manifest id missing")
     if manifest.get("art_first_world_pass")!="true":problems.append("art-first world flag missing")
+    if manifest.get("pass26_detailed_massing_art")!="true":problems.append("finished textured massing art flag missing")
+    if manifest.get("pass26_massing_art_rule")!="fixed_scale_textured_roof_complex_rc4":problems.append("RC4 massing art rule missing")
     if len(infill)<55:problems.append(f"functional infill too sparse: {len(infill)} (<55)")
     if len(kinds)<6:problems.append(f"functional infill lacks variety: {len(kinds)} kinds")
     if solid<25:problems.append(f"too few secondary solid urban structures: {solid} (<25)")
