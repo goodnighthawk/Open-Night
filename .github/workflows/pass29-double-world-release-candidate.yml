@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py'
+      - 'tools/pass28_sidewalk_continuity_audit_v2.py'
       - 'dev_tools/map_generator/tools/build_pass29_double_world.py'
       - 'dev_tools/map_generator/tools/build_pass29_double_world_v2.py'
       - 'tools/pass29_double_world_audit.py'
@@ -45,10 +47,10 @@ jobs:
         run: python dev_tools/map_generator/tools/build_pass27_from_pass26.py
       - name: Preserve Pass 27 open-block gate
         run: python tools/pass27_open_block_audit.py --strict
-      - name: Apply protected Pass 28 sidewalk continuity
-        run: python dev_tools/map_generator/tools/build_pass28_sidewalk_continuity.py
-      - name: Preserve Pass 28 sidewalk gate
-        run: python tools/pass28_sidewalk_continuity_audit.py --strict
+      - name: Apply protected Pass 28 junction-aware sidewalk continuity
+        run: python dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py
+      - name: Preserve Pass 28 junction-aware sidewalk gate
+        run: python tools/pass28_sidewalk_continuity_audit_v2.py --strict
 
       - name: Build Pass 29 doubled world with fixed component scale
         run: python dev_tools/map_generator/tools/build_pass29_double_world_v2.py
