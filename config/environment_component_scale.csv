@@ -1,0 +1,14 @@
+component_id,canonical_world_w,canonical_world_h,tolerance_fraction,min_scale_ratio,max_scale_ratio,scale_source,notes
+door,18,36,0.12,0.88,1.12,atlas_render_scale,Standard pedestrian door; architecture may repeat modules but must not enlarge the door with the building
+window,20,24,0.12,0.88,1.12,atlas_render_scale,Canonical facade window module
+wall_module,32,32,0.12,0.88,1.12,atlas_render_scale,Reference masonry/facade module used to judge apparent wall scale
+parapet,8,32,0.12,0.88,1.12,atlas_render_scale,Roof-edge/parapet reference width and repeat length
+stair,32,64,0.00,1.00,1.00,fixed_world,Exterior stair footprint is world-scale and never follows whole-building sprite scaling
+fire_escape,28,56,0.00,1.00,1.00,fixed_world,Exterior fire escape remains fixed world scale
+railing,4,32,0.00,1.00,1.00,fixed_world,Railing thickness/segment reference
+roof_hatch,28,36,0.12,0.88,1.12,atlas_render_scale,Canonical rooftop hatch module
+hvac_small,28,22,0.12,0.88,1.12,atlas_render_scale,Small rooftop equipment module
+hvac_large,56,40,0.12,0.88,1.12,atlas_render_scale,Large rooftop equipment module
+chimney,18,18,0.12,0.88,1.12,atlas_render_scale,Canonical chimney/vent footprint
+awning,36,18,0.12,0.88,1.12,atlas_render_scale,Facade awning module
+storefront_module,48,36,0.12,0.88,1.12,atlas_render_scale,Repeatable commercial frontage module
