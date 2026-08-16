@@ -50,18 +50,15 @@ jobs:
       - name: Preserve Pass 28 sidewalk gate
         run: python tools/pass28_sidewalk_continuity_audit_v2.py --strict
 
-      - name: Build and verify Pass 29 doubled-world baseline
-        run: |
-          python dev_tools/map_generator/tools/build_pass29_double_world_v3.py
-          python tools/pass29_double_world_audit.py --strict
-
-      - name: Build and verify Pass 30 seam-convergence baseline
-        run: |
-          python dev_tools/map_generator/tools/build_pass30_extension_convergence_v2.py
-          python tools/pass30_extension_convergence_audit.py --strict
-
+      # Pass 31 invokes Pass 30, which invokes the Pass 29 doubled-world build.
+      # Starting it directly from the protected 8192x4096 Pass-28 master avoids
+      # feeding a previously doubled 16384x8192 master back into Pass 29.
       - name: Build Pass 31 city-grammar candidate
         run: python dev_tools/map_generator/tools/build_pass31_city_grammar_v2.py
+      - name: Verify inherited doubled-world geometry
+        run: python tools/pass29_double_world_audit.py --strict
+      - name: Verify inherited seam convergence
+        run: python tools/pass30_extension_convergence_audit.py --strict
       - name: Run Pass 31 city-grammar gate
         run: python tools/pass31_city_grammar_audit.py --strict
 
