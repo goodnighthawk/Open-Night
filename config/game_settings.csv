@@ -1,4 +1,4 @@
-﻿section,key,value,type,notes
+section,key,value,type,notes
 camera,lookahead_enabled,true,bool,Allow capped mouse camera look-ahead
 camera,walking_max_px,220,float,Maximum camera look-ahead while walking
 camera,driving_max_px,320,float,Maximum camera look-ahead while driving
@@ -35,14 +35,14 @@ bicycle,player_brake_px_s2,260,float,Player bicycle braking
 bicycle,player_turn_rate,3.6,float,Player bicycle steering rate
 bicycle,collision_length_px,42,float,Server-authoritative top-down bicycle body length used against cars water and buildings
 bicycle,collision_width_px,18,float,Server-authoritative top-down bicycle body width used against cars water and buildings
-movement,walk_speed_px_per_second,185,float,Shared preview and server-authoritative on-foot walking speed
-movement,sprint_multiplier,3.0,float,Hold either Shift key while moving to run on foot
+movement,walk_speed_px_per_second,92.5,float,Shared preview and server-authoritative on-foot walking speed; half the previous movement speed
+movement,sprint_multiplier,3.0,float,Hold either Shift key while moving to run on foot; run remains three times walk and is therefore also half its previous absolute speed
 movement,sprint_animation_rate_multiplier,1.85,float,Run-cycle playback multiplier while sprinting
 movement,sprint_gait_width_multiplier,1.48,float,Maximum authored leg-separation multiplier at the peak run frames
 movement,jump_forward_speed_px_per_second,570,float,Server-authoritative initial single-jump forward propulsion
 movement,jump_duration_seconds,0.75,float,Server-authoritative single-jump airborne duration
 movement,double_jump_window_seconds,0.55,float,Maximum time after first launch for a second Space press
-movement,double_jump_forward_speed_px_per_second,940,float,Server-authoritative second-launch propulsion
+movement,double_jump_forward_speed_px_per_second,313.3333333333333,float,Server-authoritative second-launch propulsion; one third of the previous double-jump forward speed
 movement,double_jump_duration_seconds,0.95,float,Server-authoritative double-jump airborne duration
 movement,movement_stand_delay_seconds,1.0,float,Continuous directional input required before movement resumes from crouch or prone
 movement,water_walk_speed_multiplier,0.28,float,On-foot movement speed while wading in water; vehicles and bicycles remain blocked
@@ -82,7 +82,7 @@ vehicle,passenger_capacity,3,int,Maximum player passengers in a car in addition 
 vehicle,passenger_board_max_speed_px_s,35,float,Maximum car speed at which a nearby player can board as passenger
 vehicle,passenger_exit_max_speed_px_s,70,float,Passengers and drivers must slow below this speed before exiting
 engine,ai_profile_version,2,int,v2.0 directional-flow AI tuning migration marker
-engine,client_profile_version,281,int,"v0.8.1 Pass 19 building-art convergence and multiplayer reliability"
+engine,client_profile_version,282,int,v2.8.2 movement parity profile: preview and release share slower walk/run and shorter double jump
 render,fast_rotation_while_dragging,true,bool,Use fast whole-scene rotation during active middle-mouse drag; filtered final frame resumes on release
 render,defer_25d_rotation_while_dragging,true,bool,Do not rebuild camera-aware 2.5D chunk art during every mouse movement; apply final 30-degree extrusion bucket on release
 engine,interest_manager_version,2,int,Chunk-bucket snapshot interest manager with logical server regions
