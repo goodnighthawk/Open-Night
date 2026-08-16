@@ -14,7 +14,7 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :fail
 )
 
-".venv\Scripts\python.exe" open_night_launcher.py
+".venv\Scripts\python.exe" open_night_player_launcher.py
 exit /b %ERRORLEVEL%
 
 :fail
