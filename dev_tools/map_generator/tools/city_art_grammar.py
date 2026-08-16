@@ -52,7 +52,6 @@ def merged_lot_count(key: str) -> int:
     share = midpoint("block_merged_lot_share")
     if q >= int(share * 10000):
         return 1
-    # Most consolidated sites are two lots; rarer civic/apartment masses use 3–4.
     band = (q * 17 + stable(key + ":band")) % 100
     return 2 if band < 72 else 3 if band < 94 else 4
 
@@ -66,7 +65,6 @@ def massing_variant(key: str, merged: int = 1, corner: bool = False) -> str:
         return ("U", "courtyard", "perimeter", "L")[q % 4]
     if merged == 2:
         return ("L", "U", "chamfer", "stepped", "courtyard")[q % 5]
-    # ~75% irregular ordinary massing, centred in the configured 62–88% band.
     variants = ("L", "U", "chamfer", "stepped", "perimeter", "courtyard", "rect", "rect")
     return variants[q % len(variants)]
 
@@ -88,8 +86,6 @@ def material_family(district: str, block_id: str, building_id: str) -> str:
     """Reuse a small district palette while avoiding exact building repetition."""
     family_count = int(round(midpoint("art_material_family")))
     family_count = max(4, min(8, family_count))
-    # Block seed dominates so neighbors share an era; building seed introduces
-    # controlled variation inside that era.
     block_family = stable(f"material:{district}:{block_id}") % family_count
     if stable("material-local:" + building_id) % 100 < 68:
         idx = block_family
@@ -99,16 +95,16 @@ def material_family(district: str, block_id: str, building_id: str) -> str:
 
 
 def block_id_for(x: float, y: float, district: str, cell: int = 520) -> str:
-    # Offset every second row so grammar cells do not produce a visible perfect grid.
     gy = int(math.floor(y / cell))
     gx = int(math.floor((x - (cell * 0.34 if gy % 2 else 0.0)) / cell))
     return f"{district}_b{gx:+03d}_{gy:+03d}"
 
 
 def frontage_run_id(block_id: str, x: float, y: float) -> str:
-    # 2–6 neighboring buildings should share a run; grouping by a coarser phase
-    # creates repeated street-wall sequences without identical sprites.
-    phase = int((x + 0.65 * y) // 180) % 6
+    """Group neighboring lots into short, readable street-wall sequences."""
+    # Three phases per grammar block is coarse enough to produce multi-building
+    # runs while still breaking a long block face into several distinct sequences.
+    phase = int((x + 0.65 * y) // 180) % 3
     return f"{block_id}_run_{phase:02d}"
 
 
