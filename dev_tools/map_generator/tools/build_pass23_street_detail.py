@@ -77,7 +77,7 @@ def build_details(roads,rp,crossings,buildings,stairs):
         for a,b in zip(rp[r["road_id"]],rp[r["road_id"]][1:]):
             all_segments.append((a,b,half,sidewalk,curb,r["road_id"]))
 
-    def legal_point(p, road, *, sidewalk_object=True):
+    def legal_point(p, road, *, sidewalk_object=True, road_margin=2.0):
         x,y=p
         if any(pass20.base.point_in_polygon(p,poly) for poly in water):return False
         if any(x0<x<x1 and y0<y<y1 for x0,y0,x1,y1 in building_boxes):return False
@@ -85,13 +85,14 @@ def build_details(roads,rp,crossings,buildings,stairs):
         if any(math.hypot(x-sx,y-sy)<68 for sx,sy in stair_points):return False
         if any(math.hypot(x-ex,y-ey)<58 for ex,ey in entrance_points):return False
         # An object may only occupy the sidewalk/verge of its source road, never asphalt.
+        # road_margin is the full visible footprint allowance, not just the center point.
         source_half,source_sidewalk,source_curb=road_metrics(road)
         source_segments=list(zip(rp[road["road_id"]],rp[road["road_id"]][1:]))
         d=min(segment_distance(p,a,b) for a,b in source_segments)
-        if sidewalk_object and not (source_half+source_curb+4 <= d <= source_half+source_curb+source_sidewalk-4):return False
-        # Also reject accidental overlap with any other road ribbon.
+        if sidewalk_object and not (source_half+source_curb+road_margin <= d <= source_half+source_curb+source_sidewalk-4):return False
+        # Also reject accidental overlap with any other road ribbon using the same full-footprint margin.
         for a,b,half,_,curb,rid in all_segments:
-            if segment_distance(p,a,b)<half+curb+2:return False
+            if segment_distance(p,a,b)<half+curb+road_margin:return False
         return True
 
     furniture=("hydrant","streetlamp","trash_bin","bench","mailbox","bike_rack","bollard")
@@ -121,10 +122,22 @@ def build_details(roads,rp,crossings,buildings,stairs):
                     add(kind,px,py,rid,district,side_name,"final_sidewalk_furniture_pass23_v1",.82+(seed%5)*.06,math.degrees(math.atan2(dy,dx)))
                     # Adjacent subtle surface detail makes the sidewalk look used without cluttering movement.
                     along=((seed//17)%61-30)
-                    sx=px+ux*along;sy=py+uy*along
-                    if legal_point((sx,sy),road):
-                        skind=surface_marks[(seed//31)%len(surface_marks)]
-                        add(skind,sx,sy,rid,district,side_name,"sidewalk_surface_detail_pass23_v1",.8+(seed%4)*.07,math.degrees(math.atan2(dy,dx)))
+                    skind=surface_marks[(seed//31)%len(surface_marks)]
+                    if skind=="tree_pit":
+                        # Tree bases have a visible radius of about 10-12 world px. Put the
+                        # complete base inside the sidewalk/verge instead of validating only
+                        # its center, which previously allowed the green circle to clip asphalt.
+                        tree_margin=14.0
+                        usable=max(tree_margin+4.0,sidewalk-tree_margin)
+                        tree_sidewalk_offset=half+curb+min(sidewalk*.76,usable)
+                        sx=base_x+nx*side*tree_sidewalk_offset+ux*along
+                        sy=base_y+ny*side*tree_sidewalk_offset+uy*along
+                        if legal_point((sx,sy),road,road_margin=tree_margin):
+                            add(skind,sx,sy,rid,district,side_name,"tree_base_full_footprint_keepout_pass23_v2",.8+(seed%4)*.07,math.degrees(math.atan2(dy,dx)))
+                    else:
+                        sx=px+ux*along;sy=py+uy*along
+                        if legal_point((sx,sy),road):
+                            add(skind,sx,sy,rid,district,side_name,"sidewalk_surface_detail_pass23_v1",.8+(seed%4)*.07,math.degrees(math.atan2(dy,dx)))
 
                 # Sparse road-surface wear, safely inside the carriageway and away from crossings.
                 if (seed//13)%3==0:
@@ -187,7 +200,7 @@ def update_manifest(masters,counts):
         {"key":"street_detail_density_pass","value":"true"},
         {"key":"street_detail_rows","value":str(len(detail_rows))},
         {"key":"street_detail_kinds","value":str(len(counts))},
-        {"key":"street_detail_rule","value":"final_geometry_keepout_pass23_v1"},
+        {"key":"street_detail_rule","value":"final_geometry_keepout_pass23_v2_full_tree_base"},
     ])
     for master in masters:rows.append({"key":f"sha256_{master.stem}","value":pass20.base.sha256(master)})
     pass20.base.write_csv(path,("key","value"),rows)
