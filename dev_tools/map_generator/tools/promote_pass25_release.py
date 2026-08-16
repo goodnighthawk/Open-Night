@@ -26,6 +26,7 @@ PASS = 25
 BUILD_ID = "open_night_v0_8_2_pass25_default_only"
 ARCHIVE_REL = "assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip"
 ARCHIVE = ROOT / ARCHIVE_REL
+_LEGACY_MAP_ROWS = legacy.map_rows
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -43,7 +44,7 @@ def write_csv(path: Path, fields: tuple[str, ...], rows: list[dict]) -> None:
 
 
 def map_rows() -> list[dict[str, str]]:
-    rows = legacy.map_rows()
+    rows = _LEGACY_MAP_ROWS()
     values = {row["key"]: dict(row) for row in rows}
     replacements = {
         "description": "Pass 25 final visual-convergence corridor: fixed-scale modular buildings, street detail and hand-authored landmarks; the default and only playable map.",
@@ -98,18 +99,16 @@ def copy_pass25_semantics(folder: Path) -> None:
 
 
 def rewrite_landmarks(folder: Path) -> None:
-    old = [
+    rows = [
         {"id": "gwb", "name": "George Washington Bridge", "kind": "bridge", "x": 7680, "y": 6144},
         {"id": "fort_lee", "name": "Fort Lee", "kind": "district", "x": 2400, "y": 5600},
         {"id": "washington_heights", "name": "Washington Heights", "kind": "district", "x": 13200, "y": 5600},
     ]
-    rows = old
     for row in read_csv(legacy.SEMANTIC / "landmarks_pass24.csv"):
         role = str(row.get("visual_role", "landmark"))
-        name = role.replace("_", " ").title()
         rows.append({
             "id": row["landmark_id"],
-            "name": name,
+            "name": role.replace("_", " ").title(),
             "kind": row["kind"],
             "x": round(float(row["x"]) + float(row["w"]) * .5, 2),
             "y": round(float(row["y"]) + float(row["h"]) * .5, 2),
@@ -141,19 +140,14 @@ def write_release_identity() -> None:
 
 
 def main() -> None:
-    # Recreate the exact approved candidate before packaging it.
     pass25.main()
-
-    # Keep the established runtime writer, but replace stale Pass 19 release data.
     legacy.ART_ARCHIVE = ARCHIVE
     legacy.map_rows = map_rows
     legacy.main()
-
     for folder in legacy.MAP_DIRS:
         rewrite_render_contract(folder)
         copy_pass25_semantics(folder)
         rewrite_landmarks(folder)
-
     write_release_identity()
     print(
         f"PASS25_RELEASE_PROMOTED version={VERSION} pass={PASS} build={BUILD_ID} "
