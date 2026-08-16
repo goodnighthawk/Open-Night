@@ -6,6 +6,7 @@ on:
     paths:
       - 'dev_tools/map_generator/tools/build_pass20_streetwall.py'
       - 'dev_tools/map_generator/tools/build_pass20_streetwall_v2.py'
+      - 'dev_tools/map_generator/tools/build_pass20_streetwall_v3.py'
       - 'dev_tools/map_generator/tools/build_v090_release_candidate.py'
       - 'dev_tools/map_generator/tools/build_pass19b_frontage_release_candidate.py'
       - 'dev_tools/map_generator/tools/build_pass19_art_convergence.py'
@@ -35,7 +36,7 @@ jobs:
         run: python -m pip install 'Pillow>=10,<13'
 
       - name: Build Pass 20 street-wall candidate
-        run: python dev_tools/map_generator/tools/build_pass20_streetwall_v2.py
+        run: python dev_tools/map_generator/tools/build_pass20_streetwall_v3.py
 
       - name: Run strict frontage acceptance gate
         run: python tools/pass20_frontage_audit.py --strict
@@ -50,7 +51,7 @@ jobs:
           test -f "$OUT/unified_composition_night.png"
           test -f "$OUT/composition_manifest.csv"
           test -f "$SEM/building_frontage_audit.csv"
-          grep -q 'pass_20_streetwall_frontage_rc2' "$OUT/composition_manifest.csv"
+          grep -q 'pass_20_streetwall_frontage_rc3' "$OUT/composition_manifest.csv"
           python - <<'PY'
           import csv
           from pathlib import Path
