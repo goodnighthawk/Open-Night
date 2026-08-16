@@ -56,7 +56,7 @@ def main():
     if len(road_details)<25:problems.append("fewer than 25 restrained road-surface details")
     if districts['fort_lee']<55 or districts['washington_heights']<85:problems.append(f"district density too low: {dict(districts)}")
     if stair_viol:problems.append(f"{len(stair_viol)} details violate stair keep-outs")
-    if crossing_viol or road_cross:problems.append(f"{len(cross_viol)+len(road_cross)} details violate crossing keep-outs")
+    if cross_viol or road_cross:problems.append(f"{len(cross_viol)+len(road_cross)} details violate crossing keep-outs")
     if building_viol:problems.append(f"{len(building_viol)} sidewalk details overlap building buffers")
     if problems:
         print("PASS23_STREET_DETAIL_GATE=FAIL")
