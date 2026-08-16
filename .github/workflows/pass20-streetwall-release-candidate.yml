@@ -1,0 +1,87 @@
+name: Open Night Pass 20 Street-Wall Release Candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev_tools/map_generator/tools/build_pass20_streetwall.py'
+      - 'dev_tools/map_generator/tools/build_v090_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19b_frontage_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19_art_convergence.py'
+      - 'dev_tools/map_generator/tools/build_unified_composition.py'
+      - 'tools/pass20_frontage_audit.py'
+      - 'dev_tools/map_generator/cosmetic_packs/**'
+      - '.github/workflows/pass20-streetwall-release-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pass20-map-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install map renderer dependency
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Build Pass 20 street-wall candidate
+        run: python dev_tools/map_generator/tools/build_pass20_streetwall.py
+
+      - name: Run strict frontage acceptance gate
+        run: python tools/pass20_frontage_audit.py --strict
+
+      - name: Verify protected map geometry and outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=dev_tools/map_generator/profiles/gwb_gameplay/unified_composition
+          SEM="$OUT/semantic"
+          test -f "$OUT/unified_composition_day.png"
+          test -f "$OUT/unified_composition_night.png"
+          test -f "$OUT/composition_manifest.csv"
+          test -f "$SEM/building_frontage_audit.csv"
+          grep -q 'pass_20_streetwall_frontage_rc' "$OUT/composition_manifest.csv"
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          manifest_path = Path('dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv')
+          with manifest_path.open(encoding='utf-8-sig', newline='') as f:
+              m = {r['key']: r['value'] for r in csv.DictReader(f)}
+          expected = {
+              'selected_gameplay_roads': '38',
+              'road_segments': '157',
+              'angled_road_segments': '96',
+              't_junctions': '23',
+              'compact_approach_crossings': '242',
+              'non_bridge_hudson_violations': '0',
+              'legacy_scattered_buildings_rendered': 'false',
+          }
+          mismatches = {k: (m.get(k), v) for k, v in expected.items() if m.get(k) != v}
+          assert not mismatches, f'protected geometry changed: {mismatches}'
+          assert float(m.get('ordinary_frontage_addressed_share', '0')) >= 0.80
+          print('PASS20_PROTECTED_GEOMETRY_GATE=PASS')
+          PY
+
+      - name: Upload Pass 20 visual-review bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-pass20-streetwall-visual-review
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_day.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_night.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_frontage_audit.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_buildings.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_stairwells.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_sprite_scale_audit.csv
