@@ -1,0 +1,94 @@
+name: Open Night Pass 21 Component Scale Release Candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/environment_component_scale.csv'
+      - 'dev_tools/map_generator/tools/build_pass21_component_scale.py'
+      - 'dev_tools/map_generator/tools/build_pass20_streetwall*.py'
+      - 'dev_tools/map_generator/tools/build_v090_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19b_frontage_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19_art_convergence.py'
+      - 'dev_tools/map_generator/tools/build_unified_composition.py'
+      - 'tools/building_component_scale_audit.py'
+      - 'tools/pass20_frontage_audit.py'
+      - 'dev_tools/map_generator/cosmetic_packs/**'
+      - '.github/workflows/pass21-component-scale-release-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pass21-map-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install renderer dependency
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Build Pass 21 component-scale candidate
+        run: python dev_tools/map_generator/tools/build_pass21_component_scale.py
+
+      - name: Preserve Pass 20 frontage gate
+        run: python tools/pass20_frontage_audit.py --strict
+
+      - name: Run Pass 21 component-scale gate
+        run: python tools/building_component_scale_audit.py --strict
+
+      - name: Verify protected map geometry
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=dev_tools/map_generator/profiles/gwb_gameplay/unified_composition
+          SEM="$OUT/semantic"
+          test -f "$OUT/unified_composition_day.png"
+          test -f "$OUT/unified_composition_night.png"
+          test -f "$SEM/building_component_scale_audit.csv"
+          grep -q 'pass_21_fixed_component_scale_rc1' "$OUT/composition_manifest.csv"
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv')
+          with p.open(encoding='utf-8-sig',newline='') as f:
+              m={r['key']:r['value'] for r in csv.DictReader(f)}
+          expected={
+              'selected_gameplay_roads':'38',
+              'road_segments':'157',
+              'angled_road_segments':'96',
+              't_junctions':'23',
+              'compact_approach_crossings':'242',
+              'non_bridge_hudson_violations':'0',
+              'legacy_scattered_buildings_rendered':'false',
+              'component_scale_failures':'0',
+          }
+          bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
+          assert not bad, f'Pass 21 protected contract changed: {bad}'
+          print('PASS21_PROTECTED_GEOMETRY_GATE=PASS')
+          PY
+
+      - name: Upload Pass 21 visual-review bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-pass21-component-scale-visual-review
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_day.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_night.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_component_scale_audit.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_frontage_audit.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_buildings.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_stairwells.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_sprite_scale_audit.csv
