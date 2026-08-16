@@ -1,0 +1,26 @@
+name: Open Night Movement Contract
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "config/game_settings.csv"
+      - "assets/characters/master_dual_camera/config/movement_settings.csv"
+      - "gameplay/settings.py"
+      - "server.py"
+      - "dev_tools/character_preview/sprite_tester.py"
+      - "tools/movement_contract_audit.py"
+      - ".github/workflows/movement-contract.yml"
+
+jobs:
+  movement-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile movement code
+        run: python -m py_compile gameplay/settings.py server.py dev_tools/character_preview/sprite_tester.py tools/movement_contract_audit.py
+      - name: Verify preview-release movement parity
+        run: python tools/movement_contract_audit.py
