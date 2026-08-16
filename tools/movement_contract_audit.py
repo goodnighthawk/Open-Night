@@ -120,12 +120,15 @@ def main() -> int:
             print(f"FAIL: {failure}")
         return 1
 
-    run_speed = _number(game[("movement", "walk_speed_px_per_second")]) * _number(game[("movement", "sprint_multiplier")])
+    walk_speed = _number(game[("movement", "walk_speed_px_per_second")])
+    sprint_multiplier = _number(game[("movement", "sprint_multiplier")])
+    single_jump_speed = _number(game[("movement", "jump_forward_speed_px_per_second")])
+    double_jump_speed = _number(game[("movement", "double_jump_forward_speed_px_per_second")])
     print("MOVEMENT_CONTRACT_GATE=PASS")
-    print(f"walk_speed_px_s={_number(game[(\"movement\", \"walk_speed_px_per_second\")]):.3f}")
-    print(f"run_speed_px_s={run_speed:.3f}")
-    print(f"single_jump_launch_px_s={_number(game[(\"movement\", \"jump_forward_speed_px_per_second\")]):.3f}")
-    print(f"double_jump_launch_px_s={_number(game[(\"movement\", \"double_jump_forward_speed_px_per_second\")]):.3f}")
+    print(f"walk_speed_px_s={walk_speed:.3f}")
+    print(f"run_speed_px_s={walk_speed * sprint_multiplier:.3f}")
+    print(f"single_jump_launch_px_s={single_jump_speed:.3f}")
+    print(f"double_jump_launch_px_s={double_jump_speed:.3f}")
     print("preview_release_parity=confirmed")
     return 0
 
