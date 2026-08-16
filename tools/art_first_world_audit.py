@@ -43,7 +43,10 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument("--strict",action="store_true");args=ap.parse_args()
     manifest={r["key"]:r["value"] for r in rows(OUT/"composition_manifest.csv")}
     infill=rows(SEM/"urban_infill_pass26.csv");mobility=rows(SEM/"mobility_crossings_pass26.csv");tiles=rows(SEM/"gameplay_mask_tiles_pass26.csv")
-    base=rows(SEM/"crossings.csv")
+    # The exported semantic crossings are in master-image coordinates and omit
+    # road_id. For gameplay permeability, use the authored final world crossings
+    # directly; they retain road ownership and the exact world coordinates.
+    roads,rp,base=pass20.base.authored_block_network()
     masters={name:Image.open(MASK/name).convert("L") for name in ("collision_mask_master.png","walkable_mask_master.png","cycle_mask_master.png")}
     expected_size=(8192,4096)
     size_fail=[name for name,im in masters.items() if im.size!=expected_size]
@@ -60,13 +63,14 @@ def main():
         mx,my=pass20.base.world_to_master(float(r["x"]),float(r["y"]));px=max(0,min(collision.width-1,int(round(mx))));py=max(0,min(collision.height-1,int(round(my))))
         if collision.getpixel((px,py))>0:collision_cross.append(r["id"])
 
-    # Permeability is checked by maximum along-road gap on the major urban roads,
-    # using old + new crossings together. End gaps are included.
-    roads,rp,_=pass20.base.authored_block_network();all_cross=base+mobility
+    # Permeability is checked by maximum along-road gap on major urban roads,
+    # using old intersection crossings plus new art-first mid-block crossings.
     major_gaps=[]
     thresholds={"primary":720.0,"secondary":780.0,"tertiary":900.0}
     by_road=defaultdict(list)
-    for r in all_cross:by_road[r["road_id"]].append(r)
+    for r in base+mobility:
+        rid=r.get("road_id")
+        if rid:by_road[rid].append(r)
     for road in roads:
         cls=road.get("highway","residential")
         if cls not in thresholds or str(road.get("bridge","false")).lower()=="true":continue
@@ -80,19 +84,23 @@ def main():
     collision_nonzero=sum(1 for p in collision.getdata() if p>0)
     collision_share=collision_nonzero/(collision.width*collision.height)
     kinds=Counter(r["kind"] for r in infill)
+    solid=sum(r.get("collision_class")=="solid" for r in infill)
+    open_use=len(infill)-solid
     print("PASS26_ART_FIRST_AUDIT "
-          f"infill={len(infill)} infill_kinds={len(kinds)} blank={blank_before}->{blank_after} "
+          f"infill={len(infill)} solid={solid} open_use={open_use} infill_kinds={len(kinds)} blank={blank_before}->{blank_after} "
           f"base_crossings={len(base)} added_crossings={len(mobility)} shared_cycle={shared} total_crossings={total_crossings} "
           f"major_gap_failures={len(gap_fail)} worst_major_gap={worst:.1f} collision_crossings={len(collision_cross)} "
           f"mask_tiles={dict(tile_counts)} collision_share={collision_share:.3f} size_fail={len(size_fail)} missing_tiles={len(missing_tiles)}")
     if not args.strict:return 0
     problems=[]
-    if manifest.get("pass_id")!="pass_26_art_first_world_rc1":problems.append("Pass 26 manifest id missing")
+    if manifest.get("pass_id")!="pass_26_art_first_world_rc2":problems.append("Pass 26 RC2 manifest id missing")
     if manifest.get("art_first_world_pass")!="true":problems.append("art-first world flag missing")
     if len(infill)<55:problems.append(f"functional infill too sparse: {len(infill)} (<55)")
     if len(kinds)<6:problems.append(f"functional infill lacks variety: {len(kinds)} kinds")
-    if blank_before<55:problems.append(f"too few sampled dead cells were identified: {blank_before}")
-    if blank_after>max(3,int(blank_before*.15)):problems.append(f"too many sampled blank cells remain: {blank_after}/{blank_before}")
+    if solid<25:problems.append(f"too few secondary solid urban structures: {solid} (<25)")
+    if open_use<20:problems.append(f"too few purposeful open/service uses: {open_use} (<20)")
+    if blank_before<55:problems.append(f"too few dead-space regions were identified: {blank_before}")
+    if blank_after>max(3,int(blank_before*.15)):problems.append(f"too many sampled blank regions remain: {blank_after}/{blank_before}")
     if len(mobility)<35:problems.append(f"too few added ped/cycle crossings: {len(mobility)} (<35)")
     if shared<20:problems.append(f"too few shared pedestrian/cycle crossings: {shared} (<20)")
     if total_crossings<=len(base):problems.append("road permeability did not increase")
