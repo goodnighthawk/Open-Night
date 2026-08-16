@@ -36,19 +36,19 @@ DEFAULTS = {
     "controls": {
         "movement_aim_independent": True,
         "local_player_camera_facing": True,
-        "camera_relative_movement": False,
+        "camera_relative_movement": True,
         "body_follows_movement": True,
         "idle_body_realign_camera": True,
     },
     "movement": {
-        "walk_speed_px_per_second": 185.0,
+        "walk_speed_px_per_second": 92.5,
         "sprint_multiplier": 3.0,
         "sprint_animation_rate_multiplier": 1.85,
         "sprint_gait_width_multiplier": 1.48,
         "jump_forward_speed_px_per_second": 570.0,
         "jump_duration_seconds": 0.75,
         "double_jump_window_seconds": 0.55,
-        "double_jump_forward_speed_px_per_second": 940.0,
+        "double_jump_forward_speed_px_per_second": 313.3333333333333,
         "double_jump_duration_seconds": 0.95,
         "movement_stand_delay_seconds": 1.0,
         "water_walk_speed_multiplier": 0.28,
@@ -66,7 +66,7 @@ DEFAULTS = {
         "player_turn_rate": 2.75,
         "player_front_axle_offset_ratio": 0.36,
     },
-    "engine": {"ai_profile_version": 2},
+    "engine": {"ai_profile_version": 2, "client_profile_version": 282},
     "debug": {"show_camera_lookahead": False},
     "render": {
         "player_scale": 1,
@@ -139,8 +139,10 @@ def _migrate_v2_ai_profile(shared_path: Path) -> None:
     revision = 0
     for row in shared_rows:
         if str(row.get("section", "")).strip() == "engine" and str(row.get("key", "")).strip() == "ai_profile_version":
-            try: revision = int(float(str(row.get("value", "0"))))
-            except ValueError: revision = 0
+            try:
+                revision = int(float(str(row.get("value", "0"))))
+            except ValueError:
+                revision = 0
             break
     if revision >= 2:
         return
@@ -155,7 +157,8 @@ def _migrate_v2_ai_profile(shared_path: Path) -> None:
         if key in by_key:
             by_key[key].update(row)
         else:
-            shared_rows.append(dict(row)); by_key[key] = shared_rows[-1]
+            shared_rows.append(dict(row))
+            by_key[key] = shared_rows[-1]
     try:
         shared_path.parent.mkdir(parents=True, exist_ok=True)
         with shared_path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -167,13 +170,13 @@ def _migrate_v2_ai_profile(shared_path: Path) -> None:
         pass
 
 
-
 def _migrate_v26_client_profile(shared_path: Path) -> None:
-    """Apply v2.6 camera/movement defaults once to persistent shared settings.
+    """Apply the current camera/movement contract to persistent shared settings.
 
     The migration preserves unrelated user settings while retaining the camera-rotation
     performance controls, camera-relative walking, and the shared preview/server
-    action contract. Vehicle controls remain raw.
+    action contract. Vehicle controls remain raw. Profile 282 halves absolute walk/run
+    speed and reduces double-jump forward propulsion to one third of its prior value.
     """
     if shared_path == LOCAL_CONFIG_PATH:
         return
@@ -186,7 +189,7 @@ def _migrate_v26_client_profile(shared_path: Path) -> None:
             except ValueError:
                 revision = 0
             break
-    if revision >= 260:
+    if revision >= 282:
         return
     shared_rows = [
         row for row in shared_rows
@@ -240,6 +243,7 @@ def _migrate_v26_client_profile(shared_path: Path) -> None:
                 writer.writerow({name: row.get(name, "") for name in fields})
     except OSError:
         pass
+
 
 def load_settings(path: Path = CONFIG_PATH) -> dict:
     """Load flat CSV rows into a nested settings dictionary.
