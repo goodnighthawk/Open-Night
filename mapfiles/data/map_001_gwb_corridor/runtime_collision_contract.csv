@@ -1,0 +1,4 @@
+﻿key,value
+visible_footprint_source,iterated_buildings.csv
+collision_inset_world_px,40.0
+reason,decorative_parapet_facade_and_runtime_road_clearance
