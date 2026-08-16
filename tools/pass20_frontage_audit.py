@@ -32,7 +32,8 @@ def main() -> int:
     addressed = [r for r in ordinary if r.get("addressed") == "true"]
     safe = [r for r in rows if r.get("safe_clearance") == "true"]
     max_shift = max((float(r.get("shift_distance", 0) or 0) for r in rows), default=0.0)
-    min_gap = min((float(r.get("gap_after", 0) or 0) for r in rows), default=0.0)
+    min_sidewalk_gap = min((float(r.get("gap_after", 0) or 0) for r in rows), default=0.0)
+    min_road_clearance = min((float(r.get("road_clearance_after", 0) or 0) for r in rows), default=0.0)
     addressed_share = len(addressed) / max(1, len(ordinary))
     stair_buildings = {r.get("building_id") for r in stairs}
     building_ids = {r.get("id") for r in buildings}
@@ -42,9 +43,9 @@ def main() -> int:
     print(
         "PASS20_FRONTAGE_AUDIT "
         f"buildings={len(buildings)} ordinary={len(ordinary)} addressed={len(addressed)} "
-        f"addressed_share={addressed_share:.3f} safe={len(safe)}/{len(rows)} "
-        f"min_gap={min_gap:.2f} max_shift={max_shift:.2f} "
-        f"missing_stairs={len(missing_stairs)} scale_failures={len(scale_failures)}"
+        f"addressed_share={addressed_share:.3f} road_safe={len(safe)}/{len(rows)} "
+        f"min_sidewalk_gap={min_sidewalk_gap:.2f} min_road_clearance={min_road_clearance:.2f} "
+        f"max_shift={max_shift:.2f} missing_stairs={len(missing_stairs)} scale_failures={len(scale_failures)}"
     )
 
     if not args.strict:
@@ -56,9 +57,11 @@ def main() -> int:
     if addressed_share < 0.80:
         problems.append(f"ordinary sidewalk-addressed share {addressed_share:.1%} is below 80%")
     if len(safe) != len(rows):
-        problems.append(f"{len(rows)-len(safe)} buildings violate the minimum road/sidewalk clearance")
-    if min_gap < 14.0 - 1e-6:
-        problems.append(f"minimum frontage gap {min_gap:.2f} is below 14 world units")
+        problems.append(f"{len(rows)-len(safe)} buildings violate minimum asphalt/curb clearance")
+    if min_road_clearance < 8.0 - 1e-6:
+        problems.append(f"minimum road clearance {min_road_clearance:.2f} is below 8 world units")
+    if min_sidewalk_gap < -8.0 - 1e-6:
+        problems.append(f"minimum sidewalk-edge gap {min_sidewalk_gap:.2f} exceeds the -8 raster tolerance")
     if max_shift > 64.0 + 1e-6:
         problems.append(f"maximum footprint shift {max_shift:.2f} exceeds 64 world units")
     if missing_stairs:
