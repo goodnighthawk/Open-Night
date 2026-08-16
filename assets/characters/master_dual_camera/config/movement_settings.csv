@@ -1,15 +1,15 @@
 setting,value,type,description
-walk_speed_px_per_second,185,float,Base camera-relative walking speed
+walk_speed_px_per_second,92.5,float,Base camera-relative walking speed; matches the release movement contract
 sprint_control,hold_shift,string,Hold either Shift key while moving
-sprint_speed_multiplier,3.0,float,Running speed multiplier while Shift remains held
+sprint_speed_multiplier,3.0,float,Running speed multiplier while Shift remains held; absolute running speed is half the previous value because walk speed is halved
 sprint_animation_rate_multiplier,1.85,float,Walk-cycle playback multiplier while running
 sprint_gait_animation,run_wide_8,string,Dedicated eight-frame run with wider leg separation and preserved ground anchor
 sprint_gait_width_multiplier,1.48,float,Maximum authored leg-separation multiplier at peak run frames
 sprint_cancel_inputs,shift_release;stop;crouch;prone;jump;action,string,Inputs and states that stop running
-jump_forward_speed_px_per_second,570,float,Initial forward propulsion; twice the previous jump range
-jump_duration_seconds,0.75,float,Single-jump airborne duration
+jump_forward_speed_px_per_second,570,float,Initial forward propulsion; matches server-authoritative single jump
 double_jump_window_seconds,0.55,float,Maximum time after first launch for the second Space press
-double_jump_forward_speed_px_per_second,940,float,Second-launch propulsion; twice the previous double-jump range
+jump_duration_seconds,0.75,float,Single-jump airborne duration
+double_jump_forward_speed_px_per_second,313.3333333333333,float,Second-launch propulsion; one third of the previous double-jump forward speed
 double_jump_duration_seconds,0.95,float,Double-jump airborne duration after the second launch
 double_jump_landing,prone,string,Double jump always ends in prone state
 jump_scale_multiplier,1.35,float,Visible single-jump enlargement in the movement preview and game
