@@ -7,6 +7,7 @@ on:
       - 'dev_tools/map_generator/tools/build_pass26_art_first_world.py'
       - 'dev_tools/map_generator/tools/build_pass26_art_first_world_v2.py'
       - 'dev_tools/map_generator/tools/build_pass26_art_first_world_v3.py'
+      - 'dev_tools/map_generator/tools/build_pass26_art_first_world_v4.py'
       - 'dev_tools/map_generator/tools/build_pass24_landmarks.py'
       - 'dev_tools/map_generator/tools/build_pass23_street_detail.py'
       - 'dev_tools/map_generator/tools/build_pass22b_massing_convergence.py'
@@ -40,8 +41,8 @@ jobs:
           python-version: '3.12'
       - name: Install renderer dependency
         run: python -m pip install 'Pillow>=10,<13'
-      - name: Build Pass 26 dense art-first world
-        run: python dev_tools/map_generator/tools/build_pass26_art_first_world_v3.py
+      - name: Build Pass 26 finished art-first world
+        run: python dev_tools/map_generator/tools/build_pass26_art_first_world_v4.py
       - name: Preserve Pass 20 frontage gate
         run: python tools/pass20_frontage_audit.py --strict
       - name: Preserve Pass 21 component-scale gate
@@ -69,7 +70,7 @@ jobs:
           test -f "$OUT/gameplay_masks/cycle_mask_master.png"
           test -f "$OUT/semantic/urban_infill_pass26.csv"
           test -f "$OUT/semantic/mobility_crossings_pass26.csv"
-          grep -q 'pass_26_art_first_world_rc3' "$OUT/composition_manifest.csv"
+          grep -q 'pass_26_art_first_world_rc4' "$OUT/composition_manifest.csv"
           python - <<'PY'
           import csv
           from pathlib import Path
@@ -83,6 +84,8 @@ jobs:
               'hand_authored_landmark_pass':'true','art_first_world_pass':'true',
               'art_first_collision_mode':'paired_semantic_masks_after_final_art',
               'pass26_tree_base_full_footprint_gate':'true',
+              'pass26_detailed_massing_art':'true',
+              'pass26_massing_art_rule':'fixed_scale_textured_roof_complex_rc4',
           }
           bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
           assert not bad, f'Pass 26 protected contract changed: {bad}'
