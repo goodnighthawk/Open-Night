@@ -8,6 +8,7 @@ on:
       - 'tools/pass28_sidewalk_continuity_audit_v2.py'
       - 'dev_tools/map_generator/tools/build_pass29_double_world.py'
       - 'dev_tools/map_generator/tools/build_pass29_double_world_v2.py'
+      - 'dev_tools/map_generator/tools/build_pass29_double_world_v3.py'
       - 'tools/pass29_double_world_audit.py'
       - '.github/workflows/pass29-double-world-release-candidate.yml'
   workflow_dispatch:
@@ -52,8 +53,8 @@ jobs:
       - name: Preserve Pass 28 junction-aware sidewalk gate
         run: python tools/pass28_sidewalk_continuity_audit_v2.py --strict
 
-      - name: Build Pass 29 doubled world with fixed component scale
-        run: python dev_tools/map_generator/tools/build_pass29_double_world_v2.py
+      - name: Build Pass 29 doubled world with deterministic large landmarks
+        run: python dev_tools/map_generator/tools/build_pass29_double_world_v3.py
       - name: Run Pass 29 doubled-world gate
         run: python tools/pass29_double_world_audit.py --strict
 
@@ -72,7 +73,8 @@ jobs:
           test -f "$OUT/gameplay_masks/walkable_mask_master.png"
           test -f "$OUT/gameplay_masks/cycle_mask_master.png"
           test -f "$OUT/gameplay_masks/collision_mask_master.png"
-          grep -q 'pass_29_double_world_rc1' "$OUT/composition_manifest.csv"
+          grep -q 'pass_29_double_world_rc2' "$OUT/composition_manifest.csv"
+          grep -q 'deterministic_large_merged_footprints_two_per_land_side_v1' "$OUT/composition_manifest.csv"
 
       - name: Upload Pass 29 doubled-world review bundle
         if: always()
