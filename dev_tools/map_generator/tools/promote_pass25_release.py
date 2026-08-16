@@ -4,8 +4,9 @@ from __future__ import annotations
 
 This script is deliberately a release wrapper around the older promotion code: it
 first rebuilds and audits Pass 25, then reuses the established runtime geometry
-writer while replacing every stale Pass 19 release identifier.  It does not alter
-Pass 25 artwork.
+writer while replacing every stale Pass 19 release identifier. It does not alter
+Pass 25 artwork. Runtime collision remains slightly inset from the visible roof/
+facade silhouette so movement does not snag on decorative building edges.
 """
 
 import csv
@@ -26,6 +27,7 @@ PASS = 25
 BUILD_ID = "open_night_v0_8_2_pass25_default_only"
 ARCHIVE_REL = "assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip"
 ARCHIVE = ROOT / ARCHIVE_REL
+RUNTIME_COLLISION_INSET = 40.0
 _LEGACY_MAP_ROWS = legacy.map_rows
 
 
@@ -65,6 +67,7 @@ def map_rows() -> list[dict[str, str]]:
         ("final_visual_convergence_pass", "true", "bool"),
         ("visual_convergence_failures", "0", "int"),
         ("approved_visual_checkpoint", "pass25", "str"),
+        ("runtime_building_collision_inset", str(int(RUNTIME_COLLISION_INSET)), "float"),
     )
     for key, value, typ in extras:
         values[key] = {"key": key, "value": value, "type": typ}
@@ -96,6 +99,27 @@ def copy_pass25_semantics(folder: Path) -> None:
         src = semantic / name
         if src.exists():
             shutil.copy2(src, folder / name)
+
+
+def rewrite_runtime_collision(folder: Path) -> None:
+    buildings = read_csv(legacy.SEMANTIC / "iterated_buildings.csv")
+    rows = []
+    for row in buildings:
+        w = float(row["w"]); h = float(row["h"])
+        inset = min(RUNTIME_COLLISION_INSET, max(0.0, min(w, h) * 0.25 - 1.0))
+        rows.append({
+            "id": row["id"],
+            "x": round(float(row["x"]) + inset, 2),
+            "y": round(float(row["y"]) + inset, 2),
+            "w": round(w - 2 * inset, 2),
+            "h": round(h - 2 * inset, 2),
+        })
+    write_csv(folder / "buildings.csv", ("id", "x", "y", "w", "h"), rows)
+    write_csv(folder / "runtime_collision_contract.csv", ("key", "value"), [
+        {"key": "visible_footprint_source", "value": "iterated_buildings.csv"},
+        {"key": "collision_inset_world_px", "value": str(RUNTIME_COLLISION_INSET)},
+        {"key": "reason", "value": "decorative_parapet_facade_and_runtime_road_clearance"},
+    ])
 
 
 def rewrite_landmarks(folder: Path) -> None:
@@ -133,7 +157,8 @@ def write_release_identity() -> None:
         "- Promotes the reviewed Pass 25 Fort Lee → George Washington Bridge → Washington Heights corridor as the default and only playable map.\n"
         "- Locks building component scale to 0.88–1.12 and uses modular roof/facade detail with deterministic anti-repetition signatures.\n"
         "- Adds irregular L/U/stepped/courtyard/chamfered building massing, 501 deterministic street details, and 12 recognizable landmark groups.\n"
-        "- Preserves 38 roads, 157 segments, 96 angled segments, 23 T-junctions, 242 compact crossings, Hudson/park geometry, and 95 road-safe buildings.\n"
+        "- Preserves 38 roads, 157 segments, 96 angled segments, 23 T-junctions, 242 compact crossings, Hudson/park geometry, and 95 road-safe visual building footprints.\n"
+        "- Uses a 40 px runtime building-collision inset inside the decorative visible silhouette to preserve road-corridor clearance and avoid snagging on parapets/facade lips.\n"
         "- Ships reviewed day/night Pass 25 baked composition tiles in composition_tiles_v25.zip.\n",
         encoding="utf-8",
     )
@@ -147,11 +172,13 @@ def main() -> None:
     for folder in legacy.MAP_DIRS:
         rewrite_render_contract(folder)
         copy_pass25_semantics(folder)
+        rewrite_runtime_collision(folder)
         rewrite_landmarks(folder)
     write_release_identity()
     print(
         f"PASS25_RELEASE_PROMOTED version={VERSION} pass={PASS} build={BUILD_ID} "
-        f"archive={ARCHIVE.name} archive_bytes={ARCHIVE.stat().st_size} maps={len(legacy.MAP_DIRS)}"
+        f"collision_inset={RUNTIME_COLLISION_INSET:g} archive={ARCHIVE.name} "
+        f"archive_bytes={ARCHIVE.stat().st_size} maps={len(legacy.MAP_DIRS)}"
     )
 
 
