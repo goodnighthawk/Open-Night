@@ -1,0 +1,30 @@
+name: Player revision audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "portrait_head_asset.py"
+      - "portrait_head_client.py"
+      - "open_night_player_launcher.py"
+      - "RUN_CLIENT.bat"
+      - "START_OPEN_NIGHT.bat"
+      - "character_catalog.py"
+      - "versioning.py"
+      - "VERSION.txt"
+      - "tools/player_revision_audit.py"
+      - ".github/workflows/player-revision-audit.yml"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile new player entry points
+        run: python -m py_compile portrait_head_asset.py portrait_head_client.py open_night_player_launcher.py tools/player_revision_audit.py
+      - name: Validate head selector and launcher contract
+        run: python tools/player_revision_audit.py
