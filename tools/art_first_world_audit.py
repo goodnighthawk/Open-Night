@@ -39,61 +39,50 @@ def polyline_distance_positions(points,crossings):
     return walked,sorted(pos)
 
 
+def nonzero_share(im):
+    return sum(1 for p in im.getdata() if p>0)/(im.width*im.height)
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--strict",action="store_true");args=ap.parse_args()
     manifest={r["key"]:r["value"] for r in rows(OUT/"composition_manifest.csv")}
     infill=rows(SEM/"urban_infill_pass26.csv");mobility=rows(SEM/"mobility_crossings_pass26.csv");tiles=rows(SEM/"gameplay_mask_tiles_pass26.csv")
-    # The exported semantic crossings are in master-image coordinates and omit
-    # road_id. For gameplay permeability, use the authored final world crossings
-    # directly; they retain road ownership and the exact world coordinates.
     roads,rp,base=pass20.base.authored_block_network()
-    masters={name:Image.open(MASK/name).convert("L") for name in ("collision_mask_master.png","walkable_mask_master.png","cycle_mask_master.png")}
-    expected_size=(8192,4096)
-    size_fail=[name for name,im in masters.items() if im.size!=expected_size]
-    tile_counts=Counter(r["layer"] for r in tiles)
-    missing_tiles=[]
-    for r in tiles:
-        if not (OUT/r["filename"]).exists():missing_tiles.append(r["filename"])
+    names=("collision_mask_master.png","solid_mask_master.png","walkable_mask_master.png","cycle_mask_master.png")
+    masters={name:Image.open(MASK/name).convert("L") for name in names}
+    expected_size=(8192,4096);size_fail=[name for name,im in masters.items() if im.size!=expected_size]
+    tile_counts=Counter(r["layer"] for r in tiles);missing_tiles=[r["filename"] for r in tiles if not (OUT/r["filename"]).exists()]
 
     blank_before=int(manifest.get("pass26_sampled_blank_cells_before","0"));blank_after=int(manifest.get("pass26_sampled_blank_cells_after","999999"))
     total_crossings=len(base)+len(mobility);shared=sum(r.get("mode")=="shared_ped_cycle" for r in mobility)
-    collision=masters["collision_mask_master.png"]
+    collision=masters["collision_mask_master.png"];solid_mask=masters["solid_mask_master.png"]
     collision_cross=[]
     for r in mobility:
         mx,my=pass20.base.world_to_master(float(r["x"]),float(r["y"]));px=max(0,min(collision.width-1,int(round(mx))));py=max(0,min(collision.height-1,int(round(my))))
         if collision.getpixel((px,py))>0:collision_cross.append(r["id"])
 
-    # Permeability is checked by maximum along-road gap on major urban roads,
-    # using old intersection crossings plus new art-first mid-block crossings.
-    major_gaps=[]
-    thresholds={"primary":720.0,"secondary":780.0,"tertiary":900.0}
-    by_road=defaultdict(list)
+    thresholds={"primary":720.0,"secondary":780.0,"tertiary":900.0};by_road=defaultdict(list)
     for r in base+mobility:
         rid=r.get("road_id")
         if rid:by_road[rid].append(r)
+    major_gaps=[]
     for road in roads:
         cls=road.get("highway","residential")
         if cls not in thresholds or str(road.get("bridge","false")).lower()=="true":continue
-        length,pos=polyline_distance_positions(rp[road["road_id"]],by_road.get(road["road_id"],[]))
-        checkpoints=[0.0]+pos+[length]
-        gap=max((b-a for a,b in zip(checkpoints,checkpoints[1:])),default=length)
-        major_gaps.append((road["road_id"],cls,gap,thresholds[cls]))
-    gap_fail=[r for r in major_gaps if r[2]>r[3]]
-    worst=max((r[2] for r in major_gaps),default=0.0)
+        length,pos=polyline_distance_positions(rp[road["road_id"]],by_road.get(road["road_id"],[]));check=[0.0]+pos+[length]
+        gap=max((b-a for a,b in zip(check,check[1:])),default=length);major_gaps.append((road["road_id"],cls,gap,thresholds[cls]))
+    gap_fail=[r for r in major_gaps if r[2]>r[3]];worst=max((r[2] for r in major_gaps),default=0.0)
 
-    collision_nonzero=sum(1 for p in collision.getdata() if p>0)
-    collision_share=collision_nonzero/(collision.width*collision.height)
-    kinds=Counter(r["kind"] for r in infill)
-    solid=sum(r.get("collision_class")=="solid" for r in infill)
-    open_use=len(infill)-solid
+    collision_share=nonzero_share(collision);solid_share=nonzero_share(solid_mask)
+    kinds=Counter(r["kind"] for r in infill);solid=sum(r.get("collision_class")=="solid" for r in infill);open_use=len(infill)-solid
     print("PASS26_ART_FIRST_AUDIT "
           f"infill={len(infill)} solid={solid} open_use={open_use} infill_kinds={len(kinds)} blank={blank_before}->{blank_after} "
           f"base_crossings={len(base)} added_crossings={len(mobility)} shared_cycle={shared} total_crossings={total_crossings} "
           f"major_gap_failures={len(gap_fail)} worst_major_gap={worst:.1f} collision_crossings={len(collision_cross)} "
-          f"mask_tiles={dict(tile_counts)} collision_share={collision_share:.3f} size_fail={len(size_fail)} missing_tiles={len(missing_tiles)}")
+          f"mask_tiles={dict(tile_counts)} collision_share={collision_share:.3f} solid_share={solid_share:.3f} size_fail={len(size_fail)} missing_tiles={len(missing_tiles)}")
     if not args.strict:return 0
     problems=[]
-    if manifest.get("pass_id")!="pass_26_art_first_world_rc2":problems.append("Pass 26 RC2 manifest id missing")
+    if manifest.get("pass_id")!="pass_26_art_first_world_rc3":problems.append("Pass 26 RC3 manifest id missing")
     if manifest.get("art_first_world_pass")!="true":problems.append("art-first world flag missing")
     if len(infill)<55:problems.append(f"functional infill too sparse: {len(infill)} (<55)")
     if len(kinds)<6:problems.append(f"functional infill lacks variety: {len(kinds)} kinds")
@@ -109,10 +98,13 @@ def main():
         problems.append("major-road crossing gaps too large: "+", ".join(f"{rid}={gap:.0f}>{limit:.0f}" for rid,_,gap,limit in worst_rows))
     if collision_cross:problems.append(f"{len(collision_cross)} new crossings are collision-blocked")
     if size_fail:problems.append(f"gameplay mask size mismatch: {size_fail}")
-    for layer in ("collision","walkable","cycle"):
+    for layer in ("collision","solid","walkable","cycle"):
         if tile_counts[layer]!=32:problems.append(f"{layer} tile count {tile_counts[layer]} != 32")
     if missing_tiles:problems.append(f"{len(missing_tiles)} gameplay mask tiles missing")
-    if not (.05<=collision_share<=.55):problems.append(f"implausible collision-mask occupancy {collision_share:.3f}")
+    # The combined collision layer includes the Hudson, so a large occupancy is
+    # expected. Solid-object occupancy is the meaningful building/obstacle metric.
+    if not (.30<=collision_share<=.65):problems.append(f"implausible combined collision occupancy {collision_share:.3f}")
+    if not (.03<=solid_share<=.35):problems.append(f"implausible solid-object occupancy {solid_share:.3f}")
     if problems:
         print("PASS26_ART_FIRST_GATE=FAIL")
         for p in problems:print(" - "+p)
