@@ -46,7 +46,7 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument("--strict",action="store_true");args=ap.parse_args()
     m=manifest();problems=[]
     expected={
-        "pass_id":"pass_29_double_world_rc1",
+        "pass_id":"pass_29_double_world_rc2",
         "pass29_double_world":"true",
         "pass29_linear_extent_multiplier":"2",
         "pass29_area_multiplier":"4",
@@ -54,6 +54,8 @@ def main():
         "pass29_world_size":"32768x16384",
         "pass29_component_scale_policy":"fixed_pixels_no_map_stretch",
         "pass29_hudson_policy":"continuous_north_south_extension_protected_core_unchanged",
+        "pass29_church_landmark_refinement":"true",
+        "pass29_church_landmark_rule":"deterministic_large_merged_footprints_two_per_land_side_v1",
     }
     for k,v in expected.items():
         if m.get(k)!=v:problems.append(f"manifest {k}={m.get(k)!r}, expected {v!r}")
@@ -77,6 +79,7 @@ def main():
     merged=sum(int(float(r["merged_lot_count"]))>=2 for r in buildings)
     churches=sum(r["kind"]=="church" for r in buildings)
     merged_share=merged/max(1,len(buildings))
+    church_by_district=Counter(r.get("district","") for r in buildings if r.get("kind")=="church")
     if any(r.get("fixed_component_scale")!="true" for r in buildings):problems.append("extension has non-fixed-scale building components")
 
     # No new building may intrude into the protected core or the conservative
@@ -109,8 +112,8 @@ def main():
         "PASS29_DOUBLE_WORLD_AUDIT "
         f"size={day.size[0]}x{day.size[1]} roads={len(set(r['road_id'] for r in roads))} segments={len(segs)} "
         f"angled_share={angled_share:.3f} crossings={len(crossings)} buildings={len(buildings)} "
-        f"merged={merged} merged_share={merged_share:.3f} churches={churches} open_blocks={len(opens)} "
-        f"art_tiles={art_tiles} gameplay_mask_tiles={mask_tiles}"
+        f"merged={merged} merged_share={merged_share:.3f} churches={churches} church_by_district={dict(church_by_district)} "
+        f"open_blocks={len(opens)} art_tiles={art_tiles} gameplay_mask_tiles={mask_tiles}"
     )
 
     if args.strict:
@@ -119,7 +122,9 @@ def main():
         if len(crossings)<20:problems.append("too few extension zebra crossings")
         if len(buildings)<220:problems.append(f"only {len(buildings)} extension buildings")
         if merged_share<0.10:problems.append(f"merged-footprint share {merged_share:.1%} < 10%")
-        if churches<3:problems.append(f"only {churches} church landmarks")
+        if churches<4:problems.append(f"only {churches} extension church landmarks")
+        for district in ("new_jersey_extension","upper_manhattan_extension"):
+            if church_by_district[district]<2:problems.append(f"{district} has only {church_by_district[district]} church landmarks")
         if len(opens)<8:problems.append(f"only {len(opens)} intentional open blocks")
 
     if problems:
