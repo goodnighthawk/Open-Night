@@ -5,3 +5,12 @@
 stress_results/
 feedback/next_version/next_version_feedback.csv
 feedback/next_version/screenshots/*.png
+
+# Railway runs the authoritative headless server.  These folders are local
+# map-authoring/reference output only and are not imported by server.py.  The
+# live Pass 19 geometry stays in mapfiles/, while clients already carry the
+# approved rendered art in their matching game build.
+build_previews/
+art_review/
+dev_tools/
+assets/art_review_targets/
