@@ -4,9 +4,10 @@ from __future__ import annotations
 
 The doubled-world generator already supports merged apartment/church lots, but a
 pure hash selection can produce too few churches in a particular deterministic
-layout. This refinement promotes large merged apartment footprints after the
-world build so each land-side extension receives recognizable church landmarks.
-The protected Pass-28 core remains untouched and component scale is unchanged.
+layout. This refinement also widens the protected-core exclusion used during lot
+placement so no extension footprint can straddle the old-city boundary. Each
+land-side extension receives recognizable large church landmarks while the
+Pass-28 core remains untouched and component scale is unchanged.
 """
 
 import csv
@@ -24,6 +25,7 @@ import build_pass29_double_world_v2 as rc1
 
 TARGET_PER_DISTRICT=2
 ELIGIBLE_DISTRICTS=("new_jersey_extension","upper_manhattan_extension")
+CORE_BUILDING_EXCLUSION=380.0
 
 
 def read_rows(path:Path):
@@ -77,7 +79,8 @@ def promote_churches(rows):
 
 def update_manifest(rows,selected):
     path=p29.OUT/"composition_manifest.csv";manifest=p29.pass20.base.read_csv(path)
-    remove={"pass_id","pass29_church_landmarks","pass29_church_landmark_refinement","pass29_church_landmark_rule"}
+    remove={"pass_id","pass29_church_landmarks","pass29_church_landmark_refinement","pass29_church_landmark_rule",
+            "pass29_core_building_exclusion_px"}
     manifest=[r for r in manifest if r.get("key") not in remove and not r.get("key","").startswith("sha256_unified_composition_")]
     church_count=sum(r.get("kind")=="church" for r in rows)
     manifest.extend([
@@ -85,6 +88,7 @@ def update_manifest(rows,selected):
         {"key":"pass29_church_landmarks","value":str(church_count)},
         {"key":"pass29_church_landmark_refinement","value":"true"},
         {"key":"pass29_church_landmark_rule","value":"deterministic_large_merged_footprints_two_per_land_side_v1"},
+        {"key":"pass29_core_building_exclusion_px","value":f"{CORE_BUILDING_EXCLUSION:g}"},
     ])
     for mode in ("day","night"):
         path_mode=p29.OUT/f"unified_composition_{mode}.png"
@@ -93,7 +97,16 @@ def update_manifest(rows,selected):
 
 
 def main():
+    # The base lot placer checked only a candidate centre with an 80 px margin.
+    # Its largest merged footprints can extend ~310 px from the centre, so five
+    # legal-looking lots crossed into the protected core in RC1. Expand only the
+    # lot-placement core predicate; the core art itself is still pasted unchanged.
+    original_core_contains=p29.core_contains
+    def protected_core_contains(x:float,y:float,margin:float=0.0)->bool:
+        return original_core_contains(x,y,max(float(margin),CORE_BUILDING_EXCLUSION))
+    p29.core_contains=protected_core_contains
     rc1.main()
+
     path=p29.SEMANTIC/p29.EXTENSION_BUILDINGS
     rows=read_rows(path)
     selected=promote_churches(rows)
@@ -113,7 +126,7 @@ def main():
     counts=defaultdict(int)
     for row in rows:
         if row.get("kind")=="church":counts[row.get("district","")]+=1
-    print(f"PASS29_RC2_CHURCH_REFINEMENT promoted={len(selected)} churches={sum(counts.values())} by_district={dict(counts)}")
+    print(f"PASS29_RC2_CHURCH_REFINEMENT promoted={len(selected)} churches={sum(counts.values())} by_district={dict(counts)} core_exclusion={CORE_BUILDING_EXCLUSION:g}")
 
 
 if __name__=="__main__":main()
