@@ -12,6 +12,25 @@ if str(HERE) not in sys.path:sys.path.insert(0,str(HERE))
 
 import build_pass27_intentional_open_blocks as pass27
 
+_original_block_features=pass27.block_features
+
+
+def block_features_wide_paths(row):
+    """Make green-space through-routes genuinely useful while preserving layout."""
+    box,features=_original_block_features(row)
+    if row.get("use")!="green_space":
+        return box,features
+    widened=[]
+    for kind,geom in features:
+        if kind=="cycle_path":
+            x0,y0,x1,y1=geom
+            # Original paths are 12 px. Expanding six pixels on each side gives
+            # 24 px paths, enough for a clear two-way ped/cycle through-route.
+            widened.append((kind,(x0-6,y0-6,x1+6,y1+6)))
+        else:
+            widened.append((kind,geom))
+    return box,widened
+
 
 def draw_open_blocks_fixed(output_path:Path, rows, night:bool):
     """Pass-27 renderer with the output path kept distinct from path paint color."""
@@ -69,6 +88,7 @@ def main():
     # The release-candidate workflow builds and audits RC4 first. Avoid rebuilding
     # it a second time; all remaining Pass-27 stages consume that protected output.
     pass27.rc4.main=lambda:None
+    pass27.block_features=block_features_wide_paths
     pass27.draw_open_blocks=draw_open_blocks_fixed
     pass27.main()
 
