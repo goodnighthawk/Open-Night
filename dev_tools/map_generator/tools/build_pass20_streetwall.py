@@ -3,9 +3,9 @@ from __future__ import annotations
 """Pass 20: street-wall/frontage correction on top of the promoted v0.9.0 art baseline.
 
 Roads, bridge geometry, water/green surfaces and crosswalks remain owned by the
-accepted unified generator. This pass only moves legal building footprints toward
-their nearest sidewalk edge, within a conservative bounded shift, then regenerates
-dependent collision/stair semantic rows from the moved footprints.
+accepted unified generator. This pass moves legal building footprints toward (or,
+when necessary, slightly away from) the nearest sidewalk edge, within a bounded
+shift, then regenerates collision/stair semantic rows from the moved footprints.
 """
 
 import math
@@ -22,7 +22,8 @@ import build_v090_release_candidate as v090
 PASS_ID = "pass_20_streetwall_frontage_rc"
 FRONTAGE_AUDIT_CSV = "building_frontage_audit.csv"
 MAX_SHIFT = 64.0
-MIN_CLEAR_GAP = 14.0
+MIN_SIDEWALK_GAP = -8.0  # small raster/render tolerance; asphalt clearance is stricter below
+MIN_ROAD_CLEARANCE = 8.0
 _original_generate_iterated_buildings = base.generate_iterated_buildings
 frontage_rows: list[dict[str, object]] = []
 
@@ -39,33 +40,80 @@ def segment_projection(point, a, b):
     return q, math.hypot(px - q[0], py - q[1])
 
 
-def road_outer_edge(road) -> float:
+def point_rect_distance(point, rect) -> float:
+    px, py = point
+    x, y, w, h = rect
+    dx = max(x - px, 0.0, px - (x + w))
+    dy = max(y - py, 0.0, py - (y + h))
+    return math.hypot(dx, dy)
+
+
+def segment_intersects_rect(a, b, rect) -> bool:
+    x, y, w, h = rect
+    x0, x1 = x, x + w
+    y0, y1 = y, y + h
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    p = (-dx, dx, -dy, dy)
+    q = (a[0] - x0, x1 - a[0], a[1] - y0, y1 - a[1])
+    lo, hi = 0.0, 1.0
+    for pi, qi in zip(p, q):
+        if abs(pi) <= 1e-12:
+            if qi < 0:
+                return False
+            continue
+        r = qi / pi
+        if pi < 0:
+            lo = max(lo, r)
+        else:
+            hi = min(hi, r)
+        if lo > hi:
+            return False
+    return True
+
+
+def segment_rect_distance(a, b, rect) -> float:
+    if segment_intersects_rect(a, b, rect):
+        return 0.0
+    x, y, w, h = rect
+    corners = ((x, y), (x + w, y), (x, y + h), (x + w, y + h))
+    values = [point_rect_distance(a, rect), point_rect_distance(b, rect)]
+    for corner in corners:
+        _, distance = segment_projection(corner, a, b)
+        values.append(distance)
+    return min(values)
+
+
+def road_dimensions(road) -> tuple[float, float, float]:
     lanes = max(1, int(float(road.get("lanes", 1))))
     carriageway_half = max(38.0, lanes * 38.0 + 10.0) * base.ROAD_WIDTH_SCALE * 0.5
     sidewalk = max(28.0, float(road.get("sidewalk_width", 28))) * base.SIDEWALK_SCALE
     curb = max(4.0, float(road.get("curb_width", 4)))
-    return carriageway_half + sidewalk + curb
+    return carriageway_half, sidewalk, curb
 
 
 def nearest_frontage(building, roads, road_points):
     x = float(building["x"]); y = float(building["y"])
     w = float(building["w"]); h = float(building["h"])
+    rect = (x, y, w, h)
     cx = x + w * 0.5; cy = y + h * 0.5
     best = None
     for road in roads:
         if str(road.get("bridge", "false")).lower() == "true":
             continue
         rid = road["road_id"]
+        carriageway_half, sidewalk, curb = road_dimensions(road)
         for a, b in zip(road_points[rid], road_points[rid][1:]):
-            q, center_distance = segment_projection((cx, cy), a, b)
+            center_q, center_distance = segment_projection((cx, cy), a, b)
+            edge_distance = segment_rect_distance(a, b, rect)
             if center_distance <= 1e-9:
-                continue
-            ux = (q[0] - cx) / center_distance
-            uy = (q[1] - cy) / center_distance
-            # Support distance of an axis-aligned footprint along the road-facing normal.
-            facade_radius = abs(ux) * w * 0.5 + abs(uy) * h * 0.5
-            gap = center_distance - facade_radius - road_outer_edge(road)
-            candidate = (gap, center_distance, ux, uy, road)
+                ux, uy = 0.0, 0.0
+            else:
+                ux = (center_q[0] - cx) / center_distance
+                uy = (center_q[1] - cy) / center_distance
+            sidewalk_gap = edge_distance - (carriageway_half + curb + sidewalk)
+            road_clearance = edge_distance - (carriageway_half + curb)
+            candidate = (edge_distance, sidewalk_gap, road_clearance, ux, uy, road)
             if best is None or candidate[0] < best[0]:
                 best = candidate
     return best
@@ -82,12 +130,12 @@ def overlaps(a, b, clearance=6.0) -> bool:
 
 def target_frontage_gap(building, road) -> float:
     if building.get("building_kind") == "church_landmark":
-        return 46.0
+        return 34.0
     district = building.get("district", "")
     highway = str(road.get("highway", "residential"))
     if district == "washington_heights":
-        return 18.0 if highway in {"primary", "secondary"} else 22.0
-    return 24.0 if highway in {"primary", "secondary"} else 30.0
+        return 6.0 if highway in {"primary", "secondary"} else 10.0
+    return 10.0 if highway in {"primary", "secondary"} else 16.0
 
 
 def rewrite_semantics(buildings, deltas) -> None:
@@ -129,7 +177,6 @@ def generate_pass20_buildings(roads, road_points):
     buildings, parcel_uses = _original_generate_iterated_buildings(roads, road_points)
     frontage_rows.clear()
 
-    # Test against every current footprint; accepted moves replace the live box.
     boxes = {
         row["id"]: [float(row["x"]), float(row["y"]), float(row["w"]), float(row["h"])]
         for row in buildings
@@ -142,19 +189,25 @@ def generate_pass20_buildings(roads, road_points):
         if nearest is None:
             deltas[bid] = (0.0, 0.0)
             continue
-        gap_before, _, ux, uy, road = nearest
+        _, gap_before, road_clear_before, ux, uy, road = nearest
         target = target_frontage_gap(building, road)
-        desired_shift = max(0.0, min(MAX_SHIFT, gap_before - target))
+
+        # Positive correction moves toward the street. Negative correction backs a
+        # footprint away from an over-tight sidewalk edge. Either direction is bounded.
+        correction = max(-MAX_SHIFT, min(MAX_SHIFT, gap_before - target))
+        direction = 1.0 if correction >= 0 else -1.0
+        desired_shift = abs(correction)
         accepted_shift = 0.0
 
-        # Keep a modest minimum outside the full road+curb+sidewalk envelope.
-        # If a neighboring footprint limits a move, progressively reduce it rather
-        # than changing road geometry or creating a new collision overlap.
         trial = desired_shift
         current = boxes[bid]
         while trial > 0.5:
-            candidate = [current[0] + ux * trial, current[1] + uy * trial, current[2], current[3]]
-            left, top, width, height = candidate
+            candidate = [
+                current[0] + ux * direction * trial,
+                current[1] + uy * direction * trial,
+                current[2], current[3],
+            ]
+            left, _, width, _ = candidate
             right = left + width
             if left < base.HUDSON_EAST_X and right > base.HUDSON_WEST_X:
                 trial *= 0.5
@@ -166,7 +219,7 @@ def generate_pass20_buildings(roads, road_points):
             if collision:
                 trial *= 0.5
                 continue
-            accepted_shift = trial
+            accepted_shift = trial * direction
             boxes[bid] = candidate
             break
 
@@ -176,15 +229,19 @@ def generate_pass20_buildings(roads, road_points):
         building["y"] = round(float(building["y"]) + dy, 2)
         building["stair_x"] = round(float(building["stair_x"]) + dx, 2)
         building["stair_y"] = round(float(building["stair_y"]) + dy, 2)
-        building["generation_rule"] = "pass20_sidewalk_addressed_streetwall_v1"
+        building["generation_rule"] = "pass20_sidewalk_addressed_streetwall_v2"
         deltas[bid] = (dx, dy)
 
         after = nearest_frontage(building, roads, road_points)
-        gap_after = after[0] if after is not None else gap_before
+        if after is None:
+            gap_after = gap_before
+            road_clear_after = road_clear_before
+        else:
+            _, gap_after, road_clear_after, _, _, _ = after
         intentional = building.get("building_kind") == "church_landmark"
-        addressed = gap_after <= target + 12.0
-        safe = gap_after >= MIN_CLEAR_GAP - 1e-6
-        status = "pass" if addressed and safe else ("clearance_limited" if safe else "road_overlap_risk")
+        addressed = MIN_SIDEWALK_GAP - 1e-6 <= gap_after <= target + 14.0
+        safe = road_clear_after >= MIN_ROAD_CLEARANCE - 1e-6
+        status = "pass" if addressed and safe else ("frontage_limited" if safe else "road_overlap_risk")
         frontage_rows.append({
             "building_id": bid,
             "district": building.get("district", ""),
@@ -193,10 +250,13 @@ def generate_pass20_buildings(roads, road_points):
             "road_class": road.get("highway", ""),
             "gap_before": round(gap_before, 2),
             "gap_after": round(gap_after, 2),
+            "road_clearance_before": round(road_clear_before, 2),
+            "road_clearance_after": round(road_clear_after, 2),
             "target_gap": round(target, 2),
             "shift_x": round(dx, 2),
             "shift_y": round(dy, 2),
-            "shift_distance": round(accepted_shift, 2),
+            "shift_distance": round(abs(accepted_shift), 2),
+            "shift_direction": "toward_street" if accepted_shift > 0 else ("away_from_street" if accepted_shift < 0 else "unchanged"),
             "frontage_class": "intentional_setback" if intentional else "ordinary_urban",
             "addressed": "true" if addressed else "false",
             "safe_clearance": "true" if safe else "false",
@@ -207,8 +267,8 @@ def generate_pass20_buildings(roads, road_points):
     base.write_csv(
         base.SEMANTIC / FRONTAGE_AUDIT_CSV,
         ("building_id", "district", "building_kind", "road_id", "road_class", "gap_before", "gap_after",
-         "target_gap", "shift_x", "shift_y", "shift_distance", "frontage_class", "addressed",
-         "safe_clearance", "status"),
+         "road_clearance_before", "road_clearance_after", "target_gap", "shift_x", "shift_y", "shift_distance",
+         "shift_direction", "frontage_class", "addressed", "safe_clearance", "status"),
         frontage_rows,
     )
     return buildings, parcel_uses
@@ -220,7 +280,8 @@ def update_manifest() -> None:
     remove = {
         "pass_id", "streetwall_frontage_pass", "streetwall_frontage_rule",
         "streetwall_frontage_rows", "ordinary_frontage_addressed_share",
-        "streetwall_max_shift_world", "streetwall_min_clear_gap_world",
+        "streetwall_max_shift_world", "streetwall_min_sidewalk_gap_world",
+        "streetwall_min_road_clearance_world",
     }
     rows = [row for row in rows if row.get("key") not in remove]
     ordinary = [r for r in frontage_rows if r["frontage_class"] == "ordinary_urban"]
@@ -229,11 +290,12 @@ def update_manifest() -> None:
     rows.extend([
         {"key": "pass_id", "value": PASS_ID},
         {"key": "streetwall_frontage_pass", "value": "true"},
-        {"key": "streetwall_frontage_rule", "value": "nearest_legal_sidewalk_edge_bounded_shift_v1"},
+        {"key": "streetwall_frontage_rule", "value": "exact_segment_to_footprint_sidewalk_address_v2"},
         {"key": "streetwall_frontage_rows", "value": str(len(frontage_rows))},
         {"key": "ordinary_frontage_addressed_share", "value": f"{share:.4f}"},
         {"key": "streetwall_max_shift_world", "value": str(MAX_SHIFT)},
-        {"key": "streetwall_min_clear_gap_world", "value": str(MIN_CLEAR_GAP)},
+        {"key": "streetwall_min_sidewalk_gap_world", "value": str(MIN_SIDEWALK_GAP)},
+        {"key": "streetwall_min_road_clearance_world", "value": str(MIN_ROAD_CLEARANCE)},
     ])
     base.write_csv(path, ("key", "value"), rows)
 
@@ -252,7 +314,7 @@ def main() -> None:
     print(
         f"PASS20_STREETWALL buildings={len(frontage_rows)} "
         f"ordinary_addressed={len(addressed)}/{len(ordinary)} "
-        f"safe_clearance={len(safe)}/{len(frontage_rows)} max_shift={MAX_SHIFT:g}"
+        f"road_safe={len(safe)}/{len(frontage_rows)} max_shift={MAX_SHIFT:g}"
     )
 
 
