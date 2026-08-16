@@ -25,7 +25,7 @@ echo If it fails, this window will remain open and show the traceback.
 echo Crash log: %CLIENT_LOG%
 echo.
 
-".venv\Scripts\python.exe" -u client.py >"%CLIENT_LOG%" 2>&1
+".venv\Scripts\python.exe" -u portrait_head_client.py >"%CLIENT_LOG%" 2>&1
 set "CLIENT_RC=%ERRORLEVEL%"
 
 if "%CLIENT_RC%"=="0" (
