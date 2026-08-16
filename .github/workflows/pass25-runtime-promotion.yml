@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install map renderer dependency
-        run: python -m pip install 'Pillow>=10,<13'
+      - name: Install map and multiplayer test dependencies
+        run: python -m pip install 'Pillow>=10,<13' 'websockets>=16,<18'
 
       - name: Rebuild and promote frozen Pass 25
         run: python dev_tools/map_generator/tools/promote_pass25_release.py
