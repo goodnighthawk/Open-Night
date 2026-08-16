@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - 'dev_tools/map_generator/tools/build_pass28_sidewalk_continuity.py'
+      - 'dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py'
       - 'tools/pass28_sidewalk_continuity_audit.py'
+      - 'tools/pass28_sidewalk_continuity_audit_v2.py'
       - '.github/workflows/pass28-sidewalk-continuity-release-candidate.yml'
   workflow_dispatch:
 
@@ -49,9 +51,9 @@ jobs:
         run: python tools/pass27_open_block_audit.py --strict
 
       - name: Apply Pass 28 final sidewalk continuity repair
-        run: python dev_tools/map_generator/tools/build_pass28_sidewalk_continuity.py
-      - name: Run Pass 28 sidewalk continuity gate
-        run: python tools/pass28_sidewalk_continuity_audit.py --strict
+        run: python dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py
+      - name: Run Pass 28 junction-aware sidewalk continuity gate
+        run: python tools/pass28_sidewalk_continuity_audit_v2.py --strict
 
       - name: Verify protected geometry and Pass 27/28 contracts
         shell: bash
@@ -67,7 +69,7 @@ jobs:
           test -f "$OUT/gameplay_masks/walkable_mask_master.png"
           test -f "$OUT/gameplay_masks/cycle_mask_master.png"
           test -f "$OUT/semantic/intentional_open_blocks_pass27.csv"
-          grep -q 'pass_28_sidewalk_continuity_rc1' "$OUT/composition_manifest.csv"
+          grep -q 'pass_28_sidewalk_continuity_rc2' "$OUT/composition_manifest.csv"
           python - <<'PY'
           import csv
           from pathlib import Path
@@ -87,15 +89,17 @@ jobs:
               'pass27_open_blocks':'6','pass27_green_blocks':'3','pass27_car_park_blocks':'3',
               'pass27_blank_block_policy':'classified_green_or_car_park_whole_blocks_only',
               'pass27_mask_consistency':'final_open_block_art_and_gameplay_masks_paired',
-              'pass_id':'pass_28_sidewalk_continuity_rc1',
+              'pass_id':'pass_28_sidewalk_continuity_rc2',
               'pass28_sidewalk_continuity':'true',
-              'pass28_sidewalk_rule':'canonical_visual_ribbon_repaint_after_final_art_then_redress_v1',
+              'pass28_sidewalk_rule':'canonical_visual_ribbon_repaint_after_final_art_then_redress_junction_aware_v2',
               'pass28_failed_roads':'0',
           }
           bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
           assert not bad, f'Pass 28 protected contract changed: {bad}'
           assert int(m['pass26_total_crossings']) > int(m['compact_approach_crossings'])
           assert int(m['pass26_gameplay_mask_tiles']) == 128
+          assert int(m['pass28_repaired_pixels']) > 500
+          assert int(m['pass28_excluded_junction_samples']) > 20
           print('PASS28_PROTECTED_GEOMETRY_GATE=PASS')
           PY
 
