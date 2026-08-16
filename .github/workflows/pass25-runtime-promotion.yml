@@ -90,9 +90,9 @@ jobs:
             versioning.py \
             RELEASE_NOTES_OPEN_NIGHT_v0.8.2.md \
             qa/map_visual_convergence.csv \
-            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip \
             mapfiles/data/map_001_gwb_corridor \
             dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor
+          git add -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip
           if git diff --cached --quiet; then
             echo 'Pass 25 runtime package already committed.'
           else
