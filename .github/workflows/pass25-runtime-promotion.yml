@@ -1,0 +1,114 @@
+name: Open Night v0.8.2 Pass 25 Runtime Promotion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev_tools/map_generator/tools/promote_pass25_release.py'
+      - 'tools/pass25_runtime_promotion_audit.py'
+      - '.github/workflows/pass25-runtime-promotion.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote-pass25-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install map and multiplayer test dependencies
+        run: python -m pip install 'Pillow>=10,<13' 'websockets>=16,<18'
+
+      - name: Rebuild and promote frozen Pass 25
+        run: python dev_tools/map_generator/tools/promote_pass25_release.py
+
+      - name: Preserve Pass 20 frontage gate
+        run: python tools/pass20_frontage_audit.py --strict
+      - name: Preserve Pass 21 component scale gate
+        run: python tools/building_component_scale_audit.py --strict
+      - name: Preserve Pass 22 modular detail gate
+        run: python tools/building_modular_detail_audit.py --strict
+      - name: Preserve Pass 22b massing gate
+        run: python tools/building_massing_convergence_audit.py --strict
+      - name: Preserve Pass 23 street-detail gate
+        run: python tools/street_detail_density_audit.py --strict
+      - name: Preserve Pass 24 landmark gate
+        run: python tools/landmark_pass24_audit.py --strict
+      - name: Preserve Pass 25 convergence gate
+        run: python tools/map_visual_convergence_audit.py --strict
+
+      - name: Audit promoted runtime package
+        run: python tools/pass25_runtime_promotion_audit.py
+
+      - name: Validate runtime map files
+        run: python tools/validate_mapfiles.py
+
+      - name: Validate map scale and bicycle safety
+        run: python tools/map_scale_bicycle_audit.py
+
+      - name: Validate single multiplayer map roster
+        run: python tools/multiplayer_map_roster_audit.py
+
+      - name: Validate multilevel map contract
+        run: python tools/multilevel_map_audit.py
+
+      - name: Render packaged runtime composition
+        run: python tools/render_default_map_preview.py | tee pass25_runtime_preview.txt
+
+      - name: Check packaged preview matches approved Pass 25 master
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          text=Path('pass25_runtime_preview.txt').read_text(encoding='utf-8')
+          values=[float(x) for x in re.findall(r'mean_rgb_error_vs_approved=([0-9.]+)',text)]
+          assert len(values)==2, values
+          assert max(values) <= 0.02, values
+          print('PASS25_RUNTIME_VISUAL_MATCH_GATE=PASS', values)
+          PY
+
+      - name: Commit promoted v0.8.2 runtime assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Open Night Map Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            VERSION.txt \
+            versioning.py \
+            RELEASE_NOTES_OPEN_NIGHT_v0.8.2.md \
+            qa/map_visual_convergence.csv \
+            mapfiles/data/map_001_gwb_corridor \
+            dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor
+          git add -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip
+          if git diff --cached --quiet; then
+            echo 'Pass 25 runtime package already committed.'
+          else
+            git commit -m 'Open Night v0.8.2 — promote Pass 25 default map'
+            git push origin HEAD:main
+          fi
+
+      - name: Upload packaged runtime preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v0.8.2-pass25-runtime-preview
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build_previews/open_night_v0_8_0_default_map_day.png
+            build_previews/open_night_v0_8_0_default_map_night.png
+            pass25_runtime_preview.txt
+            qa/map_visual_convergence.csv

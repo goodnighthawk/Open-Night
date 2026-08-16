@@ -1,0 +1,100 @@
+name: Open Night Pass 22 Modular Buildings Release Candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev_tools/map_generator/tools/build_pass22_modular_buildings.py'
+      - 'dev_tools/map_generator/tools/build_pass21_component_scale.py'
+      - 'dev_tools/map_generator/tools/build_pass20_streetwall*.py'
+      - 'dev_tools/map_generator/tools/build_v090_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19b_frontage_release_candidate.py'
+      - 'dev_tools/map_generator/tools/build_pass19_art_convergence.py'
+      - 'dev_tools/map_generator/tools/build_unified_composition.py'
+      - 'tools/building_modular_detail_audit.py'
+      - 'tools/building_component_scale_audit.py'
+      - 'tools/pass20_frontage_audit.py'
+      - 'config/environment_component_scale.csv'
+      - '.github/workflows/pass22-modular-buildings-release-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pass22-map-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install renderer dependency
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Build Pass 22 modular-building candidate
+        run: python dev_tools/map_generator/tools/build_pass22_modular_buildings.py
+
+      - name: Preserve Pass 20 frontage gate
+        run: python tools/pass20_frontage_audit.py --strict
+
+      - name: Preserve Pass 21 scale gate
+        run: python tools/building_component_scale_audit.py --strict
+
+      - name: Run Pass 22 modular-detail gate
+        run: python tools/building_modular_detail_audit.py --strict
+
+      - name: Verify protected geometry and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=dev_tools/map_generator/profiles/gwb_gameplay/unified_composition
+          test -f "$OUT/unified_composition_day.png"
+          test -f "$OUT/unified_composition_night.png"
+          test -f "$OUT/semantic/building_modules.csv"
+          test -f "$OUT/semantic/building_module_signatures.csv"
+          grep -q 'pass_22_modular_building_details_rc1' "$OUT/composition_manifest.csv"
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv')
+          with p.open(encoding='utf-8-sig',newline='') as f:
+              m={r['key']:r['value'] for r in csv.DictReader(f)}
+          expected={
+              'selected_gameplay_roads':'38',
+              'road_segments':'157',
+              'angled_road_segments':'96',
+              't_junctions':'23',
+              'compact_approach_crossings':'242',
+              'non_bridge_hudson_violations':'0',
+              'component_scale_failures':'0',
+              'modular_building_detail_pass':'true',
+              'building_module_scale_mode':'fixed_world_scale_1.0',
+              'church_module_variants':'3',
+          }
+          bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
+          assert not bad, f'Pass 22 protected contract changed: {bad}'
+          print('PASS22_PROTECTED_GEOMETRY_GATE=PASS')
+          PY
+
+      - name: Upload Pass 22 visual-review bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-pass22-modular-buildings-visual-review
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_day.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_night.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_modules.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_module_signatures.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_component_scale_audit.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_frontage_audit.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/iterated_buildings.csv

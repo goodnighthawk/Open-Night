@@ -1,0 +1,101 @@
+name: Open Night Pass 25 Visual Convergence Release Candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev_tools/map_generator/tools/build_pass25_visual_convergence.py'
+      - 'dev_tools/map_generator/tools/build_pass24_landmarks.py'
+      - 'dev_tools/map_generator/tools/build_pass23_street_detail.py'
+      - 'dev_tools/map_generator/tools/build_pass22b_massing_convergence.py'
+      - 'dev_tools/map_generator/tools/build_pass22_modular_buildings.py'
+      - 'dev_tools/map_generator/tools/build_pass21_component_scale.py'
+      - 'dev_tools/map_generator/tools/build_pass20_streetwall*.py'
+      - 'dev_tools/map_generator/tools/build_unified_composition.py'
+      - 'tools/map_visual_convergence_audit.py'
+      - 'tools/landmark_pass24_audit.py'
+      - 'tools/street_detail_density_audit.py'
+      - 'tools/building_massing_convergence_audit.py'
+      - 'tools/building_modular_detail_audit.py'
+      - 'tools/building_component_scale_audit.py'
+      - 'tools/pass20_frontage_audit.py'
+      - '.github/workflows/pass25-visual-convergence-release-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pass25-map-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install renderer dependency
+        run: python -m pip install 'Pillow>=10,<13'
+      - name: Build Pass 25 final convergence candidate
+        run: python dev_tools/map_generator/tools/build_pass25_visual_convergence.py
+      - name: Preserve Pass 20 frontage gate
+        run: python tools/pass20_frontage_audit.py --strict
+      - name: Preserve Pass 21 scale gate
+        run: python tools/building_component_scale_audit.py --strict
+      - name: Preserve Pass 22 modular detail gate
+        run: python tools/building_modular_detail_audit.py --strict
+      - name: Preserve Pass 22b massing gate
+        run: python tools/building_massing_convergence_audit.py --strict
+      - name: Preserve Pass 23 street-detail gate
+        run: python tools/street_detail_density_audit.py --strict
+      - name: Preserve Pass 24 landmark gate
+        run: python tools/landmark_pass24_audit.py --strict
+      - name: Run Pass 25 visual convergence gate
+        run: python tools/map_visual_convergence_audit.py --strict
+      - name: Verify protected geometry and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=dev_tools/map_generator/profiles/gwb_gameplay/unified_composition
+          test -f "$OUT/unified_composition_day.png"
+          test -f "$OUT/unified_composition_night.png"
+          test -f qa/map_visual_convergence.csv
+          test -f qa/pass25_screenshots/01_whole_day.png
+          grep -q 'pass_25_final_visual_convergence_rc1' "$OUT/composition_manifest.csv"
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv')
+          with p.open(encoding='utf-8-sig',newline='') as f:m={r['key']:r['value'] for r in csv.DictReader(f)}
+          expected={
+              'selected_gameplay_roads':'38','road_segments':'157','angled_road_segments':'96',
+              't_junctions':'23','compact_approach_crossings':'242','non_bridge_hudson_violations':'0',
+              'component_scale_failures':'0','modular_building_detail_pass':'true',
+              'modular_massing_convergence_pass':'true','street_detail_density_pass':'true',
+              'hand_authored_landmark_pass':'true','final_visual_convergence_pass':'true',
+              'visual_convergence_failures':'0',
+          }
+          bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
+          assert not bad, f'Pass 25 protected contract changed: {bad}'
+          print('PASS25_PROTECTED_GEOMETRY_GATE=PASS')
+          PY
+      - name: Upload Pass 25 final visual-review bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-pass25-final-visual-convergence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_day.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_night.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/landmarks_pass24.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/street_detail_pass23.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_modular_massing.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_modules.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/building_frontage_audit.csv
+            qa/map_visual_convergence.csv
+            qa/pass25_screenshots/*.png

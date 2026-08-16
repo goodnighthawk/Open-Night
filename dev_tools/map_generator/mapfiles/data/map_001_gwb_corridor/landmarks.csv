@@ -2,3 +2,16 @@
 gwb,George Washington Bridge,bridge,7680,6144
 fort_lee,Fort Lee,district,2400,5600
 washington_heights,Washington Heights,district,13200,5600
+gwb_west_portal,Gwb West Gateway,bridge_portal,4660.0,6144.0
+gwb_west_tower,Gwb West Tower Support,bridge_tower,6516.0,6144.0
+gwb_east_tower,Gwb East Tower Support,bridge_tower,9076.0,6144.0
+gwb_east_portal,Gwb East Gateway,bridge_portal,10770.0,6144.0
+fort_lee_main_corner,Fort Lee Gwb Commercial Corner,commercial_corner,1889.17,6607.58
+fort_lee_bluff_complex,Fort Lee Bluff Transition,bluff_complex,3968.0,7769.14
+fort_lee_residential_row,Fort Lee Distinctive Residential Row,residential_row,1880.91,8643.26
+wh_broadway_181_corner,Washington Heights Broadway 181 Corner,commercial_corner,12641.35,5054.85
+wh_gwb_broadway_corner,Washington Heights Gwb Broadway Corner,dense_corner,12768.0,6602.46
+wh_168th_roof_row,Washington Heights 168Th Roof Row,residential_row,14304.0,7416.04
+church_landmark_01,Old Parish Church,church,11744.0,3216.0
+church_landmark_02,Stone Steeple Church,church,12670.01,5712.12
+church_landmark_03,Courtyard Basilica,church,16034.94,7973.77

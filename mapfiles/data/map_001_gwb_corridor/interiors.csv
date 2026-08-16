@@ -1,11 +1,11 @@
 ﻿id,name,kind,entry_x,entry_y,building_id,door_hint
-starter_apartment,Starter Apartment,apartment,62.8,2400.0,block_building_0001,west_collision_frontage
-corner_shop,Bridge Corner Store,shop,718.0,2412.0,block_building_0002,west_collision_frontage
-night_diner,Open Night Diner,diner,1450.0,2400.0,block_building_0003,west_collision_frontage
-pharmacy,Hudson Pharmacy,shop,10958.0,2368.0,block_building_0004,west_collision_frontage
-laundromat,24 Hour Laundromat,shop,12174.0,2380.0,block_building_0005,west_collision_frontage
-pawn_shop,Pawn & Exchange,shop,12555.6,6560.0,block_building_0049,west_collision_frontage
-garage,Riverside Garage,garage,13277.2,6560.0,block_building_0050,west_collision_frontage
-nightclub,After Hours Club,club,13966.0,6624.0,block_building_0051,west_collision_frontage
-warehouse_office,Warehouse Office,office,14862.0,6592.0,block_building_0052,west_collision_frontage
-rooftop_loft,Washington Heights Loft,apartment,15758.0,6604.0,block_building_0053,west_collision_frontage
+starter_apartment,Starter Apartment,apartment,62.8,2386.42,block_building_0001,west_collision_frontage
+corner_shop,Bridge Corner Store,shop,717.93,2413.62,block_building_0002,west_collision_frontage
+night_diner,Open Night Diner,diner,1451.62,2400.0,block_building_0003,west_collision_frontage
+pharmacy,Hudson Pharmacy,shop,10961.73,2412.71,block_building_0004,west_collision_frontage
+laundromat,24 Hour Laundromat,shop,12139.63,2385.73,block_building_0005,west_collision_frontage
+pawn_shop,Pawn & Exchange,shop,12555.6,6602.46,block_building_0049,west_collision_frontage
+garage,Riverside Garage,garage,13277.2,6596.06,block_building_0050,west_collision_frontage
+nightclub,After Hours Club,club,13968.48,6646.32,block_building_0051,west_collision_frontage
+warehouse_office,Warehouse Office,office,14862.14,6593.25,block_building_0052,west_collision_frontage
+rooftop_loft,Washington Heights Loft,apartment,15758.38,6599.12,block_building_0053,west_collision_frontage

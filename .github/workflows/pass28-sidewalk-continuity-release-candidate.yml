@@ -1,0 +1,123 @@
+name: Open Night Pass 28 Sidewalk Continuity Release Candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev_tools/map_generator/tools/build_pass28_sidewalk_continuity.py'
+      - 'dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py'
+      - 'tools/pass28_sidewalk_continuity_audit.py'
+      - 'tools/pass28_sidewalk_continuity_audit_v2.py'
+      - '.github/workflows/pass28-sidewalk-continuity-release-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pass28-map-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install renderer dependency
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Build protected Pass 26 RC4 base
+        run: python dev_tools/map_generator/tools/build_pass26_art_first_world_v4.py
+      - name: Preserve Pass 20 frontage gate
+        run: python tools/pass20_frontage_audit.py --strict
+      - name: Preserve Pass 21 component-scale gate
+        run: python tools/building_component_scale_audit.py --strict
+      - name: Preserve Pass 22 modular-detail gate
+        run: python tools/building_modular_detail_audit.py --strict
+      - name: Preserve Pass 22b massing gate
+        run: python tools/building_massing_convergence_audit.py --strict
+      - name: Preserve Pass 23 detail and full tree-base road gate
+        run: python tools/street_detail_density_audit.py --strict
+      - name: Preserve Pass 24 landmark gate
+        run: python tools/landmark_pass24_audit.py --strict
+      - name: Preserve Pass 26 art-first world gate
+        run: python tools/art_first_world_audit.py --strict
+
+      - name: Apply protected Pass 27 intentional open blocks
+        run: python dev_tools/map_generator/tools/build_pass27_from_pass26.py
+      - name: Preserve Pass 27 open-block gate
+        run: python tools/pass27_open_block_audit.py --strict
+
+      - name: Apply Pass 28 final sidewalk continuity repair
+        run: python dev_tools/map_generator/tools/build_pass28_sidewalk_continuity_v2.py
+      - name: Run Pass 28 junction-aware sidewalk continuity gate
+        run: python tools/pass28_sidewalk_continuity_audit_v2.py --strict
+
+      - name: Verify protected geometry and Pass 27/28 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=dev_tools/map_generator/profiles/gwb_gameplay/unified_composition
+          test -f "$OUT/unified_composition_day.png"
+          test -f "$OUT/unified_composition_night.png"
+          test -f "$OUT/sidewalk_repair_mask_pass28.png"
+          test -f "$OUT/semantic/sidewalk_continuity_pass28.csv"
+          test -f "$OUT/gameplay_masks/collision_mask_master.png"
+          test -f "$OUT/gameplay_masks/solid_mask_master.png"
+          test -f "$OUT/gameplay_masks/walkable_mask_master.png"
+          test -f "$OUT/gameplay_masks/cycle_mask_master.png"
+          test -f "$OUT/semantic/intentional_open_blocks_pass27.csv"
+          grep -q 'pass_28_sidewalk_continuity_rc2' "$OUT/composition_manifest.csv"
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv')
+          with p.open(encoding='utf-8-sig',newline='') as f:m={r['key']:r['value'] for r in csv.DictReader(f)}
+          expected={
+              'selected_gameplay_roads':'38','road_segments':'157','angled_road_segments':'96',
+              't_junctions':'23','non_bridge_hudson_violations':'0',
+              'component_scale_failures':'0','modular_building_detail_pass':'true',
+              'modular_massing_convergence_pass':'true','street_detail_density_pass':'true',
+              'hand_authored_landmark_pass':'true','art_first_world_pass':'true',
+              'art_first_collision_mode':'paired_semantic_masks_after_final_art',
+              'pass26_tree_base_full_footprint_gate':'true',
+              'pass26_detailed_massing_art':'true',
+              'pass26_massing_art_rule':'fixed_scale_textured_roof_complex_rc4',
+              'pass27_intentional_open_blocks':'true',
+              'pass27_open_blocks':'6','pass27_green_blocks':'3','pass27_car_park_blocks':'3',
+              'pass27_blank_block_policy':'classified_green_or_car_park_whole_blocks_only',
+              'pass27_mask_consistency':'final_open_block_art_and_gameplay_masks_paired',
+              'pass_id':'pass_28_sidewalk_continuity_rc2',
+              'pass28_sidewalk_continuity':'true',
+              'pass28_sidewalk_rule':'canonical_visual_ribbon_repaint_after_final_art_then_redress_junction_aware_v2',
+              'pass28_failed_roads':'0',
+          }
+          bad={k:(m.get(k),v) for k,v in expected.items() if m.get(k)!=v}
+          assert not bad, f'Pass 28 protected contract changed: {bad}'
+          assert int(m['pass26_total_crossings']) > int(m['compact_approach_crossings'])
+          assert int(m['pass26_gameplay_mask_tiles']) == 128
+          assert int(m['pass28_repaired_pixels']) > 500
+          assert int(m['pass28_excluded_junction_samples']) > 20
+          print('PASS28_PROTECTED_GEOMETRY_GATE=PASS')
+          PY
+
+      - name: Upload Pass 28 sidewalk review bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-pass28-sidewalk-continuity-review
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_day.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/unified_composition_night.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/composition_manifest.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/sidewalk_repair_mask_pass28.png
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/sidewalk_continuity_pass28.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/intentional_open_blocks_pass27.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/suppressed_buildings_pass27.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/semantic/street_detail_pass23.csv
+            dev_tools/map_generator/profiles/gwb_gameplay/unified_composition/gameplay_masks/*.png
+            qa/pass28_screenshots/*.png
