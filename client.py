@@ -2476,7 +2476,7 @@ class Game:
         title_text = str(self.map_config.get("name", "WORLD MAP")).upper()
         title = self.big_font.render(title_text, True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 18, panel.y + 12))
-        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: other online players", True, MUTED_TEXT)
+        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: players | supplier/buyer: job markers", True, MUTED_TEXT)
         self.screen.blit(subtitle, (panel.x + 20, panel.y + 46))
 
         available = pygame.Rect(panel.x + 20, panel.y + 72, max(64, panel.width - 40), max(64, panel.height - 102))
@@ -2535,6 +2535,25 @@ class Game:
             ).clip(map_rect)
             if interest_rect.width > 0 and interest_rect.height > 0:
                 pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
+
+        # Job-economy locations are client-side map UI, not baked map text. This
+        # keeps labels horizontal/readable and makes supplier/buyer destinations
+        # visible regardless of camera rotation or nearby-player interest culling.
+        for raw_pos, marker_color, marker_label in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER"),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER"),
+        ):
+            try:
+                p = mp_dynamic(float(raw_pos[0]), float(raw_pos[1]))
+            except (TypeError, ValueError, IndexError, KeyError):
+                p = None
+            if p is not None and map_rect.collidepoint(p):
+                pygame.draw.circle(self.screen, (12, 13, 13), p, 8)
+                pygame.draw.circle(self.screen, marker_color, p, 6)
+                label = self.tiny_font.render(marker_label, True, marker_color)
+                label_rect = label.get_rect(midleft=(p[0] + 8, p[1]))
+                pygame.draw.rect(self.screen, (18, 21, 22), label_rect.inflate(4, 2), border_radius=2)
+                self.screen.blit(label, label_rect)
 
         for pid, marker in self.map_players.items():
             if pid == self.local_id:
@@ -3357,6 +3376,22 @@ class Game:
         pygame.draw.circle(circle_mask, (255,255,255,255), (radius,radius), radius-3)
         mini.blit(circle_mask, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
         pygame.draw.circle(mini, border, (radius,radius), radius-2, width=7)
+        # Supplier and buyer are gameplay destinations, so they remain visible
+        # on the private/friend-focused minimap whenever they are in local range.
+        for raw_pos, marker_color in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR),
+        ):
+            try:
+                dx = float(raw_pos[0]) - local.render_x
+                dy = float(raw_pos[1]) - local.render_y
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if dx * dx + dy * dy <= (world_radius * 0.94) ** 2:
+                marker_pos = (int(radius + dx * scale), int(radius + dy * scale))
+                pygame.draw.circle(mini, (18, 24, 28), marker_pos, 7)
+                pygame.draw.circle(mini, marker_color, marker_pos, 5)
+
         # The compact minimap is deliberately private/friend-focused. The full
         # M map retains the complete online roster for general orientation.
         for pid, marker in self.map_players.items():
