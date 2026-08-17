@@ -23,9 +23,15 @@ replace_once(
     'subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: players | supplier/buyer: job markers", True, MUTED_TEXT)',
 )
 
-world_anchor = '''        for pid, marker in self.map_players.items():
+world_anchor = '''            if interest_rect.width > 0 and interest_rect.height > 0:
+                pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
+
+        for pid, marker in self.map_players.items():
 '''
-world_markers = '''        # Job-economy locations are client-side map UI, not baked map text. This
+world_markers = '''            if interest_rect.width > 0 and interest_rect.height > 0:
+                pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
+
+        # Job-economy locations are client-side map UI, not baked map text. This
         # keeps labels horizontal/readable and makes supplier/buyer destinations
         # visible regardless of camera rotation or nearby-player interest culling.
         for raw_pos, marker_color, marker_label in (
