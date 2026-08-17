@@ -1,0 +1,264 @@
+name: Open Night v0.9.0 Final Playable Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0.9.0-consolidation
+    paths:
+      - .github/workflows/v090-final-playable-gate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  playable-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fix launcher version identity
+        shell: python
+        run: |
+          from pathlib import Path
+
+          launcher = Path('open_night_launcher.py')
+          text = launcher.read_text(encoding='utf-8')
+          if 'from versioning import version_label' not in text:
+              anchor = 'import time\n\n'
+              if anchor not in text:
+                  raise SystemExit('open_night_launcher import anchor missing')
+              text = text.replace(anchor, 'import time\n\nfrom versioning import version_label\n\n', 1)
+          old = '''APP_TITLE = (\n    "OPEN NIGHT // WORK IN PROGRESS MAP"\n    if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()\n    else "OPEN NIGHT // Launcher"\n)'''
+          new = '''APP_TITLE = (\n    f"{version_label()} // WORK IN PROGRESS MAP"\n    if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()\n    else f"{version_label()} // Launcher"\n)'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('open_night_launcher APP_TITLE anchor missing')
+          launcher.write_text(text, encoding='utf-8')
+
+          server_launcher = Path('server_launcher.py')
+          text = server_launcher.read_text(encoding='utf-8')
+          if 'from versioning import version_label' not in text:
+              anchor = 'from portable_paths import ensure_shared_layout\n'
+              if anchor not in text:
+                  raise SystemExit('server_launcher import anchor missing')
+              text = text.replace(anchor, anchor + 'from versioning import version_label\n', 1)
+          text = text.replace('"server_name": "Open Night v0.8 / Pass 18",', '"server_name": version_label(),')
+          if '"server_name": version_label(),' not in text:
+              raise SystemExit('server launcher version default was not normalized')
+          server_launcher.write_text(text, encoding='utf-8')
+
+      - name: Commit exact candidate before tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Open Night Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          if ! git diff --quiet -- open_night_launcher.py server_launcher.py; then
+            git add open_night_launcher.py server_launcher.py
+            git commit -m 'v0.9: unify launcher release identity [skip ci]'
+          fi
+          echo "TESTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install runtime and QA dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Syntax and exact version identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            versioning.py client.py server.py common.py environment_art.py \
+            open_night_launcher.py open_night_player_launcher.py server_launcher.py \
+            server_directory.py tools/quick_local_test.py
+          python - <<'PY'
+          from pathlib import Path
+          from versioning import GAME_VERSION, version_label
+          import server
+          import open_night_launcher
+          import server_launcher
+
+          assert GAME_VERSION == '0.9.0'
+          assert version_label() == 'Open Night v0.9.0'
+          assert server.SERVER_VERSION == GAME_VERSION
+          assert server.SERVER_NAME.startswith(version_label())
+          assert open_night_launcher.APP_TITLE == f'{version_label()} // Launcher'
+          assert server_launcher._load_config()['server_name'] == version_label()
+          assert 'Open Night v0.9.0' in Path('VERSION.txt').read_text(encoding='utf-8')
+
+          client = Path('client.py').read_text(encoding='utf-8')
+          assert 'from versioning import GAME_VERSION' in client
+          assert '"client_version": GAME_VERSION' in client
+          launcher = Path('open_night_launcher.py').read_text(encoding='utf-8')
+          server_ui = Path('server_launcher.py').read_text(encoding='utf-8')
+          assert 'Open Night v0.8 / Pass 18' not in server_ui
+          assert 'from versioning import version_label' in launcher
+          assert 'from versioning import version_label' in server_ui
+          print('V090_EXACT_VERSION_IDENTITY_OK')
+          PY
+
+      - name: Current v0.9 runtime contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/v090_sidewalk_driveability_audit.py
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          with Path('config/game_settings.csv').open(encoding='utf-8-sig', newline='') as f:
+              rows = list(csv.DictReader(f))
+          cfg = {(r['section'], r['key']): r['value'] for r in rows}
+          assert cfg[('movement','layer_transition_jump_seconds')] == '0.0'
+          assert cfg[('engine','client_profile_version')] == '290'
+          assert float(cfg[('vehicle','player_turn_rate')]) >= 3.6
+          assert int(cfg[('npc','pedestrians_per_route')]) >= 5
+
+          server = Path('server.py').read_text(encoding='utf-8')
+          client = Path('client.py').read_text(encoding='utf-8')
+          art = Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0' in server
+          assert 'deflected = False' in server
+          assert 'HYDRANT_BREAK_MPH = 30.0' in server
+          assert 'HYDRANT_RESPAWN_SECONDS = 300.0' in server
+          assert 'def update_hydrants(now: float)' in server
+          assert '"hydrants": visible_hydrants' in server
+          assert 'npc_kind = "dog"' in server
+          assert 'def draw_dog(' in client
+          assert 'def draw_hydrant_effects(self)' in client
+          assert 'set_hidden_street_props' in client
+          assert 'def set_hidden_street_props(self, prop_ids)' in art
+          assert '(sx + 22, sy - 22)' not in client
+          assert 'index % 4 == 0' in art
+          print('V090_CURRENT_RUNTIME_CONTRACTS_OK')
+          PY
+
+      - name: Pass 25 map identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          paths = [
+              Path('mapfiles/data/map_001_gwb_corridor/map.csv'),
+              Path('dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/map.csv'),
+          ]
+          configs=[]
+          for path in paths:
+              with path.open(encoding='utf-8-sig', newline='') as f:
+                  cfg={r['key']:r['value'] for r in csv.DictReader(f)}
+              assert cfg['id'] == 'map_001_gwb_corridor'
+              assert cfg['release_version'] == '0.9.0'
+              assert cfg['render_pass'] == '25'
+              assert cfg['map_build_id'] == 'open_night_v0_9_0_pass25_default_only'
+              configs.append(cfg)
+          assert configs[0] == configs[1]
+          print('V090_PASS25_MAP_IDENTITY_OK')
+          PY
+
+      - name: Existing map release audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/building_road_audit.py
+          python tools/map_scale_bicycle_audit.py
+          python tools/multilevel_map_audit.py
+          python tools/deterministic_traffic_audit.py
+          python tools/building_art_convergence_audit.py
+
+      - name: Real local WebSocket playable smoke
+        shell: python
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          import asyncio
+          import json
+          import socket
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          from versioning import GAME_VERSION
+
+          root = Path.cwd()
+          port = 8876
+          uri = f'ws://127.0.0.1:{port}'
+          server = subprocess.Popen([
+              sys.executable, '-u', str(root/'server.py'), '--memory-db', '--no-discovery',
+              '--port', str(port), '--map', 'map_001_gwb_corridor', '--traffic', '8',
+          ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          try:
+              deadline = time.monotonic() + 20.0
+              while time.monotonic() < deadline:
+                  if server.poll() is not None:
+                      out = server.stdout.read() if server.stdout else ''
+                      raise SystemExit(f'server exited early ({server.returncode})\n{out}')
+                  with socket.socket() as sock:
+                      sock.settimeout(0.2)
+                      if sock.connect_ex(('127.0.0.1', port)) == 0:
+                          break
+                  time.sleep(0.15)
+              else:
+                  raise SystemExit('server did not open playable smoke port')
+
+              async def smoke():
+                  from websockets.asyncio.client import connect
+                  async with connect(uri, ping_interval=None) as ws:
+                      await ws.send(json.dumps({'type':'probe'}))
+                      info = json.loads(await asyncio.wait_for(ws.recv(), 3.0))
+                      assert info['type'] == 'server_info'
+                      assert info['version'] == GAME_VERSION
+                      assert info['map_id'] == 'map_001_gwb_corridor'
+                  async with connect(uri, ping_interval=None) as ws:
+                      await ws.send(json.dumps({
+                          'type':'hello', 'name':'ReleaseProbe', 'phone':'+15550000900',
+                          'client_version':GAME_VERSION,
+                      }))
+                      welcome = None
+                      snapshot = None
+                      deadline = asyncio.get_running_loop().time() + 5.0
+                      while asyncio.get_running_loop().time() < deadline and (welcome is None or snapshot is None):
+                          msg = json.loads(await asyncio.wait_for(ws.recv(), 3.0))
+                          if msg.get('type') == 'welcome':
+                              welcome = msg
+                              await ws.send(json.dumps({'type':'input','x':0.0,'y':0.0,'aim':0.0}))
+                          elif msg.get('type') == 'snapshot':
+                              snapshot = msg
+                          elif msg.get('type') in {'fatal','error'}:
+                              raise AssertionError(msg)
+                      assert welcome is not None
+                      assert welcome.get('server_version') == GAME_VERSION
+                      assert welcome.get('map', {}).get('id') == 'map_001_gwb_corridor'
+                      assert snapshot is not None
+                      for key in ('players','vehicles','npcs','hydrants','traffic_lights'):
+                          assert key in snapshot, f'missing snapshot field: {key}'
+                      print('V090_REAL_WEBSOCKET_PLAYABLE_SMOKE_OK')
+
+              asyncio.run(smoke())
+          finally:
+              server.terminate()
+              try:
+                  server.wait(timeout=5)
+              except subprocess.TimeoutExpired:
+                  server.kill()
+
+      - name: Push tested candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+          git push origin HEAD:v0.9.0-consolidation
+          echo "PLAYABLE_CANDIDATE_SHA=$TESTED_SHA"
