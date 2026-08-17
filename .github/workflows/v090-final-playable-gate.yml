@@ -149,48 +149,15 @@ jobs:
           python tools/deterministic_traffic_audit.py
           python tools/building_art_convergence_audit.py
 
-      - name: Real local WebSocket playable smoke
-        shell: python
+      - name: Repository playable quick test
+        shell: bash
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: |
-          import asyncio,json,socket,subprocess,sys,time
-          from pathlib import Path
-          from versioning import GAME_VERSION
-          root=Path.cwd(); port=8876; uri=f'ws://127.0.0.1:{port}'
-          process=subprocess.Popen([sys.executable,'-u',str(root/'server.py'),'--memory-db','--no-discovery','--port',str(port),'--map','map_001_gwb_corridor','--traffic','8'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-          try:
-              deadline=time.monotonic()+20
-              while time.monotonic()<deadline:
-                  if process.poll() is not None: raise SystemExit(f'server exited early: {process.stdout.read()}')
-                  with socket.socket() as s:
-                      s.settimeout(.2)
-                      if s.connect_ex(('127.0.0.1',port))==0: break
-                  time.sleep(.15)
-              else: raise SystemExit('server did not open playable smoke port')
-              async def smoke():
-                  from websockets.asyncio.client import connect
-                  async with connect(uri,ping_interval=None) as ws:
-                      await ws.send(json.dumps({'type':'probe'})); info=json.loads(await asyncio.wait_for(ws.recv(),3))
-                      assert info['type']=='server_info' and info['version']==GAME_VERSION and info['map_id']=='map_001_gwb_corridor'
-                  async with connect(uri,ping_interval=None) as ws:
-                      await ws.send(json.dumps({'type':'hello','name':'ReleaseProbe','phone':'+15550000900','client_version':GAME_VERSION}))
-                      welcome=snapshot=None; deadline=asyncio.get_running_loop().time()+5
-                      while asyncio.get_running_loop().time()<deadline and (welcome is None or snapshot is None):
-                          msg=json.loads(await asyncio.wait_for(ws.recv(),3)); kind=msg.get('type')
-                          if kind=='welcome': welcome=msg; await ws.send(json.dumps({'type':'input','x':0.0,'y':0.0,'aim':0.0}))
-                          elif kind=='snapshot': snapshot=msg
-                          elif kind in {'fatal','error'}: raise AssertionError(msg)
-                      assert welcome and welcome.get('server_version')==GAME_VERSION and welcome.get('map',{}).get('id')=='map_001_gwb_corridor'
-                      assert snapshot
-                      for key in ('players','vehicles','npcs','hydrants','traffic_lights'): assert key in snapshot,key
-                      print('V090_REAL_WEBSOCKET_PLAYABLE_SMOKE_OK')
-              asyncio.run(smoke())
-          finally:
-              process.terminate()
-              try: process.wait(timeout=5)
-              except subprocess.TimeoutExpired: process.kill()
+          set -euo pipefail
+          python tools/quick_local_test.py
+          echo V090_QUICK_LOCAL_PLAYABLE_SMOKE_OK
 
       - name: Push tested candidate
         shell: bash
