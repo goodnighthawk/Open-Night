@@ -8,6 +8,13 @@ on:
       - 'tools/build_v100_ground_approval.py'
       - 'mapfiles/data/map_001_gwb_corridor/**'
       - '.github/workflows/v100-ground-art.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/build_v100_art_overlays.py'
+      - 'tools/build_v100_ground_approval.py'
+      - 'mapfiles/data/map_001_gwb_corridor/**'
+      - '.github/workflows/v100-ground-art.yml'
   workflow_dispatch:
 
 permissions:
@@ -50,6 +57,7 @@ jobs:
           retention-days: 30
 
       - name: Commit generated Ground/Night files
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
