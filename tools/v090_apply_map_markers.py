@@ -78,6 +78,76 @@ mini_markers = '''        # Supplier and buyer are gameplay destinations, so the
 '''
 replace_once(mini_anchor, mini_markers)
 
+# Keep the physical destination rings in the rotating world, but move all role
+# text to the post-rotation display layer.  Text baked into world_surface rotates
+# with the camera and becomes hard to read at arbitrary angles.
+replace_once(
+    '''        self.draw_interior_entries()
+        self.draw_location(tuple(self.map_config["supplier_pos"]), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}")
+        self.draw_landmarks()
+''',
+    '''        self.draw_interior_entries()
+        self.draw_location(tuple(self.map_config.get("supplier_pos", SUPPLIER_POS)), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}")
+        self.draw_location(tuple(self.map_config.get("customer_pos", CUSTOMER_POS)), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}")
+        self.draw_landmarks()
+''',
+)
+
+replace_once(
+    '''    def draw_location(self, pos, color, label: str, sublabel: str) -> None:
+        sx, sy = self.world_to_screen(*pos)
+        pygame.draw.circle(self.screen, color, (sx, sy), 34, width=4)
+        pygame.draw.circle(self.screen, color, (sx, sy), 8)
+        self.screen.blit(self.small_font.render(label, True, TEXT_COLOR), self.small_font.render(label, True, TEXT_COLOR).get_rect(center=(sx, sy - 52)))
+        sub = self.small_font.render(sublabel, True, TEXT_COLOR)
+        self.screen.blit(sub, sub.get_rect(center=(sx, sy + 52)))
+
+''',
+    '''    def draw_location(self, pos, color, label: str, sublabel: str) -> None:
+        # Physical destination rings belong to the world.  Role text is drawn
+        # later in draw_job_location_labels() after camera rotation/zoom.
+        sx, sy = self.world_to_screen(*pos)
+        pygame.draw.circle(self.screen, color, (sx, sy), 34, width=4)
+        pygame.draw.circle(self.screen, color, (sx, sy), 8)
+
+    def draw_job_location_labels(self) -> None:
+        """Draw supplier/buyer labels in final screen space so they stay horizontal."""
+        w, h = self.screen.get_size()
+        for raw_pos, color, label, sublabel in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}"),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}"),
+        ):
+            try:
+                sx, sy = self._world_point_to_display(float(raw_pos[0]), float(raw_pos[1]))
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if sx < -90 or sy < -90 or sx > w + 90 or sy > h + 90:
+                continue
+            title = self.small_font.render(label, True, color)
+            sub = self.tiny_font.render(sublabel, True, TEXT_COLOR)
+            title_rect = title.get_rect(center=(sx, sy - 52))
+            sub_rect = sub.get_rect(center=(sx, sy + 52))
+            for surf, rect in ((title, title_rect), (sub, sub_rect)):
+                pygame.draw.rect(self.screen, (18, 21, 22), rect.inflate(8, 4), border_radius=3)
+                self.screen.blit(surf, rect)
+
+''',
+)
+
+replace_once(
+    '''                    # Nameplates are screen-space UI and therefore stay horizontal
+                    # at every camera angle.
+                    self.draw_player_nameplates()
+                    self.draw_hud()
+''',
+    '''                    # Nameplates and job-location labels are screen-space UI and
+                    # therefore stay horizontal at every camera angle.
+                    self.draw_player_nameplates()
+                    self.draw_job_location_labels()
+                    self.draw_hud()
+''',
+)
+
 if text != original:
     PATH.write_text(text, encoding="utf-8")
     print("V090_MAP_MARKERS_PATCHED")
