@@ -6,18 +6,20 @@ Selected portrait IDs are encoded into legacy appearance fields that the current
 server already validates, persists, and replicates. Older clients therefore fall
 back to a compatible directional head; clients with this module also draw the
 selected portrait over the head position.
+
+The selector intentionally does not decode an embedded PNG at runtime. This keeps
+startup independent of libpng and prevents a damaged/corrupt portrait atlas from
+crashing the desktop client before login.
 """
 
 import asyncio
-import base64
-import io
 import math
 from functools import lru_cache
 
 import pygame
 
 import client as game_client
-from portrait_head_asset import HEAD_ATLAS_B64, HEAD_RECTS
+from portrait_head_asset import HEAD_RECTS
 
 HEAD_FALLBACKS = [
     "curly_short", "fade_mask", "baseball_cap", "fade_mask", "fade_mask",
@@ -28,31 +30,83 @@ HEAD_FALLBACKS = [
 HEAD_NAMES = tuple(f"Head {i:02d}" for i in range(1, len(HEAD_RECTS) + 1))
 PORTRAIT_SENTINEL = 7
 
-
-@lru_cache(maxsize=1)
-def _atlas() -> pygame.Surface:
-    raw = base64.b64decode(HEAD_ATLAS_B64)
-    return pygame.image.load(io.BytesIO(raw)).convert_alpha()
+# Lightweight built-in previews. These are deliberately generated with pygame
+# primitives so the launcher has no image-decoding dependency at startup.
+_SKIN = (
+    (244, 202, 168), (222, 174, 139), (198, 143, 105),
+    (158, 105, 75), (116, 75, 55),
+)
+_HAIR = (
+    (36, 28, 24), (77, 50, 32), (132, 91, 55), (205, 174, 108),
+    (22, 22, 24), (96, 42, 34),
+)
+_ACCENT = (
+    (64, 92, 142), (124, 72, 112), (74, 116, 82), (148, 94, 54),
+    (70, 70, 74), (150, 52, 52),
+)
 
 
 @lru_cache(maxsize=64)
 def portrait(index: int, size: int = 72) -> pygame.Surface:
     index = max(0, min(len(HEAD_RECTS) - 1, int(index)))
-    x, y, w, h = HEAD_RECTS[index]
-    raw = _atlas().subsurface(pygame.Rect(x, y, w, h)).copy()
-    try:
-        bounds = raw.get_bounding_rect(min_alpha=8)
-    except TypeError:
-        bounds = raw.get_bounding_rect()
-    if bounds.width > 0 and bounds.height > 0:
-        raw = raw.subsurface(bounds).copy()
     size = max(8, int(size))
-    factor = min(size / max(1, raw.get_width()), size / max(1, raw.get_height()))
-    target = (
-        max(1, int(round(raw.get_width() * factor))),
-        max(1, int(round(raw.get_height() * factor))),
-    )
-    return pygame.transform.scale(raw, target)
+    base = pygame.Surface((72, 72), pygame.SRCALPHA)
+
+    skin = _SKIN[(index // 4) % len(_SKIN)]
+    hair = _HAIR[index % len(_HAIR)]
+    accent = _ACCENT[(index * 3) % len(_ACCENT)]
+
+    # Neck + face.
+    pygame.draw.rect(base, skin, pygame.Rect(29, 49, 14, 12), border_radius=4)
+    pygame.draw.ellipse(base, skin, pygame.Rect(18, 13, 36, 44))
+
+    style = index % 6
+    if style == 0:  # short/curly
+        pygame.draw.ellipse(base, hair, pygame.Rect(17, 8, 38, 24))
+        for x in (21, 29, 37, 45):
+            pygame.draw.circle(base, hair, (x, 14 + ((x // 8) % 2) * 3), 7)
+    elif style == 1:  # fade
+        pygame.draw.arc(base, hair, pygame.Rect(18, 9, 36, 27), math.pi, math.tau, 7)
+        pygame.draw.rect(base, hair, pygame.Rect(19, 16, 34, 7), border_radius=3)
+    elif style == 2:  # cap
+        pygame.draw.ellipse(base, accent, pygame.Rect(16, 7, 40, 21))
+        pygame.draw.rect(base, accent, pygame.Rect(33, 21, 28, 5), border_radius=2)
+    elif style == 3:  # helmet
+        pygame.draw.arc(base, accent, pygame.Rect(14, 6, 44, 42), math.pi, math.tau, 9)
+        pygame.draw.rect(base, accent, pygame.Rect(14, 19, 8, 25), border_radius=3)
+        pygame.draw.rect(base, accent, pygame.Rect(50, 19, 8, 25), border_radius=3)
+    elif style == 4:  # ponytail
+        pygame.draw.ellipse(base, hair, pygame.Rect(17, 8, 38, 25))
+        pygame.draw.ellipse(base, hair, pygame.Rect(48, 23, 15, 29))
+    else:  # swept hair
+        pygame.draw.polygon(base, hair, [(17, 28), (19, 10), (51, 8), (55, 23), (40, 17), (30, 24)])
+
+    # Eyes / brows.
+    eye_y = 33
+    pygame.draw.line(base, (55, 42, 38), (25, eye_y - 4), (31, eye_y - 5), 2)
+    pygame.draw.line(base, (55, 42, 38), (41, eye_y - 5), (47, eye_y - 4), 2)
+    pygame.draw.circle(base, (30, 30, 32), (28, eye_y), 2)
+    pygame.draw.circle(base, (30, 30, 32), (44, eye_y), 2)
+
+    # A few selector-specific details make the 17 options visually distinct.
+    variant = index % 5
+    if variant == 1:  # shades
+        pygame.draw.rect(base, (24, 28, 34), pygame.Rect(22, 29, 12, 7), border_radius=2)
+        pygame.draw.rect(base, (24, 28, 34), pygame.Rect(38, 29, 12, 7), border_radius=2)
+        pygame.draw.line(base, (24, 28, 34), (34, 32), (38, 32), 2)
+    elif variant == 2:  # mask
+        pygame.draw.polygon(base, accent, [(22, 38), (50, 38), (47, 50), (36, 54), (25, 50)])
+    elif variant == 3:  # beard
+        pygame.draw.polygon(base, hair, [(23, 42), (49, 42), (45, 56), (36, 61), (27, 56)])
+    elif variant == 4:  # earring
+        pygame.draw.circle(base, accent, (53, 42), 3, 1)
+
+    # Mouth.
+    pygame.draw.line(base, (115, 60, 58), (31, 45), (41, 45), 2)
+
+    if size == 72:
+        return base
+    return pygame.transform.smoothscale(base, (size, size))
 
 
 def selected_index(appearance: dict | None) -> int | None:
@@ -70,11 +124,9 @@ def selected_index(appearance: dict | None) -> int | None:
 def apply_selection(appearance: dict | None, index: int) -> dict:
     index = max(0, min(len(HEAD_RECTS) - 1, int(index)))
     result = dict(appearance or game_client.CHARACTER_DEFAULT)
-    # Existing server normalization preserves these bounded legacy fields.
     result["skin_tone"] = index // 5
     result["hair_style"] = index % 5
     result["top_color"] = PORTRAIT_SENTINEL
-    # Directional fallback for older clients and action sheets.
     result["head"] = HEAD_FALLBACKS[index]
     result["profile"] = "custom"
     return game_client.normalize_character(result)
@@ -88,7 +140,6 @@ class HeadSelectLauncher(game_client.Launcher):
         existing = selected_index(self.appearance)
         self._portrait_index = existing if existing is not None else 0
         if existing is None:
-            # Make Head 01 a saved choice even if the player simply presses Enter.
             self._choose(self._portrait_index)
         self.customizing = True
 
@@ -226,9 +277,6 @@ def draw_character_with_portrait(
     index = selected_index(appearance)
     if index is None:
         return rect
-    # The supplied atlas is frontal rather than eight-direction art. Keep the
-    # portrait small and anchored to the existing directional head so movement,
-    # collision and action poses stay authoritative.
     icon_size = max(12, int(round(16 * max(0.65, float(scale)))))
     icon = portrait(index, icon_size)
     lift = int(round(8 * max(0.65, float(scale))))
@@ -240,8 +288,6 @@ def draw_character_with_portrait(
 def _install() -> None:
     game_client.Launcher = HeadSelectLauncher
     game_client.draw_character = draw_character_with_portrait
-    # These modules import draw_character by name, so update their bound symbol
-    # too when present. This keeps selected heads visible indoors/on bicycles.
     for module_name in ("interior_art", "bicycle_art"):
         try:
             module = __import__(module_name)
