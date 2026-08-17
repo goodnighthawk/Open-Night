@@ -13,21 +13,43 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Publish tested v0.9.0 candidate
+      - name: Check out tested playable candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ab5f568f7766717b2775fc7b810b51f7bc42d618
+          fetch-depth: 0
+
+      - name: Tag tested v0.9.0 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_SHA=ab5f568f7766717b2775fc7b810b51f7bc42d618
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git config user.name 'Open Night Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          if git ls-remote --exit-code --tags origin refs/tags/v0.9.0 >/dev/null 2>&1; then
+            git fetch origin tag v0.9.0 --force
+            test "$(git rev-list -n 1 v0.9.0)" = "$RELEASE_SHA"
+          else
+            git tag -a v0.9.0 "$RELEASE_SHA" -m 'Open Night v0.9.0'
+            git push origin refs/tags/v0.9.0
+          fi
+          echo "V090_TAG_OK=$RELEASE_SHA"
+
+      - name: Create GitHub release from verified tag
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ab5f568f7766717b2775fc7b810b51f7bc42d618
         shell: bash
         run: |
           set -euo pipefail
           if gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'v0.9.0 already published.'
-            exit 0
+            echo 'v0.9.0 GitHub Release already exists.'
+          else
+            gh release create v0.9.0 \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title 'Open Night v0.9.0' \
+              --notes $'Playable consolidation release.\n\nTested candidate: `ab5f568f7766717b2775fc7b810b51f7bc42d618`\n\nRelease gate: launcher/client/server 0.9.0 identity; runtime contracts; Pass 25 default-map identity; building/road, bicycle-scale, multilevel, deterministic-traffic and building-art audits; repository Quick Local Test with real WebSocket hello/welcome and desktop client launch.\n\nIncludes layer-transition and collision recovery fixes, GWB elevated movement, buyer/supplier presentation, visible 2.5D city art, sidewalk proportions/driveability, aligned traffic signals and streetlamp lighting, compact tree footprints, server-authoritative dogs, and breakable/respawning hydrants.'
           fi
-          gh release create v0.9.0 \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$RELEASE_SHA" \
-            --title 'Open Night v0.9.0' \
-            --notes $'Playable consolidation release.\n\nTested candidate: `ab5f568f7766717b2775fc7b810b51f7bc42d618`\n\nRelease gate: launcher/client/server 0.9.0 identity; runtime contracts; Pass 25 default-map identity; building/road, bicycle-scale, multilevel, deterministic-traffic and building-art audits; repository Quick Local Test with real WebSocket hello/welcome and desktop client launch.\n\nIncludes the v0.9 consolidation fixes for layer transitions, vehicle collision recovery, GWB elevated movement, buyer/supplier presentation, visible 2.5D city art, sidewalk proportions/driveability, signal and streetlamp alignment, compact tree footprints, server-authoritative dogs, and breakable/respawning hydrants.'
-          test "$(gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" --json targetCommitish -q .targetCommitish)" = "$RELEASE_SHA"
-          echo "OPEN_NIGHT_V090_RELEASED=$RELEASE_SHA"
+          gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease -q '.tagName + " " + (.isDraft|tostring) + " " + (.isPrerelease|tostring)' | grep -qx 'v0.9.0 false false'
+          echo 'OPEN_NIGHT_V090_RELEASED=ab5f568f7766717b2775fc7b810b51f7bc42d618'
