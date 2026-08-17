@@ -7,6 +7,7 @@ on:
       - '.github/workflows/v090-runtime-consolidation.yml'
       - 'tools/v090_apply_map_markers.py'
       - 'tools/v090_enable_25d_assets.py'
+      - 'tools/v090_sidewalk_driveability_audit.py'
       - 'client.py'
       - 'server.py'
       - 'environment_art.py'
@@ -61,7 +62,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile client.py server.py environment_art.py versioning.py gameplay/settings.py common.py tools/v090_apply_map_markers.py tools/v090_enable_25d_assets.py
+          python -m py_compile client.py server.py environment_art.py versioning.py gameplay/settings.py common.py tools/v090_apply_map_markers.py tools/v090_enable_25d_assets.py tools/v090_sidewalk_driveability_audit.py
+          python tools/v090_sidewalk_driveability_audit.py
           python - <<'PY'
           import csv
           from pathlib import Path
