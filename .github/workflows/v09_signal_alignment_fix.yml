@@ -1,0 +1,61 @@
+name: Open Night v0.9.0 Traffic Signal Alignment Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0.9.0-consolidation
+    paths:
+      - .github/workflows/v09_signal_alignment_fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+
+      - name: Align synchronized traffic light to authored fixture anchor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("client.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''        pygame.draw.circle(self.screen, (18, 20, 20), (sx + 22, sy - 22), 8)\n        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx + 22, sy - 22), 5)'''
+          new = '''        # `signal["pos"]` is the authored fixture anchor.  Keep the live\n        # synchronized lamp on that exact anchor; the old (+22, -22) offset\n        # visually detached the red/green state from its traffic-signal fixture.\n        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 8)\n        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 5)'''
+          if old not in text:
+              raise SystemExit("expected traffic-signal rendering block not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+      - name: Runtime syntax and alignment contract
+        shell: bash
+        run: |
+          python -m py_compile client.py server.py common.py environment_art.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('client.py').read_text(encoding='utf-8')
+          assert '(sx + 22, sy - 22)' not in text, 'legacy displaced signal-light anchor remains'
+          assert 'pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 8)' in text
+          assert 'pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 5)' in text
+          print('traffic-signal authored-anchor contract: PASS')
+          PY
+
+      - name: Commit runtime fix
+        shell: bash
+        run: |
+          if git diff --quiet -- client.py; then
+            echo "No runtime change required."
+            exit 0
+          fi
+          git config user.name "Open Night Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add client.py
+          git commit -m "v0.9: align synchronized traffic lights [skip ci]"
+          git push origin HEAD:v0.9.0-consolidation
