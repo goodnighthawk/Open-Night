@@ -5,93 +5,95 @@ on:
     branches: [v0.9.0-consolidation]
     paths:
       - '.github/workflows/v090-runtime-consolidation.yml'
+      - 'server.py'
+      - 'versioning.py'
+      - 'VERSION.txt'
+      - 'config/game_settings.csv'
+      - 'mapfiles/data/map_001_gwb_corridor/**'
+      - 'dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/**'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  runtime-fixes:
+  runtime-and-map-qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: v0.9.0-consolidation
           fetch-depth: 1
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Apply v0.9 runtime fixes
+      - name: Install map QA dependencies
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Runtime syntax and v0.9 contract checks
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('server.py')
-          s = p.read_text(encoding='utf-8')
-          old = 'LAYER_TRANSITION_JUMP_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.65)))'
-          new = 'LAYER_TRANSITION_JUMP_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.0)))'
-          assert old in s, 'layer transition clamp source changed'
-          s = s.replace(old, new, 1)
-
-          old = '''            if next_level != previous_level:\n                # Connector transitions should read as a deliberate hop rather\n                # than the player silently snapping between vertical layers.\n                session.jump_until = max(\n                    session.jump_until,\n                    time.monotonic() + LAYER_TRANSITION_JUMP_SECONDS,\n                )'''
-          new = '''            if next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0:\n                # Optional authored transition pose. v0.9 defaults this to zero so\n                # automatic ramps/bridges never masquerade as a player jump.\n                session.jump_until = max(\n                    session.jump_until,\n                    time.monotonic() + LAYER_TRANSITION_JUMP_SECONDS,\n                )'''
-          assert old in s, 'layer transition block source changed'
-          s = s.replace(old, new, 1)
-
-          old = '''                    if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):\n                        car.x, car.y, car.angle = nx, ny, proposed_angle\n                    else:\n                        car.speed = 0.0'''
-          new = '''                    if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):\n                        car.x, car.y, car.angle = nx, ny, proposed_angle\n                    else:\n                        # v0.9 arcade collision recovery: try a short glancing slide\n                        # before killing momentum. This prevents player cars being\n                        # pinned squarely into building corners after one impact.\n                        impact_speed = car.speed\n                        deflected = False\n                        direction = 1.0 if impact_speed >= 0.0 else -1.0\n                        for deflect_angle in (0.16, -0.16, 0.30, -0.30):\n                            candidate_angle = old_angle + deflect_angle * direction\n                            slide = impact_speed * dt * 0.45\n                            sx = car.x + math.cos(candidate_angle) * slide\n                            sy = car.y + math.sin(candidate_angle) * slide\n                            if (_vehicle_map_blocked(car, sx, sy, candidate_angle)\n                                    or _vehicle_hits_vehicle(car, sx, sy, candidate_angle)\n                                    or _vehicle_hits_bicycle(car, sx, sy, candidate_angle)):\n                                continue\n                            car.x, car.y, car.angle = sx, sy, candidate_angle\n                            car.speed = impact_speed * 0.42\n                            deflected = True\n                            break\n                        if not deflected:\n                            # A small rebound leaves the next input tick able to steer\n                            # away instead of trapping the car at exactly zero speed.\n                            car.angle = old_angle\n                            car.speed = -impact_speed * 0.10'''
-          assert old in s, 'player vehicle collision block source changed'
-          s = s.replace(old, new, 1)
-          s = s.replace('SERVER_NAME = "Open Night v0.8 / Pass 19"', 'SERVER_NAME = "Open Night v0.9.0 / consolidation"', 1)
-          p.write_text(s, encoding='utf-8')
-
-          p = Path('versioning.py')
-          s = p.read_text(encoding='utf-8')
-          assert 'GAME_VERSION = "0.8.3"' in s
-          p.write_text(s.replace('GAME_VERSION = "0.8.3"', 'GAME_VERSION = "0.9.0"', 1), encoding='utf-8')
-
-          Path('VERSION.txt').write_text('Open Night v0.9.0 - consolidation release candidate\n', encoding='utf-8')
-
-          p = Path('config/game_settings.csv')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace('engine,client_profile_version,284,int,v0.8.4 bugfix profile: tighter car steering and layer-transition animation suppression', 'engine,client_profile_version,290,int,v0.9.0 consolidation profile: tighter steering, true animation-free layer transitions, and collision recovery')
-          s = s.replace('Target pedestrians per sidewalk route for the v0.8.4 population pass', 'Target pedestrians per sidewalk route for the v0.9.0 population pass')
-          p.write_text(s, encoding='utf-8')
-          PY
-
-      - name: Runtime syntax and contract checks
-        shell: bash
-        run: |
-          python -m py_compile server.py versioning.py gameplay/settings.py
+          set -euo pipefail
+          python -m py_compile server.py versioning.py gameplay/settings.py common.py
           python - <<'PY'
           import csv
           from pathlib import Path
           from versioning import GAME_VERSION
+
           assert GAME_VERSION == '0.9.0'
           assert 'Open Night v0.9.0' in Path('VERSION.txt').read_text(encoding='utf-8')
-          rows = list(csv.DictReader(Path('config/game_settings.csv').open(encoding='utf-8-sig', newline='')))
+
+          with Path('config/game_settings.csv').open(encoding='utf-8-sig', newline='') as f:
+              rows = list(csv.DictReader(f))
           cfg = {(r['section'], r['key']): r['value'] for r in rows}
           assert cfg[('movement','layer_transition_jump_seconds')] == '0.0'
           assert cfg[('engine','client_profile_version')] == '290'
+          assert float(cfg[('vehicle','player_turn_rate')]) >= 3.6
+          assert int(cfg[('npc','pedestrians_per_route')]) >= 5
+
           text = Path('server.py').read_text(encoding='utf-8')
           assert 'LAYER_TRANSITION_JUMP_SECONDS = max(0.0' in text
           assert 'next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0' in text
           assert 'deflected = False' in text
+          assert 'SERVER_NAME = "Open Night v0.9.0 / consolidation"' in text
           print('V090_RUNTIME_CONTRACT_OK')
           PY
 
-      - name: Commit fixes
+      - name: Pass 25 map identity checks
         shell: bash
         run: |
-          git config user.name 'Open Night Release Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add server.py versioning.py VERSION.txt config/game_settings.csv
-          if git diff --cached --quiet; then
-            echo 'No runtime changes to commit.'
-            exit 0
-          fi
-          git commit -m 'v0.9.0: fix layer transitions and vehicle collision recovery'
-          git push origin HEAD:v0.9.0-consolidation
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          paths = [
+              Path('mapfiles/data/map_001_gwb_corridor/map.csv'),
+              Path('dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/map.csv'),
+          ]
+          configs = []
+          for path in paths:
+              with path.open(encoding='utf-8-sig', newline='') as f:
+                  cfg = {r['key']: r['value'] for r in csv.DictReader(f)}
+              assert cfg['id'] == 'map_001_gwb_corridor'
+              assert cfg['release_version'] == '0.9.0'
+              assert cfg['render_pass'] == '25'
+              assert cfg['map_build_id'] == 'open_night_v0_9_0_pass25_default_only'
+              assert cfg['baked_composition_archive'].endswith('composition_tiles_v25.zip')
+              configs.append(cfg)
+          assert configs[0] == configs[1], 'runtime and generator map identities diverged'
+          print('V090_PASS25_MAP_IDENTITY_OK')
+          PY
+
+      - name: Existing release audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/building_road_audit.py
+          python tools/map_scale_bicycle_audit.py
+          python tools/multilevel_map_audit.py
+          python tools/deterministic_traffic_audit.py
+          python tools/building_art_convergence_audit.py
