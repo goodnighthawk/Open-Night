@@ -2114,8 +2114,11 @@ class Game:
         green = bool(self.traffic_lights.get(str(signal.get("id")), False))
         # Crosswalk geometry is rendered once by EnvironmentRenderer from
         # crosswalks.csv. Traffic signals now render only their live light state.
-        pygame.draw.circle(self.screen, (18, 20, 20), (sx + 22, sy - 22), 8)
-        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx + 22, sy - 22), 5)
+        # `signal["pos"]` is the authored fixture anchor.  Keep the live
+        # synchronized lamp on that exact anchor; the old (+22, -22) offset
+        # visually detached the red/green state from its traffic-signal fixture.
+        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 8)
+        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 5)
 
     def nearest_interior(self, max_distance: float = 105.0) -> dict | None:
         local = self.players.get(self.local_id or "")
