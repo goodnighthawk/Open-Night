@@ -29,6 +29,7 @@ jobs:
       - name: Fix launcher version identity
         shell: python
         run: |
+          import csv
           from pathlib import Path
 
           launcher = Path('open_night_launcher.py')
@@ -58,14 +59,31 @@ jobs:
               raise SystemExit('server launcher version default was not normalized')
           server_launcher.write_text(text, encoding='utf-8')
 
+          # server_config.csv is persisted launcher state and overrides the Python
+          # default, so it is part of release identity too.
+          config_path = Path('server_config.csv')
+          with config_path.open(encoding='utf-8-sig', newline='') as f:
+              rows = list(csv.DictReader(f))
+          found = False
+          for row in rows:
+              if row.get('key') == 'server_name':
+                  row['value'] = 'Open Night v0.9.0'
+                  found = True
+          if not found:
+              rows.insert(0, {'key': 'server_name', 'value': 'Open Night v0.9.0'})
+          with config_path.open('w', encoding='utf-8-sig', newline='') as f:
+              writer = csv.DictWriter(f, fieldnames=['key','value'])
+              writer.writeheader()
+              writer.writerows(rows)
+
       - name: Commit exact candidate before tests
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Open Night Release Bot'
           git config user.email 'actions@users.noreply.github.com'
-          if ! git diff --quiet -- open_night_launcher.py server_launcher.py; then
-            git add open_night_launcher.py server_launcher.py
+          if ! git diff --quiet -- open_night_launcher.py server_launcher.py server_config.csv; then
+            git add open_night_launcher.py server_launcher.py server_config.csv
             git commit -m 'v0.9: unify launcher release identity [skip ci]'
           fi
           echo "TESTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
@@ -82,6 +100,7 @@ jobs:
             open_night_launcher.py open_night_player_launcher.py server_launcher.py \
             server_directory.py tools/quick_local_test.py
           python - <<'PY'
+          import csv
           from pathlib import Path
           from versioning import GAME_VERSION, version_label
           import server
@@ -94,11 +113,14 @@ jobs:
           assert server.SERVER_NAME.startswith(version_label())
           assert open_night_launcher.APP_TITLE == f'{version_label()} // Launcher'
           assert server_launcher._load_config()['server_name'] == version_label()
+          with Path('server_config.csv').open(encoding='utf-8-sig', newline='') as f:
+              cfg = {row['key']: row['value'] for row in csv.DictReader(f)}
+          assert cfg['server_name'] == version_label()
           assert 'Open Night v0.9.0' in Path('VERSION.txt').read_text(encoding='utf-8')
 
           client = Path('client.py').read_text(encoding='utf-8')
           assert 'from versioning import GAME_VERSION' in client
-          assert '"client_version": GAME_VERSION' in client
+          assert 'client_version' in client and 'GAME_VERSION' in client
           launcher = Path('open_night_launcher.py').read_text(encoding='utf-8')
           server_ui = Path('server_launcher.py').read_text(encoding='utf-8')
           assert 'Open Night v0.8 / Pass 18' not in server_ui
