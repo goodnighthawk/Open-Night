@@ -1,11 +1,11 @@
 road_id,name,base_width,width,lanes,sidewalk_width,curb_width,building_setback,bridge,map_label,highway,level,walkable
 fl_west_avenue,Fl West Avenue,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-fl_center_avenue,Fl Center Avenue,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+fl_center_avenue,Fl Center Avenue,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 fl_sylvan_road,Fl Sylvan Road,67.08,83.85,1,47.6,5,0,false,false,tertiary,0,true
 fl_hudson_terrace,Fl Hudson Terrace,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-fl_north_boulevard,Fl North Boulevard,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
-fl_gwb_approach,Fl Gwb Approach,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
-fl_south_boulevard,Fl South Boulevard,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+fl_north_boulevard,Fl North Boulevard,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
+fl_gwb_approach,Fl Gwb Approach,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
+fl_south_boulevard,Fl South Boulevard,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 fl_northwest_local,Fl Northwest Local,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 fl_northeast_local,Fl Northeast Local,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 fl_bluff_lane,Fl Bluff Lane,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
@@ -16,14 +16,14 @@ fl_park_lane,Fl Park Lane,67.08,83.85,1,47.6,5,0,false,false,tertiary,0,true
 fl_ridge_connector,Fl Ridge Connector,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 fl_south_connector,Fl South Connector,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 wh_riverside_drive,Wh Riverside Drive,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-wh_broadway,Wh Broadway,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+wh_broadway,Wh Broadway,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 wh_amsterdam_avenue,Wh Amsterdam Avenue,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-wh_east_avenue,Wh East Avenue,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
-wh_north_crosstown,Wh North Crosstown,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+wh_east_avenue,Wh East Avenue,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
+wh_north_crosstown,Wh North Crosstown,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 wh_181st_street,Wh 181St Street,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-wh_gwb_crosstown,Wh Gwb Crosstown,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+wh_gwb_crosstown,Wh Gwb Crosstown,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 wh_168th_street,Wh 168Th Street,96.72,120.9,2,52.36,5,0,false,true,secondary,0,true
-wh_south_crosstown,Wh South Crosstown,126.36,157.95,3,61.88,5,0,false,true,primary,0,true
+wh_south_crosstown,Wh South Crosstown,126.36,142.0,3,49.0,5,0,false,true,primary,0,true
 wh_northwest_local,Wh Northwest Local,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 wh_northeast_local,Wh Northeast Local,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
 wh_midtown_local,Wh Midtown Local,67.08,83.85,1,42.84,5,0,false,false,residential,0,true
