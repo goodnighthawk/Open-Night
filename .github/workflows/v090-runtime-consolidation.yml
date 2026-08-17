@@ -6,8 +6,10 @@ on:
     paths:
       - '.github/workflows/v090-runtime-consolidation.yml'
       - 'tools/v090_apply_map_markers.py'
+      - 'tools/v090_enable_25d_assets.py'
       - 'client.py'
       - 'server.py'
+      - 'environment_art.py'
       - 'versioning.py'
       - 'VERSION.txt'
       - 'config/game_settings.csv'
@@ -35,17 +37,20 @@ jobs:
       - name: Apply deterministic v0.9 client map-marker patch
         run: python tools/v090_apply_map_markers.py
 
-      - name: Commit generated client patch when needed
+      - name: Apply approved 2.5D city asset promotion
+        run: python tools/v090_enable_25d_assets.py
+
+      - name: Commit generated runtime patches when needed
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- client.py; then
-            echo 'Client marker patch already present.'
+          if git diff --quiet -- client.py environment_art.py; then
+            echo 'v0.9 generated runtime patches already present.'
           else
             git config user.name 'Open Night Release Bot'
             git config user.email 'actions@users.noreply.github.com'
-            git add client.py
-            git commit -m 'v0.9: show supplier and buyer on minimap and M map [skip ci]'
+            git add client.py environment_art.py
+            git commit -m 'v0.9: apply map markers and visible 2.5D city art [skip ci]'
             git push origin HEAD:v0.9.0-consolidation
           fi
 
@@ -56,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile client.py server.py versioning.py gameplay/settings.py common.py tools/v090_apply_map_markers.py
+          python -m py_compile client.py server.py environment_art.py versioning.py gameplay/settings.py common.py tools/v090_apply_map_markers.py tools/v090_enable_25d_assets.py
           python - <<'PY'
           import csv
           from pathlib import Path
@@ -84,6 +89,11 @@ jobs:
           assert '(self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER")' in client
           assert '(self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER")' in client
           assert 'Supplier and buyer are gameplay destinations' in client
+
+          environment = Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'index % 4 == 0' in environment
+          assert 'the approved 2.5D city import is a visible runtime art layer' in environment
+          assert '_open_asset_building("isometric", min(104, max(52, inner.height - 6)))' in environment
           print('V090_RUNTIME_CONTRACT_OK')
           PY
 
