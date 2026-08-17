@@ -417,6 +417,7 @@ class NPCPedestrian:
     appearance: dict
     pause_timer: float = 0.0
     step_counter: int = 0
+    kind: str = "pedestrian"
 
     def public_dict(self) -> dict:
         return {
@@ -425,6 +426,7 @@ class NPCPedestrian:
             "y": round(self.y, 2),
             "aim": round(self.aim, 4),
             "appearance": normalize_character(self.appearance),
+            "kind": self.kind,
         }
 
 
@@ -1383,6 +1385,24 @@ def initialize_npcs() -> None:
             npc_id=str(start.get("id", f"npc{i+1:03d}")), route_index=route_index, next_waypoint=next_wp,
             x=x, y=y, speed=float(route.get("speed", 54.0)) * float(start.get("speed_scale", 1.0)),
             aim=heading, appearance=appearance, pause_timer=0.0,
+        ))
+
+    # v0.9: dogs are lightweight server-authoritative ambient NPCs. They reuse
+    # sidewalk pedestrian routes so they inherit existing culling/path behavior
+    # without adding a second AI system or allowing animals onto water/roads.
+    dog_count = min(8, max(3, len(routes) // 3))
+    for dog_i in range(dog_count):
+        route_index = (dog_i * 7 + 1) % len(routes)
+        route = routes[route_index]
+        points = _route_points(route)
+        if len(points) < 2:
+            continue
+        fraction = ((dog_i + 1) / (dog_count + 1)) * 0.92
+        x, y, next_wp, heading = _sample_route(route, fraction)
+        npc_pedestrians.append(NPCPedestrian(
+            npc_id=f"dog{dog_i+1:02d}", route_index=route_index, next_waypoint=next_wp,
+            x=x, y=y, speed=max(36.0, float(route.get("speed", 54.0)) * 0.82),
+            aim=heading, appearance={}, pause_timer=0.0, kind="dog",
         ))
 
 

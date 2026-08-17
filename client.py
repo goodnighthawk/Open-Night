@@ -1154,6 +1154,7 @@ class RemoteNPC:
         self.target_y = self.render_y
         self.aim = float(data.get("aim", 0.0))
         self.appearance = normalize_character(data.get("appearance"))
+        self.kind = str(data.get("kind", "pedestrian"))
         self.moving_until = time.monotonic() + 0.3
         self.anim_epoch = time.monotonic() + random.random() * 4.0
 
@@ -1164,6 +1165,7 @@ class RemoteNPC:
             self.moving_until = time.monotonic() + 0.22
         self.target_x, self.target_y = nx, ny
         self.aim = float(data.get("aim", self.aim))
+        self.kind = str(data.get("kind", self.kind))
         if "appearance" in data:
             self.appearance = normalize_character(data.get("appearance"))
 
@@ -2658,6 +2660,21 @@ class Game:
 
     def draw_npc(self, npc: RemoteNPC) -> None:
         sx, sy = self.world_to_screen(npc.render_x, npc.render_y)
+        if getattr(npc, "kind", "pedestrian") == "dog":
+            # Compact original top-down dog silhouette; heading follows the same
+            # authoritative route aim as pedestrians. No external art dependency.
+            sprite = pygame.Surface((34, 22), pygame.SRCALPHA)
+            pygame.draw.ellipse(sprite, (91, 68, 48), pygame.Rect(7, 6, 21, 11))
+            pygame.draw.circle(sprite, (104, 78, 54), (28, 10), 6)
+            pygame.draw.polygon(sprite, (70, 49, 34), [(27,5),(29,1),(31,6)])
+            pygame.draw.line(sprite, (70, 49, 34), (7,10), (2,5), 3)
+            moving = time.monotonic() < npc.moving_until
+            gait = 2 if moving and int((time.monotonic()-npc.anim_epoch)*8) % 2 else 0
+            for lx in (10, 22):
+                pygame.draw.line(sprite, (65, 47, 34), (lx,15), (lx-gait,20), 2)
+            rotated = pygame.transform.rotozoom(sprite, -math.degrees(npc.aim), 1.0)
+            self.screen.blit(rotated, rotated.get_rect(center=(sx, sy)))
+            return
         npc_scale = max(1, int(self.settings.get("render", {}).get("npc_scale", 2)))
         draw_character(
             self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,
