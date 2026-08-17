@@ -19,7 +19,7 @@ traffic,visible_stall_recovery_seconds,2.2,float,Nudge and advance on-screen AI 
 traffic,recycle_player_clearance_px,900,float,Do not recycle cars near players
 traffic,max_wait_priority,15.0,float,Cap right-of-way wait credit
 traffic,follow_time_seconds,0.14,float,Extra time headway for following
-npc,pedestrians_per_route,5,int,Target pedestrians per sidewalk route for the v0.8.4 population pass
+npc,pedestrians_per_route,5,int,Target pedestrians per sidewalk route for the v0.9.0 population pass
 npc,personal_space_px,22,float,Pedestrian separation radius
 npc,active_radius_px,1800,float,Full NPC update radius around players
 npc,far_update_hz,5,float,Update rate for distant NPCs
@@ -82,7 +82,7 @@ vehicle,passenger_capacity,3,int,Maximum player passengers in a car in addition 
 vehicle,passenger_board_max_speed_px_s,35,float,Maximum car speed at which a nearby player can board as passenger
 vehicle,passenger_exit_max_speed_px_s,70,float,Passengers and drivers must slow below this speed before exiting
 engine,ai_profile_version,2,int,v2.0 directional-flow AI tuning migration marker
-engine,client_profile_version,284,int,v0.8.4 bugfix profile: tighter car steering and layer-transition animation suppression
+engine,client_profile_version,290,int,v0.9.0 consolidation profile: tighter steering, true animation-free layer transitions, and collision recovery
 render,fast_rotation_while_dragging,true,bool,Use fast whole-scene rotation during active middle-mouse drag; filtered final frame resumes on release
 render,defer_25d_rotation_while_dragging,true,bool,Do not rebuild camera-aware 2.5D chunk art during every mouse movement; apply final 30-degree extrusion bucket on release
 engine,interest_manager_version,2,int,Chunk-bucket snapshot interest manager with logical server regions

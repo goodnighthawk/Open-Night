@@ -80,7 +80,7 @@ from versioning import GAME_VERSION
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v0.8 / Pass 19"
+SERVER_NAME = "Open Night v0.9.0 / consolidation"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 SERVER_VERSION = GAME_VERSION
@@ -106,7 +106,7 @@ MOVEMENT_SETTINGS = SETTINGS.get("movement", {})
 VEHICLE_SETTINGS = SETTINGS.get("vehicle", {})
 ENGINE_SETTINGS = SETTINGS.get("engine", {})
 MAP_ROSTER_RATE = max(0.25, float(ENGINE_SETTINGS.get("world_map_player_roster_hz", 2.0)))
-LAYER_TRANSITION_JUMP_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.65)))
+LAYER_TRANSITION_JUMP_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.0)))
 JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("jump_duration_seconds", 0.75)))
 DOUBLE_JUMP_WINDOW_SECONDS = max(0.05, float(MOVEMENT_SETTINGS.get("double_jump_window_seconds", 0.55)))
 DOUBLE_JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("double_jump_duration_seconds", 0.95)))
@@ -2879,7 +2879,30 @@ async def simulation_loop() -> None:
                     if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):
                         car.x, car.y, car.angle = nx, ny, proposed_angle
                     else:
-                        car.speed = 0.0
+                        # v0.9 arcade collision recovery: try a short glancing slide
+                        # before killing momentum. This prevents player cars being
+                        # pinned squarely into building corners after one impact.
+                        impact_speed = car.speed
+                        deflected = False
+                        direction = 1.0 if impact_speed >= 0.0 else -1.0
+                        for deflect_angle in (0.16, -0.16, 0.30, -0.30):
+                            candidate_angle = old_angle + deflect_angle * direction
+                            slide = impact_speed * dt * 0.45
+                            sx = car.x + math.cos(candidate_angle) * slide
+                            sy = car.y + math.sin(candidate_angle) * slide
+                            if (_vehicle_map_blocked(car, sx, sy, candidate_angle)
+                                    or _vehicle_hits_vehicle(car, sx, sy, candidate_angle)
+                                    or _vehicle_hits_bicycle(car, sx, sy, candidate_angle)):
+                                continue
+                            car.x, car.y, car.angle = sx, sy, candidate_angle
+                            car.speed = impact_speed * 0.42
+                            deflected = True
+                            break
+                        if not deflected:
+                            # A small rebound leaves the next input tick able to steer
+                            # away instead of trapping the car at exactly zero speed.
+                            car.angle = old_angle
+                            car.speed = -impact_speed * 0.10
                     car.parked = False
                     p.x, p.y = car.x, car.y
                     p.aim = car.angle
@@ -2946,9 +2969,9 @@ async def simulation_loop() -> None:
                 previous_y=movement_start_y,
             )
             p.level = next_level
-            if next_level != previous_level:
-                # Connector transitions should read as a deliberate hop rather
-                # than the player silently snapping between vertical layers.
+            if next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0:
+                # Optional authored transition pose. v0.9 defaults this to zero so
+                # automatic ramps/bridges never masquerade as a player jump.
                 session.jump_until = max(
                     session.jump_until,
                     time.monotonic() + LAYER_TRANSITION_JUMP_SECONDS,
