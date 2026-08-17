@@ -1343,7 +1343,14 @@ class EnvironmentRenderer:
             if str(light.get("source_type")) not in {"streetlamp","bridge_lamp"}: continue
             if not self.map_config.get("street_lamps_enabled",True) and str(light.get("source_type"))=="streetlamp": continue
             try:
-                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy); r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))
+                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy)
+                # Portable streetlamp coordinates are ground/base anchors (the
+                # sprite is drawn with midbottom anchoring), while the light pool
+                # belongs on the lamp head.  Lift only streetlamp emitters; bridge
+                # lamps retain their explicitly authored emitter coordinates.
+                if str(light.get("source_type")) == "streetlamp":
+                    y -= int(round(float(light.get("head_offset_px", 42))))
+                r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))
             except (TypeError,ValueError): continue
             col=colors.get(str(light.get("color_tag","warm")),(238,176,90))
             for frac,alpha in ((1.0,18),(.62,26),(.32,38)):
