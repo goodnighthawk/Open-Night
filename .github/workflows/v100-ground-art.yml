@@ -1,0 +1,63 @@
+name: Build v1.0 Ground Art
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'tools/build_v100_art_overlays.py'
+      - 'tools/build_v100_ground_approval.py'
+      - 'mapfiles/data/map_001_gwb_corridor/**'
+      - '.github/workflows/v100-ground-art.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ground-art:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install renderer dependency
+        run: python -m pip install --upgrade pillow
+
+      - name: Generate collision-accurate Ground/Night art
+        run: python tools/build_v100_ground_approval.py
+
+      - name: Verify output
+        run: |
+          test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+          test "$(find assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night -name 'tile_*.png' | wc -l)" -eq 192
+
+      - name: Upload approval artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v100-ground-night
+          path: |
+            assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+            assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night/*.png
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit generated Ground/Night files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+          git add assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+          else
+            git commit -m 'v1.0: generate collision-accurate Ground/Night art'
+            git push origin HEAD:v1.0-art-overlay
+          fi
