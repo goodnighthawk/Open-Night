@@ -117,6 +117,10 @@ WATER_WALK_SPEED_MULTIPLIER = max(0.05, min(1.0, float(MOVEMENT_SETTINGS.get("wa
 PASSENGER_CAPACITY = max(1, int(VEHICLE_SETTINGS.get("passenger_capacity", 3)))
 PASSENGER_BOARD_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_board_max_speed_px_s", 35.0)))
 PASSENGER_EXIT_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_exit_max_speed_px_s", 70.0)))
+HYDRANT_BREAK_MPH = 30.0
+HYDRANT_RESPAWN_SECONDS = 300.0
+HYDRANT_WATER_SECONDS = 5.0
+HYDRANT_HIT_RADIUS = 34.0
 
 
 def _indexed_character_appearance(index: int, *, preset_only: bool = False) -> dict:
@@ -450,6 +454,26 @@ class BloodStain:
 
 
 @dataclass
+class HydrantState:
+    hydrant_id: str
+    x: float
+    y: float
+    broken_until: float = 0.0
+    water_until: float = 0.0
+
+    def public_dict(self, now: float) -> dict:
+        broken = self.broken_until > now
+        return {
+            "id": self.hydrant_id,
+            "x": round(self.x, 2),
+            "y": round(self.y, 2),
+            "broken": broken,
+            "water_remaining": round(max(0.0, self.water_until - now), 2) if broken else 0.0,
+            "respawn_remaining": round(max(0.0, self.broken_until - now), 2) if broken else 0.0,
+        }
+
+
+@dataclass
 class NPCRespawn:
     due_at: float
     route_index: int
@@ -460,6 +484,7 @@ class NPCRespawn:
 
 blood_stains: list[BloodStain] = []
 npc_respawns: list[NPCRespawn] = []
+hydrants: dict[str, HydrantState] = {}
 
 
 @dataclass
@@ -1370,6 +1395,20 @@ def inventory_payload(session: ClientSession) -> dict:
     }
 
 
+def initialize_hydrants() -> None:
+    """Load authored fire-hydrant props into lightweight authoritative state."""
+    hydrants.clear()
+    for index, prop in enumerate(ACTIVE_MAP.get("street_props", []) or []):
+        if str(prop.get("kind", "")) != "fire_hydrant":
+            continue
+        try:
+            x, y = map(float, prop.get("pos", [0, 0]))
+        except (TypeError, ValueError):
+            continue
+        hid = str(prop.get("id", f"hydrant_{index:04d}"))
+        hydrants[hid] = HydrantState(hydrant_id=hid, x=x, y=y)
+
+
 def initialize_npcs() -> None:
     npc_pedestrians.clear()
     blood_stains.clear()
@@ -1478,6 +1517,31 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
 
 def vehicle_speed_mph(speed_px_s: float) -> float:
     return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
+
+
+def update_hydrants(now: float) -> None:
+    """Break authored hydrants on >30 mph car impacts and respawn after five minutes."""
+    if not hydrants:
+        return
+    for hydrant in hydrants.values():
+        if hydrant.broken_until > 0.0 and now >= hydrant.broken_until:
+            hydrant.broken_until = 0.0
+            hydrant.water_until = 0.0
+        if hydrant.broken_until > now:
+            continue
+        for car in traffic_vehicles:
+            if vehicle_speed_mph(car.speed) <= HYDRANT_BREAK_MPH:
+                continue
+            direction = 1.0 if car.speed >= 0.0 else -1.0
+            nose_x = car.x + math.cos(car.angle) * car.collision_length * 0.46 * direction
+            nose_y = car.y + math.sin(car.angle) * car.collision_length * 0.46 * direction
+            hit_radius = HYDRANT_HIT_RADIUS + car.collision_width * 0.38
+            if (nose_x - hydrant.x) ** 2 + (nose_y - hydrant.y) ** 2 > hit_radius ** 2:
+                continue
+            hydrant.broken_until = now + HYDRANT_RESPAWN_SECONDS
+            hydrant.water_until = now + HYDRANT_WATER_SECONDS
+            car.speed *= 0.86
+            break
 
 
 def update_npc_runovers(now: float) -> None:
@@ -3001,7 +3065,9 @@ async def simulation_loop() -> None:
         update_traffic(dt, sessions, time.time())
         update_bicycles(dt, sessions)
         update_npcs(dt, sessions, tick_index)
-        update_npc_runovers(time.monotonic())
+        current_mono = time.monotonic()
+        update_npc_runovers(current_mono)
+        update_hydrants(current_mono)
         tick_index += 1
 
 
@@ -3031,6 +3097,7 @@ async def snapshot_loop() -> None:
         npc_buckets: dict[tuple[int,int], list[NPCPedestrian]] = {}
         bicycle_buckets: dict[tuple[int,int], list[BicycleState]] = {}
         blood_buckets: dict[tuple[int,int], list[BloodStain]] = {}
+        hydrant_buckets: dict[tuple[int,int], list[HydrantState]] = {}
         light_buckets: dict[tuple[int,int], list[dict]] = {}
 
         for other in sessions:
@@ -3043,6 +3110,8 @@ async def snapshot_loop() -> None:
             bicycle_buckets.setdefault(world_to_chunk(bike.x, bike.y, ACTIVE_MAP), []).append(bike)
         for stain in blood_stains:
             blood_buckets.setdefault(world_to_chunk(stain.x, stain.y, ACTIVE_MAP), []).append(stain)
+        for hydrant in hydrants.values():
+            hydrant_buckets.setdefault(world_to_chunk(hydrant.x, hydrant.y, ACTIVE_MAP), []).append(hydrant)
         for signal in ACTIVE_MAP.get("traffic_signals", []):
             pos = signal.get("pos", [0, 0])
             light_buckets.setdefault(world_to_chunk(float(pos[0]), float(pos[1]), ACTIVE_MAP), []).append(signal)
@@ -3056,6 +3125,7 @@ async def snapshot_loop() -> None:
             visible_npcs = []
             visible_bicycles = []
             visible_blood = []
+            visible_hydrants = []
             visible_lights = {}
 
             for cy in range(max(0, pcy-radius), pcy+radius+1):
@@ -3079,7 +3149,9 @@ async def snapshot_loop() -> None:
                     visible_vehicles.extend(car.public_dict() for car in vehicle_buckets.get(key, ()))
                     visible_npcs.extend(npc.public_dict() for npc in npc_buckets.get(key, ()))
                     visible_bicycles.extend(bike.public_dict() for bike in bicycle_buckets.get(key, ()))
-                    visible_blood.extend(stain.public_dict(time.monotonic()) for stain in blood_buckets.get(key, ()))
+                    snapshot_mono = time.monotonic()
+                    visible_blood.extend(stain.public_dict(snapshot_mono) for stain in blood_buckets.get(key, ()))
+                    visible_hydrants.extend(hydrant.public_dict(snapshot_mono) for hydrant in hydrant_buckets.get(key, ()))
                     for signal in light_buckets.get(key, ()):
                         sid = str(signal.get("id"))
                         visible_lights[sid] = bool(all_lights.get(sid, False))
@@ -3091,6 +3163,7 @@ async def snapshot_loop() -> None:
                 "npcs": visible_npcs,
                 "bicycles": visible_bicycles,
                 "blood_stains": visible_blood,
+                "hydrants": visible_hydrants,
                 "traffic_lights": visible_lights,
                 "server_time": server_time,
                 "chunk": [pcx, pcy],
@@ -3346,6 +3419,7 @@ def cli_main() -> None:
     initialize_parked_vehicles()
     initialize_bicycles()
     initialize_npcs()
+    initialize_hydrants()
 
     try:
         asyncio.run(main(args.host, args.port, args.name, discovery=not args.no_discovery))

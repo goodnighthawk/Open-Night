@@ -286,6 +286,7 @@ class EnvironmentRenderer:
         self._junction_cores: list[tuple[float, float, float]] = []
         self._junction_exclusions: dict[str, list[tuple[float, float, float]]] = {}
         self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}
+        self._hidden_street_props: set[str] = set()
         self._composition_tile_cache: OrderedDict[tuple[str, int, int], pygame.Surface] = OrderedDict()
         self._composition_zip: zipfile.ZipFile | None = None
         self._composition_zip_path = ""
@@ -517,6 +518,18 @@ class EnvironmentRenderer:
         self.view_rotation_degrees=bucket
         if not self.chunked and self.map_config:
             cfg=dict(self.map_config); self._signature=None; self.set_map(cfg)
+
+    def set_hidden_street_props(self, prop_ids) -> None:
+        """Hide dynamic/broken props and invalidate only cached static chunks."""
+        hidden = {str(item) for item in prop_ids}
+        if hidden == self._hidden_street_props:
+            return
+        self._hidden_street_props = hidden
+        self.chunk_cache.clear()
+        if not self.chunked and self.map_config:
+            cfg = dict(self.map_config)
+            self._signature = None
+            self.set_map(cfg)
 
     def _style(self) -> tuple[list[str], list[str]]:
         # v1.2 ships one exterior art family. Keeping this selector centralized
@@ -1196,6 +1209,8 @@ class EnvironmentRenderer:
             "traffic_signal": 72,
         }
         for prop in self._street_prop_index.get((cx, cy), ()):
+            if str(prop.get("id", "")) in self._hidden_street_props:
+                continue
             try:
                 wx, wy = map(float, prop.get("pos", [0, 0]))
             except (TypeError, ValueError):

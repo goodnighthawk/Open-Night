@@ -1206,6 +1206,7 @@ class Game:
         self.bicycles: dict[str, RemoteBicycle] = {}
         self.npcs: dict[str, RemoteNPC] = {}
         self.blood_stains: dict[str, dict] = {}
+        self.hydrants: dict[str, dict] = {}
         self.traffic_lights: dict[str, bool] = {}
         self.notice = "Connecting to Open Night Internet Server..." if ".railway.app" in uri.lower() else "Connecting..."
         self.notice_until = time.monotonic() + 4.0
@@ -1962,6 +1963,16 @@ class Game:
                         str(row.get("id")): row for row in blood_rows
                         if isinstance(row, dict) and row.get("id")
                     }
+                hydrant_rows = message.get("hydrants", [])
+                if isinstance(hydrant_rows, list):
+                    self.hydrants = {
+                        str(row.get("id")): row for row in hydrant_rows
+                        if isinstance(row, dict) and row.get("id")
+                    }
+                    hidden = {hid for hid, row in self.hydrants.items() if bool(row.get("broken", False))}
+                    setter = getattr(self.environment, "set_hidden_street_props", None)
+                    if callable(setter):
+                        setter(hidden)
                 lights = message.get("traffic_lights")
                 if isinstance(lights, dict):
                     self.traffic_lights = {str(k): bool(v) for k, v in lights.items()}
@@ -2111,6 +2122,24 @@ class Game:
             pygame.draw.line(surface, color, a, b, width)
             pos += dash + gap
 
+    def draw_hydrant_effects(self) -> None:
+        """Render the short server-authoritative water burst after a hydrant impact."""
+        now = time.monotonic()
+        for hydrant in self.hydrants.values():
+            try:
+                remaining = float(hydrant.get("water_remaining", 0.0))
+                x, y = float(hydrant.get("x", 0.0)), float(hydrant.get("y", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if remaining <= 0.0 or not bool(hydrant.get("broken", False)):
+                continue
+            sx, sy = self.world_to_screen(x, y)
+            pulse = 0.5 + 0.5 * math.sin(now * 9.0)
+            height = int(28 + 32 * min(1.0, remaining / 1.5))
+            pygame.draw.line(self.screen, (136, 196, 220), (sx, sy), (sx + int(5*pulse), sy - height), 5)
+            pygame.draw.circle(self.screen, (174, 218, 232), (sx + int(5*pulse), sy - height), 6)
+            pygame.draw.ellipse(self.screen, (72, 119, 137), pygame.Rect(sx - 23, sy - 8, 46, 16), width=3)
+
     def draw_traffic_signal(self, signal: dict) -> None:
         sx, sy = self.world_to_screen(float(signal["pos"][0]), float(signal["pos"][1]))
         green = bool(self.traffic_lights.get(str(signal.get("id")), False))
@@ -2219,6 +2248,7 @@ class Game:
         # atlas once per map. Collision/traffic data remains server-authoritative
         # and independent of this visual layer.
         self.environment.draw_view(self.screen, self.camera())
+        self.draw_hydrant_effects()
         self.draw_bike_lanes()
 
         # Traffic signals remain dynamic because their state is synchronized
