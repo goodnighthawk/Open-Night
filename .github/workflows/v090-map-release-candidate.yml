@@ -2,7 +2,7 @@ name: Open Night v0.9.0 Map Release Candidate
 
 on:
   push:
-    branches: [main]
+    branches: [main, v0.9.0-consolidation]
     paths:
       - 'dev_tools/map_generator/**'
       - 'mapfiles/**'
@@ -55,7 +55,7 @@ jobs:
           vegetation = rows('iterated_vegetation.csv')
           frontage = rows('iterated_frontage_dressing.csv')
           scales = rows('building_sprite_scale_audit.csv')
-          park = [r for r in vegetation if r.get('placement_rule') == 'retained_park_canopy_pass19_v2']
+          park = [r for r in vegetation if 'retained_park' in r.get('placement_rule', '')]
           obvious = [r for r in frontage if r.get('kind') not in {'frontage_wear', 'litter_cluster'}]
           dressed = {r.get('building_id') for r in obvious}
           by_building = {}
@@ -63,13 +63,16 @@ jobs:
               by_building.setdefault(row.get('building_id'), 0)
               by_building[row.get('building_id')] += 1
           cluttered = {bid for bid, count in by_building.items() if count >= 4}
+          max_tree = max(float(r.get('size', 0) or 0) for r in vegetation)
           assert len(buildings) == 95, f'expected 95 buildings, got {len(buildings)}'
           assert all(r.get('status') == 'pass' for r in scales), 'building scale audit contains failures'
           assert len(park) >= 20, f'park canopy unexpectedly sparse: {len(park)} trees'
+          assert max_tree <= 130.0, f'v0.9 tree footprint regression: max size {max_tree}'
+          assert all('v090_compact_tree_footprint_v1' in r.get('placement_rule', '') for r in vegetation), 'tree footprint marker missing'
           assert 29 <= len(dressed) <= 48, f'dressed facades outside 30-50% target: {len(dressed)}'
           assert 10 <= len(cluttered) <= 19, f'cluttered facades outside 10-20% target: {len(cluttered)}'
           assert len(frontage) >= 190, f'frontage layer unexpectedly sparse: {len(frontage)} rows'
-          print(f'V090_RC_GATE buildings={len(buildings)} vegetation={len(vegetation)} park_trees={len(park)} frontage_rows={len(frontage)} dressed_facades={len(dressed)} cluttered_facades={len(cluttered)} scale_failures=0')
+          print(f'V090_RC_GATE buildings={len(buildings)} vegetation={len(vegetation)} max_tree={max_tree:.1f} park_trees={len(park)} frontage_rows={len(frontage)} dressed_facades={len(dressed)} cluttered_facades={len(cluttered)} scale_failures=0')
           PY
 
       - name: Upload v0.9.0 visual-review bundle
