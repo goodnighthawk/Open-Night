@@ -1,0 +1,33 @@
+name: Publish Open Night v0.9.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0.9.0-consolidation]
+    paths: [.github/workflows/v090-publish-release.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish tested v0.9.0 candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ab5f568f7766717b2775fc7b810b51f7bc42d618
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v0.9.0 already published.'
+            exit 0
+          fi
+          gh release create v0.9.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title 'Open Night v0.9.0' \
+            --notes $'Playable consolidation release.\n\nTested candidate: `ab5f568f7766717b2775fc7b810b51f7bc42d618`\n\nRelease gate: launcher/client/server 0.9.0 identity; runtime contracts; Pass 25 default-map identity; building/road, bicycle-scale, multilevel, deterministic-traffic and building-art audits; repository Quick Local Test with real WebSocket hello/welcome and desktop client launch.\n\nIncludes the v0.9 consolidation fixes for layer transitions, vehicle collision recovery, GWB elevated movement, buyer/supplier presentation, visible 2.5D city art, sidewalk proportions/driveability, signal and streetlamp alignment, compact tree footprints, server-authoritative dogs, and breakable/respawning hydrants.'
+          test "$(gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" --json targetCommitish -q .targetCommitish)" = "$RELEASE_SHA"
+          echo "OPEN_NIGHT_V090_RELEASED=$RELEASE_SHA"
