@@ -17,6 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 from common import DEFAULT_MAP_ID, MAPS, TRAFFIC_DEFAULT_COUNT
 from database import DatabaseConfig, InventoryDatabase, mysql_error_text
 from portable_paths import ensure_shared_layout
+from versioning import version_label
 
 APP_DIR = Path(__file__).resolve().parent
 LOCAL_CONFIG_PATH = APP_DIR / "server_config.csv"
@@ -52,7 +53,7 @@ WARN = "#d6a84d"
 
 def _load_config() -> dict:
     defaults = {
-        "server_name": "Open Night v0.8 / Pass 18",
+        "server_name": version_label(),
         "port": 8765,
         "max_players": 128,
         "traffic_cars": TRAFFIC_DEFAULT_COUNT,

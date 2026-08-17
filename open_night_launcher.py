@@ -8,10 +8,12 @@ import subprocess
 import sys
 import time
 
+from versioning import version_label
+
 APP_TITLE = (
-    "OPEN NIGHT // WORK IN PROGRESS MAP"
+    f"{version_label()} // WORK IN PROGRESS MAP"
     if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()
-    else "OPEN NIGHT // Launcher"
+    else f"{version_label()} // Launcher"
 )
 WINDOW = (1120, 820)
 FPS = 60
