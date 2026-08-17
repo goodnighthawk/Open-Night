@@ -24,10 +24,13 @@ def function_source(path: Path, name: str) -> str:
 def main() -> None:
     vehicle_block = function_source(SERVER, "_vehicle_map_blocked")
 
-    # GTA-style player cars are allowed off the asphalt.  The authoritative
-    # collision rule may reject map edges, water and solid buildings, but it
-    # must never require the car body to stay inside a road corridor.
-    assert "point_near_road" not in vehicle_block, "vehicle collision became road-only; sidewalks would be blocked"
+    # GTA-style player cars are allowed off the asphalt. The authoritative
+    # collision rule may reject map edges, water and solid buildings. A road
+    # proximity test is allowed only as the bridge-over-water exception; it
+    # must not become a general requirement that the car stay on asphalt.
+    compact = " ".join(vehicle_block.split())
+    assert "if not point_near_road(" not in compact, "vehicle collision became road-only; sidewalks would be blocked"
+    assert "and not point_near_road(" in compact, "bridge-over-water road exception unexpectedly disappeared"
     assert "collision_buildings_near" in vehicle_block, "solid building collision must remain authoritative"
     assert "point_in_water" in vehicle_block, "water must remain blocked for cars"
 
