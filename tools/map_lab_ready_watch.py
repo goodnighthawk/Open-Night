@@ -3,6 +3,8 @@
 
 A dedicated playback device is selected once and stored locally, so the ready
 alert does not follow the Windows default device (for example headphones).
+The console also streams small incremental progress from new commits so the
+watcher remains useful between testable visual iterations.
 """
 from __future__ import annotations
 
@@ -67,7 +69,6 @@ def _playback_devices() -> list[str]:
     finally:
         pygame.mixer.quit()
         pygame.display.quit()
-    # Keep order but remove duplicate names.
     return list(dict.fromkeys(names))
 
 
@@ -164,6 +165,51 @@ def _is_relevant(path: str) -> bool:
     return normalized in RELEVANT_EXACT or normalized.startswith(RELEVANT_PREFIXES)
 
 
+def _progress_area(paths: list[str]) -> str:
+    names = " ".join(path.replace("\\", "/").lower() for path in paths)
+    labels: list[str] = []
+    if "grid_world.py" in names or "curb" in names:
+        labels.append("curbs/grid semantics")
+    if "grid_renderer.py" in names or "building" in names:
+        labels.append("building/rendering")
+    if "map_lab" in names:
+        labels.append("Map Lab tooling")
+    if "ground_grid" in names or "ground_generated_objects" in names:
+        labels.append("Ground layout")
+    if "roof" in names:
+        labels.append("Roof")
+    if "source_packs/city_block" in names or "assets/grid_v100" in names:
+        labels.append("city_block art/catalog")
+    return ", ".join(dict.fromkeys(labels)) or "repo/tooling"
+
+
+def _commit_feed(old_sha: str, new_sha: str) -> list[tuple[str, str, list[str]]]:
+    if old_sha == new_sha:
+        return []
+    hashes = [line.strip() for line in _git("rev-list", "--reverse", f"{old_sha}..{new_sha}").splitlines() if line.strip()]
+    feed: list[tuple[str, str, list[str]]] = []
+    for sha in hashes:
+        subject = _git("show", "-s", "--format=%s", sha)
+        paths = [line.strip() for line in _git("show", "--format=", "--name-only", sha).splitlines() if line.strip()]
+        feed.append((sha, subject, paths))
+    return feed
+
+
+def _print_progress_feed(old_sha: str, new_sha: str) -> None:
+    feed = _commit_feed(old_sha, new_sha)
+    if not feed:
+        return
+    stamp = time.strftime("%H:%M:%S")
+    print(f"\n[{stamp}] MAP LAB PROGRESS — {len(feed)} new commit{'s' if len(feed) != 1 else ''}")
+    for sha, subject, paths in feed:
+        relevant = [path for path in paths if _is_relevant(path)]
+        area = _progress_area(relevant or paths)
+        marker = "visual" if relevant else "support"
+        print(f"  [{marker}] {sha[:8]}  {subject}")
+        print(f"           {area}")
+    print()
+
+
 def _working_tree_clean() -> bool:
     return not _git("status", "--porcelain")
 
@@ -207,7 +253,7 @@ def _render_and_beep(sha: str, paths: list[str]) -> bool:
     result = subprocess.run([sys.executable, str(RENDER_SCRIPT)], cwd=str(ROOT))
     if result.returncode:
         _save_state(sha, "render_failed")
-        print("[Map Lab Watch] New commit pulled, but Map Lab validation/render failed. No ready beep.")
+        print("[Map Lab Watch] Progress pulled, but Map Lab validation/render failed. No ready beep.")
         return False
 
     _save_state(sha, "ready")
@@ -228,8 +274,10 @@ def _process_remote(remote_sha: str) -> str:
     if remote_sha == local_sha:
         return local_sha
 
+    _print_progress_feed(local_sha, remote_sha)
+
     if not _working_tree_clean():
-        print("[Map Lab Watch] New remote version exists, but your working tree has local changes.")
+        print("[Map Lab Watch] New progress exists remotely, but your working tree has local changes.")
         print("[Map Lab Watch] Commit/stash/revert them; I will retry automatically. No ready beep yet.")
         return local_sha
 
@@ -247,7 +295,7 @@ def _process_remote(remote_sha: str) -> str:
         _render_and_beep(new_local, relevant)
     else:
         _save_state(new_local, "non_visual_update")
-        print("[Map Lab Watch] Pulled a non-visual update; no Map Lab beep.")
+        print("[Map Lab Watch] Small support progress pulled; no Map Lab beep needed.")
     return new_local
 
 
@@ -281,6 +329,7 @@ def main() -> None:
     print(f"Branch: {BRANCH}")
     print(f"Dedicated alert device: {device}")
     print(f"Checking origin every {POLL_SECONDS} seconds.")
+    print("PROGRESS lines = small incoming changes; no action required.")
     print("TRIPLE BEEP = a new relevant version was pulled and Map Lab proof passed.")
     print("Headphones may remain the Windows default; this alert uses the saved device directly.")
     print("Leave this window open; press Ctrl+C to stop.\n")
