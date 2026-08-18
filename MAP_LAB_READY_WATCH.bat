@@ -61,6 +61,8 @@ echo.
 echo [Map Lab Watch] Starting watcher...
 echo [Map Lab Watch] Leave this window open.
 echo [Map Lab Watch] Small progress will appear here as new commits arrive.
+echo [Map Lab Watch] SPACE = silence a READY ALARM and resume monitoring.
+echo [Map Lab Watch] ENTER = prepare a timestamped Open Night GPT continuation nudge, copy it to clipboard, and open ChatGPT.
 echo [Map Lab Watch] READY ALARM repeats until you press SPACE in this window.
 echo [Map Lab Watch] Headphones can remain Windows default; the saved alert device is used directly.
 echo [Map Lab Watch] Ready validation uses the same 0.25x building-scale Map Lab preview you inspect.
