@@ -45,7 +45,16 @@ class TileCatalog:
 
     @classmethod
     def load(cls, path: str | Path) -> "TileCatalog":
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        path = Path(path)
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        # The modular 256 px building kit is kept in a companion catalog so the
+        # main object catalog stays readable while still making city_block tiles
+        # first-class collision/render cells.
+        extra_path = path.with_name("building_tiles.json")
+        if extra_path.is_file():
+            extra = json.loads(extra_path.read_text(encoding="utf-8"))
+            raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
+            raw.setdefault("objects", {}).update(extra.get("objects", {}))
         entries = {
             tile_id: TileDef(
                 tile_id=tile_id,
@@ -183,10 +192,7 @@ class GridWorld:
         if radius <= 0.0:
             return True
         diag = radius * 0.7071067811865476
-        probes = (
-            (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius),
-            (diag, diag), (diag, -diag), (-diag, diag), (-diag, -diag),
-        )
+        probes = ((radius,0.0),(-radius,0.0),(0.0,radius),(0.0,-radius),(diag,diag),(diag,-diag),(-diag,diag),(-diag,-diag))
         return all(self.walkable_at(layer, x + ox, y + oy) for ox, oy in probes)
 
     def move_circle(self, layer: str, x: float, y: float, dx: float, dy: float, radius: float, *, max_step: float | None = None) -> tuple[float, float]:
@@ -234,26 +240,21 @@ class GridWorld:
         return self.nearest_walkable(layer, cx, cy, radius)
 
     def visible_cells(self, camera_x: float, camera_y: float, width_px: int, height_px: int):
-        gx0 = max(0, int(camera_x // self.cell_px))
-        gy0 = max(0, int(camera_y // self.cell_px))
-        gx1 = min(self.width - 1, int((camera_x + width_px) // self.cell_px))
-        gy1 = min(self.height - 1, int((camera_y + height_px) // self.cell_px))
+        gx0 = max(0, int(camera_x // self.cell_px)); gy0 = max(0, int(camera_y // self.cell_px))
+        gx1 = min(self.width - 1, int((camera_x + width_px) // self.cell_px)); gy1 = min(self.height - 1, int((camera_y + height_px) // self.cell_px))
         for gy in range(gy0, gy1 + 1):
             for gx in range(gx0, gx1 + 1):
                 yield gx, gy
 
     def visible_objects(self, camera_x: float, camera_y: float, width_px: int, height_px: int, layer: str):
-        left, top = float(camera_x), float(camera_y)
-        right, bottom = left + width_px, top + height_px
+        left, top = float(camera_x), float(camera_y); right, bottom = left + width_px, top + height_px
         visible = []
         for item in self.objects:
-            asset_id = str(item["asset"])
-            definition = self.catalog.object(asset_id)
+            asset_id = str(item["asset"]); definition = self.catalog.object(asset_id)
             if definition.layer != layer:
                 continue
             x, y = self.cell_to_world(int(item["gx"]), int(item["gy"]))
-            width = int(item.get("width_px", definition.native_width_px))
-            height = int(item.get("height_px", definition.native_height_px))
+            width = int(item.get("width_px", definition.native_width_px)); height = int(item.get("height_px", definition.native_height_px))
             if x < right and y < bottom and x + width > left and y + height > top:
                 visible.append((definition.z, asset_id, item, x, y, width, height))
         visible.sort(key=lambda row: row[0])
