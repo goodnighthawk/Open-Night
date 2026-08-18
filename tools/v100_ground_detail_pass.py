@@ -97,12 +97,6 @@ def _urban_land_texture(mode: str) -> Image.Image | None:
     for y in range(0, TILE, sh):
         for x in range(0, TILE, sw):
             tile.alpha_composite(source, (x, y))
-    # Broad stains break the visual repetition of the 64px source crop without
-    # creating new gameplay objects or tile-edge discontinuities.
-    d = ImageDraw.Draw(tile, "RGBA")
-    for y in range(128, TILE, 256):
-        for x in range(128, TILE, 256):
-            d.ellipse((x - 94, y - 58, x + 94, y + 58), fill=(7, 10, 13, 11 if night else 7))
     return tile
 
 
