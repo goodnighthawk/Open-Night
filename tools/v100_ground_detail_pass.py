@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Authored rooftop and block-identity detail for v1.0 Ground/Night.
+"""Authored land, rooftop and block-identity detail for v1.0 Ground/Night.
 
 This is a cosmetic post-pass. It reads only existing Map 001 authoring tables and
-never changes collision, traversal, road, water, green or building footprints.
+approved material crops; it never changes collision, traversal, road, water,
+green or building footprints.
 """
 from __future__ import annotations
 
@@ -11,11 +12,14 @@ from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP = ROOT / "mapfiles/data/map_001_gwb_corridor"
+APPROVED = ROOT / "assets/environment/approved"
 TILE = 1024
+GROUND_BG_NIGHT = (18, 22, 27)
+GROUND_BG_DAY = (91, 94, 89)
 
 
 @lru_cache(maxsize=None)
@@ -75,6 +79,48 @@ def _local_box(row, tx: int, ty: int):
     w, h = float(row.get("w", 0) or 0), float(row.get("h", 0) or 0)
     ox, oy = tx * TILE, ty * TILE
     return x - ox, y - oy, x + w - ox, y + h - oy
+
+
+@lru_cache(maxsize=2)
+def _urban_land_texture(mode: str) -> Image.Image | None:
+    """Return a restrained service-lot/urban-land texture at world tile scale."""
+    path = APPROVED / "city_concrete_64.png"
+    if not path.is_file():
+        return None
+    source = Image.open(path).convert("RGBA")
+    night = mode == "night"
+    source = ImageEnhance.Brightness(source).enhance(0.38 if night else 0.78)
+    wash_color = (10, 16, 22, 255) if night else (92, 94, 88, 255)
+    source = Image.blend(source, Image.new("RGBA", source.size, wash_color), 0.18 if night else 0.10)
+    tile = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 255))
+    sw, sh = source.size
+    for y in range(0, TILE, sh):
+        for x in range(0, TILE, sw):
+            tile.alpha_composite(source, (x, y))
+    # Broad stains break the visual repetition of the 64px source crop without
+    # creating new gameplay objects or tile-edge discontinuities.
+    d = ImageDraw.Draw(tile, "RGBA")
+    for y in range(128, TILE, 256):
+        for x in range(128, TILE, 256):
+            d.ellipse((x - 94, y - 58, x + 94, y + 58), fill=(7, 10, 13, 11 if night else 7))
+    return tile
+
+
+def apply_land_base(im: Image.Image, mode: str) -> None:
+    """Replace only untouched Ground background pixels with urban land texture.
+
+    Roads, sidewalks, water, green polygons, buildings and authored props have
+    already painted over the background. Exact-color masking therefore fills
+    only the previously empty urban/service parcels and cannot move geometry.
+    """
+    texture = _urban_land_texture(mode)
+    if texture is None:
+        return
+    base_rgb = GROUND_BG_NIGHT if mode == "night" else GROUND_BG_DAY
+    rgb = im.convert("RGB")
+    difference = ImageChops.difference(rgb, Image.new("RGB", im.size, base_rgb)).convert("L")
+    untouched = difference.point(lambda value: 255 if value == 0 else 0)
+    im.paste(texture, (0, 0), untouched)
 
 
 def draw_module(d: ImageDraw.ImageDraw, row: dict, tx: int, ty: int, night: bool):
@@ -172,7 +218,8 @@ def draw_identity(d: ImageDraw.ImageDraw, building: dict, tx: int, ty: int, nigh
 
 
 def apply(im: Image.Image, tx: int, ty: int, mode: str = "night") -> Image.Image:
-    """Overlay authored building detail onto one already-painted Ground tile."""
+    """Overlay urban land and authored building detail onto one Ground tile."""
+    apply_land_base(im, mode)
     d = ImageDraw.Draw(im, "RGBA")
     night = mode == "night"
     for building in building_index().get((tx, ty), []):
