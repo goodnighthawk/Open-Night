@@ -12,6 +12,19 @@ GRID_H = 48
 GRID_WORLD_W = GRID_W * GRID_CELL_PX
 GRID_WORLD_H = GRID_H * GRID_CELL_PX
 
+# The city_block curb filenames describe the edge from the pavement sprite's
+# own frame, while Open Night's logical curb IDs describe the visible world
+# edge. The supplied reference art shows the vertical convention is opposite
+# to the first-pass mapping, so translate top<->bottom once at catalog load.
+CURB_WORLD_TO_PACK_IMAGE = {
+    "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
+    "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
+}
+
 
 @dataclass(frozen=True)
 class TileDef:
@@ -55,6 +68,13 @@ class TileCatalog:
             extra = json.loads(extra_path.read_text(encoding="utf-8"))
             raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
             raw.setdefault("objects", {}).update(extra.get("objects", {}))
+
+        # Centralized orientation correction: map authors continue to use world
+        # semantics (top/bottom), and no individual curb sprite is rotated.
+        for tile_id, image in CURB_WORLD_TO_PACK_IMAGE.items():
+            if tile_id in raw.get("tiles", {}):
+                raw["tiles"][tile_id]["image"] = image
+
         entries = {
             tile_id: TileDef(
                 tile_id=tile_id,
