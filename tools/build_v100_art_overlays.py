@@ -148,7 +148,6 @@ def _material_source(name: str, mode: str) -> Image.Image | None:
         }
         factor = factors.get(name, 0.58)
         im = ImageEnhance.Brightness(im).enhance(factor)
-        # Blue-black night wash unifies source crops while preserving texture.
         wash = Image.new("RGBA", im.size, (9, 16, 27, 255))
         im = Image.blend(im, wash, 0.16)
     return im
@@ -163,8 +162,6 @@ def _material_tile(name: str, mode: str) -> Image.Image | None:
     sw, sh = source.size
     if sw <= 0 or sh <= 0:
         return None
-    # TILE is a multiple of the approved 64px crops, so this is world-continuous
-    # across 1024px chunk boundaries without per-chunk texture phase shifts.
     for y in range(0, TILE, sh):
         for x in range(0, TILE, sw):
             canvas.alpha_composite(source, (x, y))
@@ -182,15 +179,13 @@ def fill_mask(im: Image.Image, mask: Image.Image, material_name: str, mode: str,
 
 def polygon_mask(points, tx, ty):
     mask = Image.new("L", (TILE, TILE), 0)
-    md = ImageDraw.Draw(mask)
-    md.polygon(local_polyline(points, tx, ty), fill=255)
+    ImageDraw.Draw(mask).polygon(local_polyline(points, tx, ty), fill=255)
     return mask
 
 
 def line_mask(points, tx, ty, width):
     mask = Image.new("L", (TILE, TILE), 0)
-    md = ImageDraw.Draw(mask)
-    md.line(local_polyline(points, tx, ty), fill=255, width=max(1, int(width)), joint="curve")
+    ImageDraw.Draw(mask).line(local_polyline(points, tx, ty), fill=255, width=max(1, int(width)), joint="curve")
     return mask
 
 
@@ -205,8 +200,6 @@ def _procedural_green_texture(mode: str, tx: int, ty: int):
     base = (24, 45, 31, 255) if night else (61, 91, 60, 255)
     im = Image.new("RGBA", (TILE, TILE), base)
     d = ImageDraw.Draw(im, "RGBA")
-    # Sparse, deterministic mottling avoids flat green without creating random
-    # tree objects or altering the authoritative green polygon.
     for gy in range(10, TILE, 28):
         for gx in range(10, TILE, 28):
             seed = stable_int(f"green:{tx}:{ty}:{gx}:{gy}")
@@ -219,6 +212,116 @@ def _procedural_green_texture(mode: str, tx: int, ty: int):
                 col = (88 + seed % 20, 116 + (seed >> 8) % 20, 76 + (seed >> 16) % 16, 75)
             d.ellipse((gx + dx - r, gy + dy - r, gx + dx + r, gy + dy + r), fill=col)
     return im
+
+
+def parallel_points(points, offset):
+    if len(points) < 2:
+        return list(points)
+    out = []
+    for i, (x, y) in enumerate(points):
+        ax, ay = points[max(0, i - 1)]
+        bx, by = points[min(len(points) - 1, i + 1)]
+        dx, dy = bx - ax, by - ay
+        mag = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / mag, dx / mag
+        out.append((x + nx * offset, y + ny * offset))
+    return out
+
+
+def sampled_polyline(points, spacing):
+    if len(points) < 2:
+        return []
+    samples = []
+    carry = 0.0
+    for a, b in zip(points, points[1:]):
+        ax, ay = a
+        bx, by = b
+        dx, dy = bx - ax, by - ay
+        seg = math.hypot(dx, dy)
+        if seg <= 1e-6:
+            continue
+        ux, uy = dx / seg, dy / seg
+        distance = spacing - carry if carry > 1e-6 else 0.0
+        while distance <= seg:
+            samples.append((ax + ux * distance, ay + uy * distance, ux, uy))
+            distance += spacing
+        carry = max(0.0, seg - (distance - spacing))
+        if carry >= spacing:
+            carry %= spacing
+    return samples
+
+
+def draw_bridge_details(im, d, tx, ty, mode, points, width, sidewalk):
+    """Give authored bridge roads a recognizable GWB structural treatment.
+
+    The drivable/walkable envelope is unchanged. Towers and steelwork use the
+    authored landmark anchors and are decorative only.
+    """
+    if len(points) < 2 or not intersects_tile(points, tx, ty, pad=220):
+        return
+    night = mode == "night"
+    ox, oy = tx * TILE, ty * TILE
+    half_deck = width * 0.5
+    outer = half_deck + sidewalk * 0.62
+    deck_col = (162, 160, 150, 180) if night else (118, 120, 118, 190)
+    steel_col = (113, 124, 126, 230) if night else (151, 155, 151, 235)
+    shadow_col = (3, 8, 13, 150) if night else (39, 44, 45, 105)
+
+    for off in (-outer, outer):
+        rail = local_polyline(parallel_points(points, off), tx, ty)
+        d.line(rail, fill=shadow_col, width=7, joint="curve")
+        d.line(rail, fill=steel_col, width=2, joint="curve")
+    for off in (-half_deck, half_deck):
+        edge = local_polyline(parallel_points(points, off), tx, ty)
+        d.line(edge, fill=deck_col, width=3, joint="curve")
+
+    for x, y, ux, uy in sampled_polyline(points, 96.0):
+        lx, ly = x - ox, y - oy
+        if lx < -outer or ly < -outer or lx > TILE + outer or ly > TILE + outer:
+            continue
+        nx, ny = -uy, ux
+        a = (lx - nx * outer, ly - ny * outer)
+        b = (lx + nx * outer, ly + ny * outer)
+        d.line((a, b), fill=(99, 111, 113, 45 if night else 38), width=2)
+    for x, y, ux, uy in sampled_polyline(points, 144.0):
+        lx, ly = x - ox, y - oy
+        nx, ny = -uy, ux
+        for sign in (-1, 1):
+            px, py = lx + nx * outer, ly + ny * outer
+            if -20 <= px <= TILE + 20 and -20 <= py <= TILE + 20:
+                if night:
+                    d.ellipse((px-8, py-8, px+8, py+8), fill=(236, 175, 92, 24))
+                    d.ellipse((px-2.5, py-2.5, px+2.5, py+2.5), fill=(244, 189, 104, 215))
+                else:
+                    d.ellipse((px-2, py-2, px+2, py+2), fill=(207, 201, 177, 180))
+
+    for lm in rows("landmarks.csv"):
+        kind = str(lm.get("kind", ""))
+        if kind not in {"bridge_tower", "bridge_portal"}:
+            continue
+        try:
+            lx = float(lm["x"]) - ox
+            ly = float(lm["y"]) - oy
+        except (KeyError, TypeError, ValueError):
+            continue
+        if lx < -220 or ly < -220 or lx > TILE + 220 or ly > TILE + 220:
+            continue
+        if kind == "bridge_tower":
+            tower_off = outer + 22
+            for sign in (-1, 1):
+                cy = ly + sign * tower_off
+                d.rectangle((lx-15, cy-39, lx+15, cy+39), fill=(52, 61, 63, 245), outline=steel_col, width=3)
+                d.rectangle((lx-7, cy-31, lx+7, cy+31), fill=(18, 26, 29, 230), outline=(141, 149, 145, 130), width=1)
+                d.line((lx-13, cy-31, lx+13, cy+31), fill=(131, 141, 140, 100), width=2)
+                d.line((lx+13, cy-31, lx-13, cy+31), fill=(131, 141, 140, 100), width=2)
+            d.rectangle((lx-12, ly-outer-4, lx+12, ly+outer+4), outline=(132, 143, 143, 130), width=2)
+            if night:
+                for sign in (-1, 1):
+                    cy = ly + sign * (tower_off + 38)
+                    d.ellipse((lx-5, cy-5, lx+5, cy+5), fill=(235, 175, 91, 65))
+        else:
+            d.rectangle((lx-8, ly-outer-9, lx+8, ly+outer+9), fill=(47, 55, 57, 225), outline=steel_col, width=2)
+            d.line((lx, ly-outer, lx, ly+outer), fill=(169, 165, 150, 100), width=2)
 
 
 def draw_dashed_polyline(d, pts, fill, width=2, dash=22, gap=24):
@@ -261,7 +364,6 @@ def draw_rotated_crosswalk(im, row, tx, ty):
     lx, ly = x - ox, y - oy
     if lx < -length or ly < -length or lx > TILE + length or ly > TILE + length:
         return
-
     patch_size = int(math.ceil(max(length, width) * 1.6 + 16))
     patch = Image.new("RGBA", (patch_size, patch_size), (0, 0, 0, 0))
     pd = ImageDraw.Draw(patch, "RGBA")
@@ -270,10 +372,7 @@ def draw_rotated_crosswalk(im, row, tx, ty):
     stripe_index = 0
     while pos < width / 2:
         alpha = 212 if stripe_index % 3 else 188
-        pd.rectangle(
-            (cx - length / 2, cy + pos, cx + length / 2, cy + min(pos + stripe, width / 2)),
-            fill=(224, 222, 211, alpha),
-        )
+        pd.rectangle((cx - length / 2, cy + pos, cx + length / 2, cy + min(pos + stripe, width / 2)), fill=(224, 222, 211, alpha))
         pos += stripe + gap
         stripe_index += 1
     patch = patch.rotate(-angle, resample=Image.Resampling.BICUBIC, expand=False)
@@ -318,7 +417,6 @@ def draw_street_details(im, d, tx, ty, mode):
         if lx < -64 or ly < -64 or lx > TILE + 64 or ly > TILE + 64:
             continue
         kind = str(row.get("kind", ""))
-
         if kind == "streetlamp":
             if night:
                 glow = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))
@@ -368,7 +466,6 @@ def draw_frontage_dressing(im, d, tx, ty, mode):
         kind = str(row.get("kind", ""))
         box = (lx, ly, lx + w, ly + h)
         seed = stable_int(str(row.get("id", kind)))
-
         if kind == "frontage_wear":
             d.rectangle(box, fill=(19, 22, 24, 38 if night else 28))
         elif kind == "service_patch":
@@ -380,8 +477,7 @@ def draw_frontage_dressing(im, d, tx, ty, mode):
                 d.line((gx, ly + 2, gx, ly + h - 2), fill=(116, 115, 105, 85), width=1)
         elif kind == "awning":
             colors = ((91, 28, 31, 220), (31, 61, 52, 220), (38, 53, 82, 220))
-            color = colors[seed % len(colors)]
-            d.rectangle(box, fill=color, outline=(172, 152, 117, 105), width=1)
+            d.rectangle(box, fill=colors[seed % len(colors)], outline=(172, 152, 117, 105), width=1)
             if night:
                 d.line((lx, ly + h, lx + w, ly + h), fill=(236, 174, 91, 125), width=2)
         elif kind == "stoop":
@@ -412,15 +508,11 @@ def draw_building_ground(im, d, b, tx, ty, mode):
     x0, y0, x1, y1 = local_box(x, y, w, h, tx, ty)
     if x1 < 0 or y1 < 0 or x0 > TILE or y0 > TILE:
         return
-
     seed = stable_int(bid)
     roof_material = ROOF_MATERIALS[seed % len(ROOF_MATERIALS)]
     facade_material = FACADE_MATERIALS[(seed >> 8) % len(FACADE_MATERIALS)]
     visual = building_visuals().get(bid, {})
     facade_depth = max(7, min(15, int(float(visual.get("height_px", 12) or 12))))
-
-    # Full footprint remains the silhouette; 2.5D facade strips are painted
-    # inside the south/east edges rather than extruded beyond collision bounds.
     footprint = (x0 + 2, y0 + 2, x1 - 2, y1 - 2)
     fill_mask(im, rect_mask(footprint), roof_material, mode, (48, 47, 47, 255))
     fd = min(facade_depth, max(3, int(min(max(w, 1), max(h, 1)) * 0.18)))
@@ -428,13 +520,10 @@ def draw_building_ground(im, d, b, tx, ty, mode):
     east = (max(x0 + 2, x1 - fd - 2), y0 + 2, x1 - 2, y1 - 2)
     fill_mask(im, rect_mask(south), facade_material, mode, (56, 48, 44, 255))
     fill_mask(im, rect_mask(east), facade_material, mode, (53, 46, 43, 255))
-
     d.rectangle(footprint, outline=(123, 112, 93, 190), width=2)
     inner = (x0 + 7, y0 + 7, x1 - fd - 6, y1 - fd - 6)
     if inner[2] > inner[0] and inner[3] > inner[1]:
         d.rectangle(inner, outline=(22, 25, 28, 150), width=2)
-
-    # Warm practical lights are deterministic and stay on the facade strips.
     if mode == "night":
         spacing = max(22, min(44, int(max(22, w / 7))))
         start_x = int(x0 + 10 + (seed % max(1, spacing // 2)))
@@ -446,8 +535,6 @@ def draw_building_ground(im, d, b, tx, ty, mode):
         for wy in range(start_y, int(y1 - 8), spacing_y):
             if ((seed + wy) // spacing_y) % 4 != 0:
                 d.rectangle((x1 - fd + 2, wy, x1 - fd + 6, min(wy + 7, y1 - 4)), fill=(218, 151, 74, 160))
-
-    # Rooftop density scales with footprint, using only small utility forms.
     roof_x0, roof_y0 = x0 + 12, y0 + 12
     roof_x1, roof_y1 = x1 - fd - 10, y1 - fd - 10
     if roof_x1 - roof_x0 > 26 and roof_y1 - roof_y0 > 22:
@@ -464,7 +551,6 @@ def draw_building_ground(im, d, b, tx, ty, mode):
             d.rectangle((cx-rw, cy-rh, cx+rw, cy+rh), fill=(61, 63, 62, 235), outline=(126, 121, 108, 145), width=1)
             for fin in range(-int(rw)+4, int(rw)-3, 5):
                 d.line((cx+fin, cy-rh+2, cx+fin, cy+rh-2), fill=(148, 145, 132, 80), width=1)
-
         if seed % 7 == 0 and min(w, h) > 120:
             r = min(13, max(8, int(min(w, h) * 0.06)))
             cx = (roof_x0 + roof_x1) / 2
@@ -475,8 +561,6 @@ def draw_building_ground(im, d, b, tx, ty, mode):
 
 def paint_ground_semantics(im, d, tx, ty, mode, roads, road_pts, water, green, crosswalks, vegetation):
     night = mode == "night"
-
-    # Authoritative water polygons first: preserve Hudson shape exactly.
     for pts in water.values():
         if not intersects_tile(pts, tx, ty):
             continue
@@ -491,8 +575,6 @@ def paint_ground_semantics(im, d, tx, ty, mode, roads, road_pts, water, green, c
         clipped.paste(overlay, (0, 0), mask)
         im.alpha_composite(clipped)
         d.line(lp + [lp[0]], fill=(90, 119, 126, 115), width=2)
-
-    # Parks/green polygons remain exact masks, but gain restrained texture.
     green_texture = _procedural_green_texture(mode, tx, ty)
     for pts in green.values():
         if intersects_tile(pts, tx, ty):
@@ -500,9 +582,6 @@ def paint_ground_semantics(im, d, tx, ty, mode, roads, road_pts, water, green, c
             im.paste(green_texture, (0, 0), mask)
             lp = local_polyline(pts, tx, ty)
             d.line(lp + [lp[0]], fill=(76, 96, 72, 125), width=2)
-
-    # Roads: exact centerline, sidewalk envelope and authored widths. Material
-    # imagery is clipped by masks generated directly from those same values.
     for rid, pts in road_pts.items():
         if len(pts) < 2 or not intersects_tile(pts, tx, ty, pad=180):
             continue
@@ -512,27 +591,20 @@ def paint_ground_semantics(im, d, tx, ty, mode, roads, road_pts, water, green, c
         curb = max(1, int(float(r.get("curb_width", 4))))
         lanes = max(1, int(float(r.get("lanes", 1) or 1)))
         lp = local_polyline(pts, tx, ty)
-
         if sidewalk:
             smask = line_mask(pts, tx, ty, width + 2 * sidewalk)
             fill_mask(im, smask, SIDEWALK_MATERIAL, mode, (91, 88, 81, 255) if night else (139, 136, 126, 255))
             d.line(lp, fill=(132, 122, 104, 120), width=width + 2 * curb, joint="curve")
-
         rmask = line_mask(pts, tx, ty, width)
         fill_mask(im, rmask, ROAD_MATERIAL, mode, (37, 41, 45, 255) if night else (76, 79, 78, 255))
-        # Wet sheen and wear stay well inside the road mask.
         d.line(lp, fill=(121, 132, 136, 28 if night else 18), width=max(2, width // 9), joint="curve")
         if lanes >= 2:
             draw_dashed_polyline(d, lp, (205, 207, 201, 82 if night else 105), width=max(1, width // 42), dash=26, gap=30)
-
+        if str(r.get("bridge", "")).strip().lower() in {"1", "true", "yes", "on"}:
+            draw_bridge_details(im, d, tx, ty, mode, pts, width, sidewalk)
     for r in crosswalks:
         draw_rotated_crosswalk(im, r, tx, ty)
-
-    # Authored surface/furniture pass restores drains, lamps, hydrants, benches,
-    # repairs and racks at their existing coordinates rather than inventing props.
     draw_street_details(im, d, tx, ty, mode)
-
-    # Trees: exact authored centers/sizes with multi-lobed, scale-consistent canopy.
     for r in vegetation:
         x, y, size = float(r["x"]), float(r["y"]), float(r["size"])
         lx, ly = x - tx * TILE, y - ty * TILE
@@ -558,10 +630,8 @@ def paint_layer(layer, mode, tx, ty, roads, road_pts, buildings, levels, water, 
     bg, primary, accent = palette(layer, mode)
     im = Image.new("RGBA", (TILE, TILE), bg)
     d = ImageDraw.Draw(im, "RGBA")
-
     if layer == "ground":
         paint_ground_semantics(im, d, tx, ty, mode, roads, road_pts, water, green, crosswalks, vegetation)
-
     wanted = {
         "ground": {(0, "ground")},
         "first_floor": {(1, "upper")},
@@ -586,10 +656,7 @@ def paint_layer(layer, mode, tx, ty, roads, road_pts, buildings, levels, water, 
                     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
                     rw, rh = min(40, w * .18), min(28, h * .15)
                     d.rectangle((cx-rw, cy-rh, cx+rw, cy+rh), fill=(91, 90, 84, 235), outline=(155, 146, 128, 220), width=2)
-
     if layer == "ground":
-        # Existing authored frontage dressing is the last static ground pass so
-        # awnings, stoops and service details sit over the building/sidewalk art.
         draw_frontage_dressing(im, d, tx, ty, mode)
     elif layer == "hell":
         for i in range(0, TILE, 96):
@@ -605,13 +672,10 @@ def paint_layer(layer, mode, tx, ty, roads, road_pts, buildings, levels, water, 
             rx = 90 + ((seed >> (n % 13)) & 63)
             ry = 38 + ((seed >> ((n + 3) % 13)) & 31)
             d.ellipse((cx-rx, cy-ry, cx+rx, cy+ry), fill=primary)
-
     return im
 
 
 def build_ground_preview(cols, rows_n):
-    # Stitches the same production tiles, then scales only for approval viewing.
-    # This is not a separate concept render.
     scale = 0.125
     preview = Image.new("RGB", (int(cols*TILE*scale), int(rows_n*TILE*scale)), (8, 10, 13))
     ground = OUT / "ground" / "night"
@@ -636,7 +700,6 @@ def main():
     crosswalks = rows("crosswalks.csv")
     vegetation = rows("iterated_vegetation.csv")
     OUT.mkdir(parents=True, exist_ok=True)
-
     for layer in LAYERS:
         for mode in ("day", "night"):
             target = OUT / layer / mode
@@ -645,7 +708,6 @@ def main():
                 for tx in range(cols):
                     im = paint_layer(layer, mode, tx, ty, roads, pts, buildings, levels, water, green, crosswalks, vegetation)
                     im.save(target / f"tile_{tx:02d}_{ty:02d}.png", optimize=True)
-
     build_ground_preview(cols, rows_n)
     print(f"V100_ART_OVERLAYS_OK layers={len(LAYERS)} tiles_per_variant={cols*rows_n} world={cfg['world_w']}x{cfg['world_h']} preview=GROUND_NIGHT_APPROVAL_PREVIEW.png")
 
