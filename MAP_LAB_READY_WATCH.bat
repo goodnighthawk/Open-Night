@@ -14,14 +14,16 @@ if errorlevel 1 (
     if errorlevel 1 goto :error
 )
 
-echo [Map Lab Watch] Testing Windows default playback device...
+echo [Map Lab Watch] Checking dedicated alert playback device...
+echo [Map Lab Watch] On first run, choose the monitor/HDMI/DisplayPort or motherboard output you want.
 %PY% tools\map_lab_ready_watch.py --test-beep
+if errorlevel 1 goto :error
 
 echo.
 echo [Map Lab Watch] Starting watcher...
 echo [Map Lab Watch] Leave this window open.
-echo [Map Lab Watch] TRIPLE SYSTEM BEEP = new Map Lab version is ready to inspect.
-echo [Map Lab Watch] The alert follows your Windows default playback device.
+echo [Map Lab Watch] TRIPLE BEEP = new Map Lab version is ready to inspect.
+echo [Map Lab Watch] Headphones can remain Windows default; the saved alert device is used directly.
 echo.
 %PY% tools\map_lab_ready_watch.py
 if errorlevel 1 goto :error
