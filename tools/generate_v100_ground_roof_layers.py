@@ -1,19 +1,34 @@
 #!/usr/bin/env python3
-"""Generate the current v1.0 Ground + Roof layer support files.
+"""Generate deterministic v1.0 Ground + Roof building layers.
 
-Only Ground and Roof are generated in this phase. Future traversal affordances are
-kept as simple deterministic placeholders so later interior/underground work does
-not require changing the map grammar:
-- street door: future Ground -> First Floor
-- fire escape: future stationary Jump near exterior -> Roof
-- roof hatch: future Second Floor -> Roof
-- real city_block manhole: future crouch-on-manhole -> Underground
+Current production scope is Ground + Roof only.
 
-The other semantic layers intentionally remain absent/blank for now.
+Building synthesis rules:
+- existing building components define the buildable lot envelope;
+- each component is reduced deterministically to its largest axis-aligned rectangle;
+- one city_block colour family is chosen from a stable hash of that rectangle;
+- modular tiles are assigned strictly from filename semantics:
+  top_left_outer / top_center / top_right_outer / left / fill / right /
+  bottom_left_outer / bottom_center / bottom_right_outer;
+- modular building tiles are never rotated or stretched;
+- Roof uses the exact same generated footprint as Ground.
+
+``assets/source_packs/city_block/example.png`` is retained as the pack's visual
+orientation reference. The generator never guesses orientation from pixels: the
+filenames are authoritative, and the example image is a human/audit reference.
+
+Future traversal affordances remain simple deterministic placeholders:
+- street door: future Ground -> First Floor;
+- fire escape: future stationary Jump near exterior -> Roof;
+- roof hatch: future Second Floor -> Roof;
+- real city_block manhole: future crouch-on-manhole -> Underground.
+
+All other semantic layers intentionally remain absent/blank for now.
 """
 from __future__ import annotations
 
 from collections import deque
+import hashlib
 import json
 from pathlib import Path
 
@@ -23,8 +38,16 @@ GROUND_PATH = MAP_DIR / "ground_grid.json"
 GROUND_GENERATED = MAP_DIR / "ground_generated_objects.json"
 ROOF_PATH = MAP_DIR / "roof_grid.generated.json"
 PLACEHOLDER_DIR = ROOT / "assets" / "grid_v100" / "placeholders"
+CITY_BLOCK_DIR = ROOT / "assets" / "source_packs" / "city_block"
+ORIENTATION_REFERENCE = CITY_BLOCK_DIR / "example.png"
 
 MAGENTA = (255, 0, 255)
+THEMES = ("blue", "dark_green", "green", "red", "yellow")
+BUILDING_ROLE_ORDER = (
+    "top_left_outer", "top_center", "top_right_outer",
+    "left", "fill", "right",
+    "bottom_left_outer", "bottom_center", "bottom_right_outer",
+)
 
 
 def _write_ppm(path: Path, width: int, height: int, pixel_fn) -> None:
@@ -112,70 +135,201 @@ def _building_components(rows: list[list[str]]) -> list[list[tuple[int, int]]]:
     return groups
 
 
+def _largest_axis_aligned_rect(group: list[tuple[int, int]]) -> tuple[int, int, int, int]:
+    """Largest filled rectangle contained in the existing component.
+
+    Irregular legacy footprints are shrunk rather than expanded into sidewalks or
+    roads. Ties resolve top-to-bottom then left-to-right, so output is stable.
+    """
+    cells = set(group)
+    xs = [x for x, _ in group]
+    ys = [y for _, y in group]
+    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+    best = None
+    best_area = -1
+    for y0 in range(min_y, max_y + 1):
+        for y1 in range(y0, max_y + 1):
+            for x0 in range(min_x, max_x + 1):
+                for x1 in range(x0, max_x + 1):
+                    area = (x1 - x0 + 1) * (y1 - y0 + 1)
+                    if area < best_area:
+                        continue
+                    if all((x, y) in cells for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)):
+                        candidate = (x0, y0, x1, y1)
+                        if area > best_area or best is None or candidate < best:
+                            best = candidate
+                            best_area = area
+    if best is None:
+        x, y = min(group, key=lambda p: (p[1], p[0]))
+        return x, y, x, y
+    return best
+
+
+def _theme_for_rect(index: int, rect: tuple[int, int, int, int]) -> str:
+    payload = f"open-night-v100|{index}|{rect[0]}|{rect[1]}|{rect[2]}|{rect[3]}".encode("ascii")
+    digest = hashlib.sha256(payload).digest()
+    return THEMES[int.from_bytes(digest[:2], "big") % len(THEMES)]
+
+
+def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
+    x0, y0, x1, y1 = rect
+    if x0 == x1 or y0 == y1:
+        return "fill"
+    if y == y0:
+        if x == x0:
+            return "top_left_outer"
+        if x == x1:
+            return "top_right_outer"
+        return "top_center"
+    if y == y1:
+        if x == x0:
+            return "bottom_left_outer"
+        if x == x1:
+            return "bottom_right_outer"
+        return "bottom_center"
+    if x == x0:
+        return "left"
+    if x == x1:
+        return "right"
+    return "fill"
+
+
+def _tile_for(theme: str, role: str) -> str:
+    if role not in BUILDING_ROLE_ORDER:
+        raise ValueError(f"unsupported modular building role: {role}")
+    return f"bld_{theme}_{role}"
+
+
+def _audit_rect(rows: list[list[str]], rect: tuple[int, int, int, int], theme: str) -> None:
+    x0, y0, x1, y1 = rect
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            expected = _tile_for(theme, _role_for_rect_cell(x, y, rect))
+            actual = rows[y][x]
+            if actual != expected:
+                raise RuntimeError(
+                    f"building seam/orientation audit failed at {(x, y)}: expected {expected!r}, got {actual!r}"
+                )
+
+
 def _road_cells(rows: list[list[str]]) -> list[tuple[int, int]]:
     return [(x, y) for y, row in enumerate(rows) for x, tid in enumerate(row) if tid == "road_fill"]
 
 
+def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[str]], list[dict]]:
+    groups = _building_components(original)
+    rows = [list(row) for row in original]
+
+    # No legacy/randomly-oriented building tile survives this pass.
+    for y, row in enumerate(rows):
+        for x, tile_id in enumerate(row):
+            if tile_id.startswith("bld_"):
+                rows[y][x] = "pavement_small"
+
+    buildings = []
+    for index, group in enumerate(groups, 1):
+        rect = _largest_axis_aligned_rect(group)
+        x0, y0, x1, y1 = rect
+        theme = _theme_for_rect(index, rect)
+        building_id = f"grid_building_{index:02d}"
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                rows[y][x] = _tile_for(theme, _role_for_rect_cell(x, y, rect))
+        _audit_rect(rows, rect, theme)
+        buildings.append({
+            "building_id": building_id,
+            "footprint_type": "rectangle",
+            "theme": theme,
+            "rect": [x0, y0, x1, y1],
+            "generated_cells": (x1 - x0 + 1) * (y1 - y0 + 1),
+            "legacy_component_cells": len(group),
+            "orientation_policy": "filename_semantics_no_rotation",
+        })
+
+    data["layers"] = {"ground": rows}
+    data.pop("layers_ascii", None)
+    data["building_synthesis"] = {
+        "version": 1,
+        "shape_family": "axis_aligned_rectangles",
+        "orientation_reference": "assets/source_packs/city_block/example.png",
+        "orientation_authority": "filename_semantics",
+        "random_rotation": False,
+        "building_count": len(buildings),
+        "buildings": buildings,
+    }
+    data.setdefault("source_pack", "city_block.zip")
+    GROUND_PATH.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
+    return rows, buildings
+
+
 def generate_layers() -> tuple[int, int]:
+    if not ORIENTATION_REFERENCE.is_file():
+        raise FileNotFoundError(f"city_block orientation reference missing: {ORIENTATION_REFERENCE}")
+
     data = json.loads(GROUND_PATH.read_text(encoding="utf-8"))
-    ground = _decode_ground(data)
-    groups = _building_components(ground)
+    original_ground = _decode_ground(data)
+    ground, buildings = synthesize_ground(data, original_ground)
 
     ground_objects = []
     roof_objects = []
     roof_rows = [["void" for _ in row] for row in ground]
-    roof_prop_cycle = [
+    roof_prop_cycle = (
         "rooflayer_aircon_large",
         "rooflayer_water_red",
         "rooflayer_green_roof",
         "rooflayer_white_box",
-    ]
+    )
 
-    for index, group in enumerate(groups, 1):
-        xs = [x for x, _ in group]
-        ys = [y for _, y in group]
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    for index, building in enumerate(buildings, 1):
+        x0, y0, x1, y1 = map(int, building["rect"])
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-        building_id = f"grid_building_{index:02d}"
-        for x, y in group:
-            roof_rows[y][x] = ground[y][x]
+        building_id = str(building["building_id"])
+
+        # Ground -> Roof registration is copied cell-for-cell; no second orientation decision.
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                roof_rows[y][x] = ground[y][x]
 
         ground_objects.append({
             "asset": "placeholder_street_door", "gx": cx, "gy": y1,
             "width_px": 96, "height_px": 144, "building_id": building_id,
-            "placeholder": True, "future_transition": "ground_to_first_floor_door",
+            "edge": "south", "rotation": 0, "placeholder": True,
+            "future_transition": "ground_to_first_floor_door",
         })
         ground_objects.append({
             "asset": "placeholder_fire_escape", "gx": x1, "gy": cy,
             "width_px": 128, "height_px": 256, "building_id": building_id,
-            "placeholder": True, "future_transition": "stationary_jump_ground_to_roof",
+            "edge": "east", "rotation": 0, "placeholder": True,
+            "future_transition": "stationary_jump_ground_to_roof",
         })
         roof_objects.append({
             "asset": "placeholder_roof_hatch", "gx": cx, "gy": cy,
             "width_px": 128, "height_px": 128, "building_id": building_id,
-            "placeholder": True, "future_transition": "second_floor_to_roof",
+            "rotation": 0, "placeholder": True,
+            "future_transition": "second_floor_to_roof",
         })
         roof_objects.append({
             "asset": roof_prop_cycle[(index - 1) % len(roof_prop_cycle)],
             "gx": max(x0, min(x1, cx - 1)), "gy": max(y0, min(y1, cy - 1)),
             "width_px": 150, "height_px": 150, "building_id": building_id,
+            "rotation": 0,
         })
 
-    # Keep actual city_block manholes in the Ground grammar now even though the
-    # Underground layer itself is intentionally blank in this phase.
     roads = _road_cells(ground)
     if roads:
         for index in range(4):
             x, y = roads[(index + 1) * len(roads) // 5]
             ground_objects.append({
                 "asset": "overlay_man_hole", "gx": x, "gy": y,
-                "width_px": 128, "height_px": 128,
+                "width_px": 128, "height_px": 128, "rotation": 0,
                 "future_transition": "crouch_on_manhole_to_underground",
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v1",
+        "format": "open-night-ground-generated-v2",
         "generation_scope": ["ground", "roof"],
+        "building_synthesis": "filename_semantics_no_rotation",
+        "orientation_reference": "assets/source_packs/city_block/example.png",
         "objects": ground_objects,
     }, separators=(",", ":")) + "\n", encoding="utf-8")
 
@@ -189,18 +343,32 @@ def generate_layers() -> tuple[int, int]:
         "world_h": data["world_h"],
         "source_pack": "city_block",
         "generation_scope": ["ground", "roof"],
+        "building_synthesis": {
+            "version": 1,
+            "matching_ground": True,
+            "orientation_reference": "assets/source_packs/city_block/example.png",
+            "orientation_authority": "filename_semantics",
+            "random_rotation": False,
+        },
         "layers": {"roof": roof_rows},
         "objects": roof_objects,
         "login_spawns": [],
     }
     ROOF_PATH.write_text(json.dumps(roof_data, separators=(",", ":")) + "\n", encoding="utf-8")
-    return len(groups), len(ground_objects) + len(roof_objects)
+    return len(buildings), len(ground_objects) + len(roof_objects)
 
 
 def main() -> None:
     generate_placeholder_images()
     buildings, objects = generate_layers()
-    print(f"V100_GROUND_ROOF_GENERATED buildings={buildings} generated_objects={objects} scope=ground,roof")
+    print(
+        "V100_GROUND_ROOF_GENERATED",
+        f"buildings={buildings}",
+        f"generated_objects={objects}",
+        "shape=rectangles",
+        "orientation=filename_semantics_no_rotation",
+        "scope=ground,roof",
+    )
 
 
 if __name__ == "__main__":
