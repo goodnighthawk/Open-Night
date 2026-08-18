@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/build_v100_art_overlays.py'
       - 'tools/build_v100_ground_approval.py'
+      - 'tools/v100_ground_detail_pass.py'
       - 'mapfiles/data/map_001_gwb_corridor/**'
       - '.github/workflows/v100-ground-art.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'tools/build_v100_art_overlays.py'
       - 'tools/build_v100_ground_approval.py'
+      - 'tools/v100_ground_detail_pass.py'
       - 'mapfiles/data/map_001_gwb_corridor/**'
       - '.github/workflows/v100-ground-art.yml'
   workflow_dispatch:
