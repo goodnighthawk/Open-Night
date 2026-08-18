@@ -11,16 +11,18 @@ import pygame
 from grid_world import GridWorld
 
 ROOT = Path(__file__).resolve().parent
+CITY_BLOCK_DIR = ROOT / "assets" / "source_packs" / "city_block"
 
 
 class GridRenderer:
     """Direct renderer for the v1.0 authoritative 256 px grid.
 
-    Ground art is loaded directly from the user-supplied ``city_block.zip`` via
-    ``city_block://`` catalog URLs. This deliberately makes the original art pack
-    the runtime tile/object vocabulary instead of extracting generic materials
-    from it. Surface cells remain the collision authority; larger premade building
-    sprites are grid-anchored objects over independently blocked footprint cells.
+    ``city_block://`` catalog URLs resolve first to the repo-resident
+    ``assets/source_packs/city_block`` tree and fall back to the original
+    ``city_block.zip`` search path. This makes the city-block kit itself the
+    runtime tile/object vocabulary. Surface cells remain collision-authoritative;
+    larger premade building sprites are grid-anchored objects over independently
+    blocked footprint cells.
     """
 
     def __init__(self, world: GridWorld):
@@ -40,7 +42,6 @@ class GridRenderer:
             ROOT / "assets" / "source_packs" / "city_block.zip",
             ROOT.parent / "city_block.zip",
         ])
-        # Preserve order while removing duplicates.
         unique: list[Path] = []
         seen: set[str] = set()
         for path in candidates:
@@ -60,29 +61,35 @@ class GridRenderer:
                 return self._city_block_zip
         shown = "\n  - ".join(str(path) for path in self.city_block_zip_candidates())
         raise FileNotFoundError(
-            "Open Night grid runtime requires the original city_block.zip. "
-            "Place it in the game folder, assets/grid_v100/, or set "
-            f"OPEN_NIGHT_CITY_BLOCK_ZIP. Checked:\n  - {shown}"
+            "Open Night grid runtime could not find a repo-resident city_block asset "
+            "or the original city_block.zip fallback. Checked:\n  - " + shown
         )
 
     @lru_cache(maxsize=512)
     def _load_image(self, rel_path: str) -> pygame.Surface:
         if rel_path.startswith("city_block://"):
             member = rel_path[len("city_block://"):].lstrip("/")
+            loose_path = CITY_BLOCK_DIR / member
+            if loose_path.is_file():
+                return pygame.image.load(str(loose_path)).convert_alpha()
             archive = self._open_city_block_zip()
             try:
                 data = archive.read(member)
             except KeyError as exc:
                 raise FileNotFoundError(
-                    f"city_block.zip is missing runtime asset {member!r}"
+                    f"city_block source is missing runtime asset {member!r}"
                 ) from exc
-            # Name hint lets pygame/SDL_image choose the decoder without a temp file.
             return pygame.image.load(BytesIO(data), member).convert_alpha()
 
         path = ROOT / rel_path
         if not path.is_file():
             raise FileNotFoundError(f"grid asset missing image {path}")
-        return pygame.image.load(str(path)).convert_alpha()
+        image = pygame.image.load(str(path)).convert_alpha()
+        # Text-committed PPM placeholders use magenta as transparent key so they
+        # can remain tiny deterministic source images in the map-generation path.
+        if path.suffix.lower() == ".ppm":
+            image.set_colorkey((255, 0, 255))
+        return image
 
     @lru_cache(maxsize=256)
     def _tile_surface(self, tile_id: str) -> pygame.Surface:
