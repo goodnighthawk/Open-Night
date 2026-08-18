@@ -17,19 +17,20 @@ GRID_WORLD_H = GRID_H * GRID_CELL_PX
 #   +x = East, +y = South
 #
 # User-verified reference:
-# - curb_left / curb_right are already correct and must not change.
-# - north/south center pieces use the opposite pack filename.
-# - corner translation remains the both-axis mapping needed to join those edges.
+# - all four straight pieces (top/bottom/left/right) are correct and locked.
+# - only the *_outer corner pieces require translation.
+# - the pack corner art needs a left/right mirror relative to world corner IDs so
+#   its pavement quadrant joins the already-correct straight edges around a block.
 # No curb sprite is rotated at render time.
 CURB_WORLD_TO_PACK_IMAGE = {
     "curb_left": "city_block://road_and_pavement_tileset/curb_right_edge.png",
     "curb_right": "city_block://road_and_pavement_tileset/curb_left_edge.png",
     "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
     "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
-    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
-    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
-    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
-    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
 }
 
 
@@ -67,12 +68,17 @@ class TileCatalog:
     def load(cls, path: str | Path) -> "TileCatalog":
         path = Path(path)
         raw = json.loads(path.read_text(encoding="utf-8"))
+        # The modular 256 px building kit is kept in a companion catalog so the
+        # main object catalog stays readable while still making city_block tiles
+        # first-class collision/render cells.
         extra_path = path.with_name("building_tiles.json")
         if extra_path.is_file():
             extra = json.loads(extra_path.read_text(encoding="utf-8"))
             raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
             raw.setdefault("objects", {}).update(extra.get("objects", {}))
 
+        # Centralized orientation translation: map authors use world compass
+        # semantics, while the pack image names are converted here exactly once.
         for tile_id, image in CURB_WORLD_TO_PACK_IMAGE.items():
             if tile_id in raw.get("tiles", {}):
                 raw["tiles"][tile_id]["image"] = image
@@ -110,7 +116,12 @@ class TileCatalog:
 
 
 class GridWorld:
-    """Authoritative 256 px tile world shared by rendering and gameplay."""
+    """Authoritative 256 px tile world shared by rendering and gameplay.
+
+    The map may store layers either as explicit tile-id matrices or compact ASCII
+    rows plus a legend. Large visual objects are anchored to grid cells but never
+    define collision: gameplay reads the surface cell beneath each object.
+    """
 
     def __init__(self, data: dict[str, Any], catalog: TileCatalog):
         self.data = data
