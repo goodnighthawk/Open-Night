@@ -8,6 +8,13 @@ still invoke the historical script name.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from grid_runtime import GRID_MAP_PATH, load_ground_grid
 
 
