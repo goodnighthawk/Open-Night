@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/build_v100_art_overlays.py'
       - 'tools/build_v100_underground_approval.py'
+      - 'tools/v100_underground_detail_pass.py'
       - 'tools/v100_underground_semantics_audit.py'
       - 'tools/multilevel_map_audit.py'
       - 'mapfiles/data/map_001_gwb_corridor/roads.csv'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'tools/build_v100_art_overlays.py'
       - 'tools/build_v100_underground_approval.py'
+      - 'tools/v100_underground_detail_pass.py'
       - 'tools/v100_underground_semantics_audit.py'
       - 'tools/multilevel_map_audit.py'
       - 'mapfiles/data/map_001_gwb_corridor/roads.csv'
@@ -88,12 +90,19 @@ jobs:
           import csv
           import zipfile
           from pathlib import Path
+          from PIL import Image
 
           root = Path('assets/environment/approved/map_001_gwb_corridor')
           layer = root / 'v100_layers/underground/night'
           assert len(list(layer.glob('tile_*.png'))) == 192
-          assert (root / 'v100_layers/UNDERGROUND_NIGHT_APPROVAL_PREVIEW.png').is_file()
-          assert (root / 'v100_layers/UNDERGROUND_NIGHT_FOCUS_PREVIEW.png').is_file()
+          full = root / 'v100_layers/UNDERGROUND_NIGHT_APPROVAL_PREVIEW.png'
+          focus = root / 'v100_layers/UNDERGROUND_NIGHT_FOCUS_PREVIEW.png'
+          player = root / 'v100_layers/UNDERGROUND_NIGHT_PLAYER_SCALE_PREVIEW.png'
+          assert full.is_file()
+          assert focus.is_file()
+          assert player.is_file()
+          with Image.open(player) as im:
+              assert im.size == (1280, 720), im.size
 
           with Path('mapfiles/data/map_001_gwb_corridor/map.csv').open(encoding='utf-8-sig', newline='') as f:
               cfg = {r['key']: r['value'] for r in csv.DictReader(f)}
@@ -109,7 +118,7 @@ jobs:
           names = {f'night/tile_{x:02d}_{y:02d}.png' for x in range(16) for y in range(12)}
           if names - actual:
               raise SystemExit(f'Missing runtime tiles: {sorted(names-actual)[:5]}')
-          print('V100_UNDERGROUND_ART_CONTRACT_OK level=-1 archive=192 runtime_wired=false')
+          print('V100_UNDERGROUND_ART_CONTRACT_OK level=-1 archive=192 player_preview=1280x720 runtime_wired=false')
           PY
 
       - name: Upload Underground approval artifact
@@ -119,6 +128,7 @@ jobs:
           path: |
             assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_APPROVAL_PREVIEW.png
             assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_FOCUS_PREVIEW.png
+            assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_PLAYER_SCALE_PREVIEW.png
             assets/environment/approved/map_001_gwb_corridor/v100_layers/underground/night/*.png
             assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_underground.zip
           if-no-files-found: error
@@ -132,6 +142,7 @@ jobs:
           git add -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_underground.zip
           git add -f assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_APPROVAL_PREVIEW.png
           git add -f assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_FOCUS_PREVIEW.png
+          git add -f assets/environment/approved/map_001_gwb_corridor/v100_layers/UNDERGROUND_NIGHT_PLAYER_SCALE_PREVIEW.png
           if git diff --cached --quiet; then
             echo 'No generated Underground changes to commit.'
           else
