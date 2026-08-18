@@ -80,11 +80,14 @@ def main() -> int:
         print("Close the old server window, then run QUICK_LOCAL_TEST.bat again.")
         return 2
 
+    # v1.0 Quick Test deliberately enters through the grid-authoritative wrapper.
+    # The wrapper validates the actual 64x48 Ground GridWorld and prevents retired
+    # legacy vector-road geometry from blocking the current playable exterior.
     server_cmd = [
-        python, str(ROOT / "server.py"), "--memory-db", "--no-discovery",
+        python, str(ROOT / "tools" / "grid_local_server.py"), "--memory-db", "--no-discovery",
         "--port", str(PORT), "--map", "map_001_gwb_corridor", "--traffic", "8",
     ]
-    print("[1/3] Starting memory-DB server...")
+    print("[1/3] Starting grid-authoritative memory-DB server...")
     server = launch_visible(server_cmd, label="SERVER")
 
     deadline = time.monotonic() + 15.0
@@ -108,10 +111,10 @@ def main() -> int:
         return 5
     print(f"[OK] {detail}")
 
-    print("[3/3] Launching desktop client...")
+    print("[3/3] Launching desktop client against local grid server...")
     client_cmd = [python, str(ROOT / "client.py"), "--server", URI]
     launch_visible(client_cmd, label="CLIENT")
-    print("[OK] Client launched only after server readiness was proven.")
+    print("[OK] Client launched only after grid server readiness was proven.")
     print("If the client crashes, its console will stay open and show the Python traceback.")
     return 0
 
