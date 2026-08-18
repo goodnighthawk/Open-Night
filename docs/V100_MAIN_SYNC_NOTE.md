@@ -1,0 +1,1 @@
+Main is intentionally synchronized into v1.0-art-overlay before the final grid-authority cutover. The v1.0 branch remains the integration branch until the grid runtime, minimap/world-map, gameplay routing, and local/hosted launch paths all pass their cutover checks.
