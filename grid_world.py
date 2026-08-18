@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -76,11 +77,12 @@ class TileCatalog:
 
 
 class GridWorld:
-    """Authoritative 256 px tile world.
+    """Authoritative 256 px tile world shared by rendering and gameplay.
 
-    Rendering and gameplay query the same cell records. Large visual objects are
-    anchored to grid cells, but never define collision themselves: the cells under
-    their declared span are the gameplay authority.
+    Large visual objects are anchored to grid cells but never define collision:
+    gameplay reads the surface cell beneath the object. This keeps the supplied
+    city-block art and the server's collision contract in exactly one coordinate
+    system without treating arbitrary image alpha as gameplay geometry.
     """
 
     def __init__(self, data: dict[str, Any], catalog: TileCatalog):
@@ -89,8 +91,11 @@ class GridWorld:
         self.cell_px = int(data.get("cell_px", GRID_CELL_PX))
         self.width = int(data.get("width", GRID_W))
         self.height = int(data.get("height", GRID_H))
+        self.world_w = self.width * self.cell_px
+        self.world_h = self.height * self.cell_px
         self.layers: dict[str, list[list[str]]] = data.get("layers", {})
         self.objects: list[dict[str, Any]] = list(data.get("objects", []))
+        self.login_spawns: list[list[float]] = list(data.get("login_spawns", []))
         if self.cell_px != GRID_CELL_PX:
             raise ValueError(f"v1.0 grid requires {GRID_CELL_PX}px cells, got {self.cell_px}")
         if self.width != GRID_W or self.height != GRID_H:
@@ -98,6 +103,10 @@ class GridWorld:
         for name, rows in self.layers.items():
             if len(rows) != self.height or any(len(row) != self.width for row in rows):
                 raise ValueError(f"layer {name!r} is not {self.width}x{self.height}")
+            for row in rows:
+                for tile_id in row:
+                    if tile_id not in self.catalog.entries:
+                        raise ValueError(f"layer {name!r} references unknown tile {tile_id!r}")
         for obj in self.objects:
             oid = str(obj.get("asset", ""))
             if oid not in self.catalog.objects:
@@ -122,6 +131,9 @@ class GridWorld:
     def cell_to_world(self, gx: int, gy: int) -> tuple[int, int]:
         return gx * self.cell_px, gy * self.cell_px
 
+    def cell_center(self, gx: int, gy: int) -> tuple[float, float]:
+        return (gx + 0.5) * self.cell_px, (gy + 0.5) * self.cell_px
+
     def tile_id(self, layer: str, gx: int, gy: int) -> str:
         if not self.in_bounds(gx, gy):
             return "void"
@@ -140,6 +152,83 @@ class GridWorld:
     def walkable_at(self, layer: str, x: float, y: float) -> bool:
         gx, gy = self.world_to_cell(x, y)
         return self.tile(layer, gx, gy).walkable
+
+    def circle_walkable(self, layer: str, x: float, y: float, radius: float) -> bool:
+        """Conservative player/collision probe against authoritative grid cells."""
+        radius = max(0.0, float(radius))
+        margin = 0.5
+        if x - radius < margin or y - radius < margin or x + radius >= self.world_w - margin or y + radius >= self.world_h - margin:
+            return False
+        if not self.walkable_at(layer, x, y):
+            return False
+        if radius <= 0.0:
+            return True
+        # Cardinal + diagonal probes keep a circular player from clipping a blocked
+        # building cell even though the cell center itself remains on pavement.
+        diag = radius * 0.7071067811865476
+        probes = (
+            (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius),
+            (diag, diag), (diag, -diag), (-diag, diag), (-diag, -diag),
+        )
+        return all(self.walkable_at(layer, x + ox, y + oy) for ox, oy in probes)
+
+    def move_circle(
+        self,
+        layer: str,
+        x: float,
+        y: float,
+        dx: float,
+        dy: float,
+        radius: float,
+        *,
+        max_step: float | None = None,
+    ) -> tuple[float, float]:
+        """Substepped axis-separated movement using the same cells as rendering."""
+        x, y, dx, dy = map(float, (x, y, dx, dy))
+        distance = max(abs(dx), abs(dy))
+        step_limit = max(8.0, min(self.cell_px / 4.0, float(max_step or self.cell_px / 4.0)))
+        steps = max(1, int(math.ceil(distance / step_limit)))
+        sx, sy = dx / steps, dy / steps
+        for _ in range(steps):
+            nx = x + sx
+            if self.circle_walkable(layer, nx, y, radius):
+                x = nx
+            ny = y + sy
+            if self.circle_walkable(layer, x, ny, radius):
+                y = ny
+        return x, y
+
+    def nearest_walkable(self, layer: str, x: float, y: float, radius: float) -> tuple[float, float]:
+        if self.circle_walkable(layer, x, y, radius):
+            return float(x), float(y)
+        start_gx, start_gy = self.world_to_cell(x, y)
+        max_ring = max(self.width, self.height)
+        for ring in range(max_ring + 1):
+            candidates: list[tuple[int, int]] = []
+            for gx in range(start_gx - ring, start_gx + ring + 1):
+                candidates.append((gx, start_gy - ring))
+                candidates.append((gx, start_gy + ring))
+            for gy in range(start_gy - ring + 1, start_gy + ring):
+                candidates.append((start_gx - ring, gy))
+                candidates.append((start_gx + ring, gy))
+            for gx, gy in candidates:
+                if not self.in_bounds(gx, gy):
+                    continue
+                cx, cy = self.cell_center(gx, gy)
+                if self.circle_walkable(layer, cx, cy, radius):
+                    return cx, cy
+        raise RuntimeError("grid map contains no walkable spawn cell")
+
+    def choose_spawn(self, layer: str = "ground", radius: float = 18.0) -> tuple[float, float]:
+        for raw in self.login_spawns:
+            try:
+                x, y = float(raw[0]), float(raw[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if self.circle_walkable(layer, x, y, radius):
+                return x, y
+        cx, cy = self.cell_center(self.width // 2, self.height // 2)
+        return self.nearest_walkable(layer, cx, cy, radius)
 
     def visible_cells(self, camera_x: float, camera_y: float, width_px: int, height_px: int):
         gx0 = max(0, int(camera_x // self.cell_px))
