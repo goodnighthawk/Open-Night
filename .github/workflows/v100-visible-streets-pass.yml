@@ -1,0 +1,86 @@
+name: Apply v1.0 visible street/building pass
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - '.github/workflows/v100-visible-streets-pass.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-visible-pass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch deterministic generator
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('tools/generate_v100_ground_roof_layers.py')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              'THEMES = ("blue", "dark_green", "green", "red", "yellow")\nROOF_PROP_SPECS = (',
+              'THEMES = ("blue", "dark_green", "green", "red", "yellow")\nMIN_BUILDING_SIDE = 4\nMIN_BUILDING_AREA = 24\nROOF_PROP_SPECS = ('
+          )
+
+          road_anchor = '''def _road_cells(rows: list[list[str]]) -> list[tuple[int, int]]:\n    return [(x, y) for y, row in enumerate(rows) for x, tid in enumerate(row) if tid == "road_fill"]\n'''
+          road_helpers = road_anchor + '''\n\ndef _contiguous_bands(values: list[int]) -> list[tuple[int, int]]:\n    if not values:\n        return []\n    bands = []\n    start = prev = values[0]\n    for value in values[1:]:\n        if value != prev + 1:\n            bands.append((start, prev))\n            start = value\n        prev = value\n    bands.append((start, prev))\n    return bands\n\n\ndef _road_bands(rows: list[list[str]]) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:\n    h, w = len(rows), len(rows[0])\n    vertical_cols = [x for x in range(w) if sum(rows[y][x] == "road_fill" for y in range(h)) >= int(h * 0.75)]\n    horizontal_rows = [y for y in range(h) if sum(rows[y][x] == "road_fill" for x in range(w)) >= int(w * 0.75)]\n    return _contiguous_bands(vertical_cols), _contiguous_bands(horizontal_rows)\n\n\ndef _street_markings(rows: list[list[str]]) -> list[dict]:\n    h, w = len(rows), len(rows[0])\n    vertical, horizontal = _road_bands(rows)\n    objects: list[dict] = []\n\n    def in_h_intersection(y: int) -> bool:\n        return any(y0 - 1 <= y <= y1 + 1 for y0, y1 in horizontal)\n\n    def in_v_intersection(x: int) -> bool:\n        return any(x0 - 1 <= x <= x1 + 1 for x0, x1 in vertical)\n\n    # Repeating dashed centre lines between intersections.\n    for x0, x1 in vertical:\n        cx = (x0 + x1) // 2\n        for y in range(1, h - 1, 2):\n            if in_h_intersection(y):\n                continue\n            objects.append({\n                "asset": "mark_yellow_repeating_single", "gx": cx, "gy": y,\n                "width_px": 64, "height_px": 190, "rotation": 0,\n                "street_marking": "dashed_center_line_vertical",\n            })\n\n    for y0, y1 in horizontal:\n        cy = (y0 + y1) // 2\n        for x in range(1, w - 1, 2):\n            if in_v_intersection(x):\n                continue\n            objects.append({\n                "asset": "mark_yellow_repeating_single", "gx": x, "gy": cy,\n                "width_px": 64, "height_px": 190, "rotation": 90,\n                "street_marking": "dashed_center_line_horizontal",\n            })\n\n    # Full-width zebra piece on each of the four approaches to every intersection.\n    for vx0, vx1 in vertical:\n        for hy0, hy1 in horizontal:\n            road_w = (vx1 - vx0 + 1) * 256\n            road_h = (hy1 - hy0 + 1) * 256\n            cross_w = max(256, road_w - 64)\n            cross_h = max(256, road_h - 64)\n            if hy0 - 1 >= 0:\n                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy0 - 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_north"})\n            if hy1 + 1 < h:\n                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy1 + 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_south"})\n            if vx0 - 1 >= 0:\n                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0 - 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_west"})\n            if vx1 + 1 < w:\n                objects.append({"asset": "mark_white_crossing_piece", "gx": vx1 + 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_east"})\n    return objects\n'''
+          if '_street_markings(' not in text:
+              if road_anchor not in text:
+                  raise SystemExit('road helper anchor not found')
+              text = text.replace(road_anchor, road_helpers)
+
+          pattern = re.compile(r'''    buildings = \[\]\n    for index, group in enumerate\(groups, 1\):.*?\n    data\["layers"\] = \{"ground": rows\}''', re.S)
+          replacement = '''    buildings = []\n    rejected = []\n    for legacy_index, group in enumerate(groups, 1):\n        rect = _largest_axis_aligned_rect(group)\n        x0, y0, x1, y1 = rect\n        bw, bh = x1 - x0 + 1, y1 - y0 + 1\n        area = bw * bh\n        if bw < MIN_BUILDING_SIDE or bh < MIN_BUILDING_SIDE or area < MIN_BUILDING_AREA:\n            rejected.append({"legacy_index": legacy_index, "rect": [x0, y0, x1, y1], "area": area})\n            continue\n\n        index = len(buildings) + 1\n        theme = _theme_for_rect(index, rect)\n        for y in range(y0, y1 + 1):\n            for x in range(x0, x1 + 1):\n                rows[y][x] = _tile_for(theme, _role_for_rect_cell(x, y, rect))\n        _audit_rect(rows, rect, theme)\n        buildings.append({\n            "building_id": f"grid_building_{index:02d}",\n            "footprint_type": "rectangle",\n            "theme": theme,\n            "rect": [x0, y0, x1, y1],\n            "generated_cells": area,\n            "legacy_component_cells": len(group),\n            "orientation_policy": "filename_semantics_no_rotation",\n        })\n\n    # Retire the old plus-sign/crossing pass before adding the new street grammar.\n    data["objects"] = [obj for obj in data.get("objects", []) if not str(obj.get("asset", "")).startswith("mark_")]\n    data["layers"] = {"ground": rows}'''
+          text, n = pattern.subn(replacement, text, count=1)
+          if n != 1:
+              raise SystemExit(f'building synthesis patch count={n}')
+
+          text = text.replace('"version": 2,', '"version": 3,')
+          text = text.replace(
+              '"roof_registration": "exact_ground_footprint",\n        "building_count": len(buildings),',
+              '"roof_registration": "exact_ground_footprint",\n        "minimum_side_cells": MIN_BUILDING_SIDE,\n        "minimum_area_cells": MIN_BUILDING_AREA,\n        "rejected_small_building_count": len(rejected),\n        "building_count": len(buildings),'
+          )
+          text = text.replace('ground_objects: list[dict] = []', 'ground_objects: list[dict] = _street_markings(ground)')
+          text = text.replace('"format": "open-night-ground-generated-v3",', '"format": "open-night-ground-generated-v4",')
+          text = text.replace(
+              '"building_synthesis": "filename_semantics_no_rotation",',
+              '"building_synthesis": "filename_semantics_no_rotation_minimum_scale",\n        "street_markings": "zebra_crossings_and_dashed_center_lines",'
+          )
+          text = text.replace(
+              '"random_rotation": False,\n        },',
+              '"random_rotation": False,\n            "minimum_side_cells": MIN_BUILDING_SIDE,\n            "minimum_area_cells": MIN_BUILDING_AREA,\n        },'
+          )
+          text = text.replace(
+              '"shape=rectangles", "orientation=filename_semantics_no_rotation",',
+              'f"min_building_side={MIN_BUILDING_SIDE}", f"min_building_area={MIN_BUILDING_AREA}",\n        "street_markings=zebra+dashed", "orientation=filename_semantics_no_rotation",'
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Generate visibly revised Ground + Roof
+        run: |
+          python -m py_compile tools/generate_v100_ground_roof_layers.py
+          python tools/generate_v100_ground_roof_layers.py
+          python tools/build_v100_grid_seed.py
+      - name: Commit generated runtime map
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tools/generate_v100_ground_roof_layers.py \
+            mapfiles/data/map_001_gwb_corridor/grid_v100/ground_grid.json \
+            mapfiles/data/map_001_gwb_corridor/grid_v100/ground_generated_objects.json \
+            mapfiles/data/map_001_gwb_corridor/grid_v100/roof_grid.generated.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'v1.0: larger buildings and legible street markings'
+          git push origin HEAD:v1.0-art-overlay
