@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections import deque
 from functools import lru_cache
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -9,20 +11,17 @@ from grid_world import GridWorld, TileCatalog
 
 ROOT = Path(__file__).resolve().parent
 GRID_MAP_PATH = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100" / "ground_grid.json"
-GRID_EXTERNAL_OBJECTS_PATH = GRID_MAP_PATH.with_name("ground_external_objects.json")
 GRID_GENERATED_OBJECTS_PATH = GRID_MAP_PATH.with_name("ground_generated_objects.json")
 GRID_ROOF_PATH = GRID_MAP_PATH.with_name("roof_grid.generated.json")
 GRID_CATALOG_PATH = ROOT / "assets" / "grid_v100" / "tile_catalog.json"
 GRID_MAP_ID = "map_001_gwb_corridor"
-
-
-def _merge_objects(data: dict, path: Path) -> int:
-    if not path.is_file():
-        return 0
-    extra = json.loads(path.read_text(encoding="utf-8"))
-    extra_objects = list(extra.get("objects", []))
-    data.setdefault("objects", []).extend(extra_objects)
-    return len(extra_objects)
+THEMES = ("blue", "dark_green", "green", "red", "yellow")
+ROOF_PROP_SPECS = (
+    ("rooflayer_aircon_large", 164, 164),
+    ("rooflayer_water_red", 154, 154),
+    ("rooflayer_green_roof", 190, 190),
+    ("rooflayer_white_box", 146, 146),
+)
 
 
 def _decode_ground(data: dict) -> list[list[str]]:
@@ -34,10 +33,183 @@ def _decode_ground(data: dict) -> list[list[str]]:
     return [[str(legend[ch]) for ch in str(row)] for row in source]
 
 
-def _fallback_roof_data(ground_data: dict) -> dict:
-    """Exact registered fallback used if generated Roof support is absent."""
-    ground = _decode_ground(ground_data)
-    roof = [[tile_id if tile_id.startswith("bld_") else "void" for tile_id in row] for row in ground]
+def _building_components(rows: list[list[str]]) -> list[list[tuple[int, int]]]:
+    remaining = {
+        (x, y) for y, row in enumerate(rows) for x, tile_id in enumerate(row)
+        if tile_id.startswith("bld_")
+    }
+    groups = []
+    while remaining:
+        seed = remaining.pop()
+        q = deque([seed])
+        group = [seed]
+        while q:
+            x, y = q.popleft()
+            for n in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if n in remaining:
+                    remaining.remove(n)
+                    q.append(n)
+                    group.append(n)
+        groups.append(group)
+    groups.sort(key=lambda g: (min(y for _, y in g), min(x for x, _ in g)))
+    return groups
+
+
+def _largest_axis_aligned_rect(group: list[tuple[int, int]]) -> tuple[int, int, int, int]:
+    cells = set(group)
+    xs = [x for x, _ in group]
+    ys = [y for _, y in group]
+    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+    best = None
+    best_area = -1
+    for y0 in range(min_y, max_y + 1):
+        for y1 in range(y0, max_y + 1):
+            for x0 in range(min_x, max_x + 1):
+                for x1 in range(x0, max_x + 1):
+                    area = (x1 - x0 + 1) * (y1 - y0 + 1)
+                    if area < best_area:
+                        continue
+                    if all((x, y) in cells for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)):
+                        candidate = (x0, y0, x1, y1)
+                        if area > best_area or best is None or candidate < best:
+                            best, best_area = candidate, area
+    if best is None:
+        x, y = min(group, key=lambda p: (p[1], p[0]))
+        return x, y, x, y
+    return best
+
+
+def _theme_for_rect(index: int, rect: tuple[int, int, int, int]) -> str:
+    digest = hashlib.sha256(f"open-night-v100|{index}|{rect}".encode("ascii")).digest()
+    return THEMES[int.from_bytes(digest[:2], "big") % len(THEMES)]
+
+
+def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
+    x0, y0, x1, y1 = rect
+    if x0 == x1 or y0 == y1:
+        return "fill"
+    if y == y0:
+        return "top_left_outer" if x == x0 else "top_right_outer" if x == x1 else "top_center"
+    if y == y1:
+        return "bottom_left_outer" if x == x0 else "bottom_right_outer" if x == x1 else "bottom_center"
+    if x == x0:
+        return "left"
+    if x == x1:
+        return "right"
+    return "fill"
+
+
+def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]:
+    """Same filename-driven rectangle synthesis used by the generator, in memory."""
+    original = _decode_ground(data)
+    groups = _building_components(original)
+    rows = [list(row) for row in original]
+    for y, row in enumerate(rows):
+        for x, tile_id in enumerate(row):
+            if tile_id.startswith("bld_"):
+                rows[y][x] = "pavement_small"
+
+    buildings = []
+    for index, group in enumerate(groups, 1):
+        rect = _largest_axis_aligned_rect(group)
+        theme = _theme_for_rect(index, rect)
+        x0, y0, x1, y1 = rect
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                role = _role_for_rect_cell(x, y, rect)
+                rows[y][x] = f"bld_{theme}_{role}"
+        buildings.append({
+            "building_id": f"grid_building_{index:02d}",
+            "theme": theme,
+            "rect": [x0, y0, x1, y1],
+            "orientation_policy": "filename_semantics_no_rotation",
+        })
+
+    data["building_synthesis"] = {
+        "version": 2,
+        "shape_family": "axis_aligned_rectangles",
+        "orientation_reference": "assets/source_packs/city_block/example.png",
+        "orientation_authority": "filename_semantics",
+        "random_rotation": False,
+        "roof_registration": "exact_ground_footprint",
+        "building_count": len(buildings),
+        "buildings": buildings,
+        "runtime_synthesized": True,
+    }
+    return rows, buildings
+
+
+def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> list[tuple[int, int]]:
+    x0, y0, x1, y1 = rect
+    cx, cy = center
+    candidates = [
+        (x0 + 1, y0 + 1), (x1 - 1, y0 + 1),
+        (x0 + 1, y1 - 1), (x1 - 1, y1 - 1),
+        (cx, y0 + 1), (cx, y1 - 1), (x0 + 1, cy), (x1 - 1, cy),
+    ]
+    out = []
+    for x, y in candidates:
+        if x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out:
+            out.append((x, y))
+    return out
+
+
+def _generated_ground_objects(rows: list[list[str]], buildings: list[dict]) -> list[dict]:
+    objects = []
+    for building in buildings:
+        x0, y0, x1, y1 = map(int, building["rect"])
+        cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+        building_id = str(building["building_id"])
+        objects.extend([
+            {
+                "asset": "placeholder_street_door", "gx": cx, "gy": y1,
+                "width_px": 96, "height_px": 144, "building_id": building_id,
+                "edge": "south", "rotation": 0, "placeholder": True,
+                "future_transition": "ground_to_first_floor_door",
+            },
+            {
+                "asset": "placeholder_fire_escape", "gx": x1, "gy": cy,
+                "width_px": 128, "height_px": 256, "building_id": building_id,
+                "edge": "east", "rotation": 0, "placeholder": True,
+                "future_transition": "stationary_jump_ground_to_roof",
+            },
+        ])
+    roads = [(x, y) for y, row in enumerate(rows) for x, tid in enumerate(row) if tid == "road_fill"]
+    if roads:
+        for index in range(4):
+            x, y = roads[(index + 1) * len(roads) // 5]
+            objects.append({
+                "asset": "overlay_man_hole", "gx": x, "gy": y,
+                "width_px": 128, "height_px": 128, "rotation": 0,
+                "future_transition": "crouch_on_manhole_to_underground",
+            })
+    return objects
+
+
+def _fallback_roof_data(ground_data: dict, rows: list[list[str]], buildings: list[dict]) -> dict:
+    roof = [[tile_id if tile_id.startswith("bld_") else "void" for tile_id in row] for row in rows]
+    roof_objects = []
+    for index, building in enumerate(buildings, 1):
+        x0, y0, x1, y1 = map(int, building["rect"])
+        cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+        building_id = str(building["building_id"])
+        area = (x1 - x0 + 1) * (y1 - y0 + 1)
+        roof_objects.append({
+            "asset": "placeholder_roof_hatch", "gx": cx, "gy": cy,
+            "width_px": 128, "height_px": 128, "building_id": building_id,
+            "rotation": 0, "placeholder": True,
+            "future_transition": "second_floor_to_roof",
+        })
+        candidates = _detail_cells((x0, y0, x1, y1), (cx, cy))
+        detail_count = min(len(candidates), max(2, min(6, 2 + area // 12)))
+        for j, (gx, gy) in enumerate(candidates[:detail_count]):
+            asset, ww, hh = ROOF_PROP_SPECS[(index + j - 1) % len(ROOF_PROP_SPECS)]
+            roof_objects.append({
+                "asset": asset, "gx": gx, "gy": gy,
+                "width_px": ww, "height_px": hh, "building_id": building_id,
+                "rotation": ((index + j) % 4) * 90,
+                "deterministic_roof_detail": True,
+            })
     return {
         "format": "open-night-grid-v1",
         "authority": "grid",
@@ -49,16 +221,10 @@ def _fallback_roof_data(ground_data: dict) -> dict:
         "source_pack": "city_block",
         "generation_scope": ["ground", "roof"],
         "layers": {"roof": roof},
-        "objects": [],
+        "objects": roof_objects,
         "login_spawns": [],
         "fallback_exact_ground_registration": True,
     }
-
-
-def _load_roof_data(ground_data: dict) -> dict:
-    if GRID_ROOF_PATH.is_file():
-        return json.loads(GRID_ROOF_PATH.read_text(encoding="utf-8"))
-    return _fallback_roof_data(ground_data)
 
 
 def _assert_exact_roof_registration(ground_rows: list[list[str]], roof_rows: list[list[str]]) -> None:
@@ -69,39 +235,48 @@ def _assert_exact_roof_registration(ground_rows: list[list[str]], roof_rows: lis
             raise ValueError(f"Roof/Ground width mismatch at row {y}")
         for x, ground_tile in enumerate(ground_row):
             roof_tile = roof_rows[y][x]
-            is_building = ground_tile.startswith("bld_")
-            if is_building and roof_tile != ground_tile:
-                raise ValueError(
-                    f"Roof registration mismatch at {(x, y)}: ground={ground_tile} roof={roof_tile}"
-                )
-            if not is_building and roof_tile != "void":
-                raise ValueError(
-                    f"Roof extends outside Ground building footprint at {(x, y)}: roof={roof_tile}"
-                )
+            if ground_tile.startswith("bld_"):
+                if roof_tile != ground_tile:
+                    raise ValueError(f"Roof registration mismatch at {(x, y)}")
+            elif roof_tile != "void":
+                raise ValueError(f"Roof extends outside Ground footprint at {(x, y)}")
+
+
+def _load_roof_data(data: dict, rows: list[list[str]], buildings: list[dict]) -> dict:
+    if GRID_ROOF_PATH.is_file():
+        candidate = json.loads(GRID_ROOF_PATH.read_text(encoding="utf-8"))
+        try:
+            _assert_exact_roof_registration(rows, candidate["layers"]["roof"])
+            return candidate
+        except (KeyError, ValueError):
+            pass
+    return _fallback_roof_data(data, rows, buildings)
 
 
 @lru_cache(maxsize=1)
 def load_ground_grid() -> GridWorld:
     data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
-    generated_ground_count = _merge_objects(data, GRID_GENERATED_OBJECTS_PATH)
+    ground_rows, buildings = _synthesize_ground_runtime(data)
 
-    roof_data = _load_roof_data(data)
-    ground_rows = _decode_ground(data)
+    if GRID_GENERATED_OBJECTS_PATH.is_file():
+        generated = json.loads(GRID_GENERATED_OBJECTS_PATH.read_text(encoding="utf-8"))
+        ground_generated = list(generated.get("objects", []))
+    else:
+        ground_generated = _generated_ground_objects(ground_rows, buildings)
+    data.setdefault("objects", []).extend(ground_generated)
+
+    roof_data = _load_roof_data(data, ground_rows, buildings)
     roof_rows = [list(row) for row in roof_data["layers"]["roof"]]
     _assert_exact_roof_registration(ground_rows, roof_rows)
 
-    # One coordinate system is authoritative for the exterior: Ground is the
-    # collision surface; Roof is a visual layer registered cell-for-cell over
-    # building footprints and uses the exact same camera transform.
     data["layers"] = {"ground": ground_rows, "roof": roof_rows}
     data.pop("layers_ascii", None)
     roof_objects = list(roof_data.get("objects", []))
     data.setdefault("objects", []).extend(roof_objects)
-
     data["generation_scope"] = ["ground", "roof"]
     data["external_ground_roof_composite"] = True
     data["external_composite_object_count"] = len(roof_objects)
-    data["generated_ground_object_count"] = generated_ground_count
+    data["generated_ground_object_count"] = len(ground_generated)
     data["roof_registration"] = "exact_ground_building_footprint"
     runtime = data.setdefault("runtime", {})
     runtime["external_roofs_visible_on_ground"] = True
@@ -112,8 +287,9 @@ def load_ground_grid() -> GridWorld:
 @lru_cache(maxsize=1)
 def load_roof_grid() -> GridWorld:
     ground_data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
-    roof_data = _load_roof_data(ground_data)
-    _assert_exact_roof_registration(_decode_ground(ground_data), roof_data["layers"]["roof"])
+    ground_rows, buildings = _synthesize_ground_runtime(ground_data)
+    roof_data = _load_roof_data(ground_data, ground_rows, buildings)
+    _assert_exact_roof_registration(ground_rows, roof_data["layers"]["roof"])
     return GridWorld(roof_data, TileCatalog.load(GRID_CATALOG_PATH))
 
 
