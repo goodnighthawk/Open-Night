@@ -1,29 +1,17 @@
 #!/usr/bin/env python3
-"""Generate deterministic v1.0 Ground + Roof building layers.
+"""Generate deterministic v1.0 Ground + Roof layers from city_block.
 
 Current production scope is Ground + Roof only.
 
-Building synthesis rules:
-- existing building components define the buildable lot envelope;
-- each component is reduced deterministically to its largest axis-aligned rectangle;
-- one city_block colour family is chosen from a stable hash of that rectangle;
-- modular tiles are assigned strictly from filename semantics:
-  top_left_outer / top_center / top_right_outer / left / fill / right /
-  bottom_left_outer / bottom_center / bottom_right_outer;
+Building rules:
+- existing building components define buildable envelopes;
+- each component is reduced deterministically to its largest filled rectangle;
+- city_block modular tiles are selected only from filename semantics;
 - modular building tiles are never rotated or stretched;
-- Roof uses the exact same generated footprint as Ground.
+- Roof copies the exact generated Ground building footprint cell-for-cell;
+- Roof detail is deterministic and remains inside the registered footprint.
 
-``assets/source_packs/city_block/example.png`` is retained as the pack's visual
-orientation reference. The generator never guesses orientation from pixels: the
-filenames are authoritative, and the example image is a human/audit reference.
-
-Future traversal affordances remain simple deterministic placeholders:
-- street door: future Ground -> First Floor;
-- fire escape: future stationary Jump near exterior -> Roof;
-- roof hatch: future Second Floor -> Roof;
-- real city_block manhole: future crouch-on-manhole -> Underground.
-
-All other semantic layers intentionally remain absent/blank for now.
+assets/source_packs/city_block/example.png remains the visual orientation reference.
 """
 from __future__ import annotations
 
@@ -43,10 +31,11 @@ ORIENTATION_REFERENCE = CITY_BLOCK_DIR / "example.png"
 
 MAGENTA = (255, 0, 255)
 THEMES = ("blue", "dark_green", "green", "red", "yellow")
-BUILDING_ROLE_ORDER = (
-    "top_left_outer", "top_center", "top_right_outer",
-    "left", "fill", "right",
-    "bottom_left_outer", "bottom_center", "bottom_right_outer",
+ROOF_PROP_SPECS = (
+    ("rooflayer_aircon_large", 164, 164),
+    ("rooflayer_water_red", 154, 154),
+    ("rooflayer_green_roof", 190, 190),
+    ("rooflayer_white_box", 146, 146),
 )
 
 
@@ -136,11 +125,6 @@ def _building_components(rows: list[list[str]]) -> list[list[tuple[int, int]]]:
 
 
 def _largest_axis_aligned_rect(group: list[tuple[int, int]]) -> tuple[int, int, int, int]:
-    """Largest filled rectangle contained in the existing component.
-
-    Irregular legacy footprints are shrunk rather than expanded into sidewalks or
-    roads. Ties resolve top-to-bottom then left-to-right, so output is stable.
-    """
     cells = set(group)
     xs = [x for x, _ in group]
     ys = [y for _, y in group]
@@ -157,8 +141,7 @@ def _largest_axis_aligned_rect(group: list[tuple[int, int]]) -> tuple[int, int, 
                     if all((x, y) in cells for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)):
                         candidate = (x0, y0, x1, y1)
                         if area > best_area or best is None or candidate < best:
-                            best = candidate
-                            best_area = area
+                            best, best_area = candidate, area
     if best is None:
         x, y = min(group, key=lambda p: (p[1], p[0]))
         return x, y, x, y
@@ -166,7 +149,7 @@ def _largest_axis_aligned_rect(group: list[tuple[int, int]]) -> tuple[int, int, 
 
 
 def _theme_for_rect(index: int, rect: tuple[int, int, int, int]) -> str:
-    payload = f"open-night-v100|{index}|{rect[0]}|{rect[1]}|{rect[2]}|{rect[3]}".encode("ascii")
+    payload = f"open-night-v100|{index}|{rect}".encode("ascii")
     digest = hashlib.sha256(payload).digest()
     return THEMES[int.from_bytes(digest[:2], "big") % len(THEMES)]
 
@@ -176,17 +159,9 @@ def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
     if x0 == x1 or y0 == y1:
         return "fill"
     if y == y0:
-        if x == x0:
-            return "top_left_outer"
-        if x == x1:
-            return "top_right_outer"
-        return "top_center"
+        return "top_left_outer" if x == x0 else "top_right_outer" if x == x1 else "top_center"
     if y == y1:
-        if x == x0:
-            return "bottom_left_outer"
-        if x == x1:
-            return "bottom_right_outer"
-        return "bottom_center"
+        return "bottom_left_outer" if x == x0 else "bottom_right_outer" if x == x1 else "bottom_center"
     if x == x0:
         return "left"
     if x == x1:
@@ -195,8 +170,6 @@ def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
 
 
 def _tile_for(theme: str, role: str) -> str:
-    if role not in BUILDING_ROLE_ORDER:
-        raise ValueError(f"unsupported modular building role: {role}")
     return f"bld_{theme}_{role}"
 
 
@@ -205,22 +178,33 @@ def _audit_rect(rows: list[list[str]], rect: tuple[int, int, int, int], theme: s
     for y in range(y0, y1 + 1):
         for x in range(x0, x1 + 1):
             expected = _tile_for(theme, _role_for_rect_cell(x, y, rect))
-            actual = rows[y][x]
-            if actual != expected:
-                raise RuntimeError(
-                    f"building seam/orientation audit failed at {(x, y)}: expected {expected!r}, got {actual!r}"
-                )
+            if rows[y][x] != expected:
+                raise RuntimeError(f"building seam/orientation audit failed at {(x, y)}")
 
 
 def _road_cells(rows: list[list[str]]) -> list[tuple[int, int]]:
     return [(x, y) for y, row in enumerate(rows) for x, tid in enumerate(row) if tid == "road_fill"]
 
 
+def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> list[tuple[int, int]]:
+    x0, y0, x1, y1 = rect
+    cx, cy = center
+    candidates = [
+        (x0 + 1, y0 + 1), (x1 - 1, y0 + 1),
+        (x0 + 1, y1 - 1), (x1 - 1, y1 - 1),
+        (cx, y0 + 1), (cx, y1 - 1),
+        (x0 + 1, cy), (x1 - 1, cy),
+    ]
+    out = []
+    for x, y in candidates:
+        if x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out:
+            out.append((x, y))
+    return out
+
+
 def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[str]], list[dict]]:
     groups = _building_components(original)
     rows = [list(row) for row in original]
-
-    # No legacy/randomly-oriented building tile survives this pass.
     for y, row in enumerate(rows):
         for x, tile_id in enumerate(row):
             if tile_id.startswith("bld_"):
@@ -231,13 +215,12 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
         rect = _largest_axis_aligned_rect(group)
         x0, y0, x1, y1 = rect
         theme = _theme_for_rect(index, rect)
-        building_id = f"grid_building_{index:02d}"
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
                 rows[y][x] = _tile_for(theme, _role_for_rect_cell(x, y, rect))
         _audit_rect(rows, rect, theme)
         buildings.append({
-            "building_id": building_id,
+            "building_id": f"grid_building_{index:02d}",
             "footprint_type": "rectangle",
             "theme": theme,
             "rect": [x0, y0, x1, y1],
@@ -249,11 +232,12 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
     data["layers"] = {"ground": rows}
     data.pop("layers_ascii", None)
     data["building_synthesis"] = {
-        "version": 1,
+        "version": 2,
         "shape_family": "axis_aligned_rectangles",
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "orientation_authority": "filename_semantics",
         "random_rotation": False,
+        "roof_registration": "exact_ground_footprint",
         "building_count": len(buildings),
         "buildings": buildings,
     }
@@ -267,25 +251,17 @@ def generate_layers() -> tuple[int, int]:
         raise FileNotFoundError(f"city_block orientation reference missing: {ORIENTATION_REFERENCE}")
 
     data = json.loads(GROUND_PATH.read_text(encoding="utf-8"))
-    original_ground = _decode_ground(data)
-    ground, buildings = synthesize_ground(data, original_ground)
-
-    ground_objects = []
-    roof_objects = []
+    ground, buildings = synthesize_ground(data, _decode_ground(data))
+    ground_objects: list[dict] = []
+    roof_objects: list[dict] = []
     roof_rows = [["void" for _ in row] for row in ground]
-    roof_prop_cycle = (
-        "rooflayer_aircon_large",
-        "rooflayer_water_red",
-        "rooflayer_green_roof",
-        "rooflayer_white_box",
-    )
 
     for index, building in enumerate(buildings, 1):
         x0, y0, x1, y1 = map(int, building["rect"])
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
         building_id = str(building["building_id"])
+        area = (x1 - x0 + 1) * (y1 - y0 + 1)
 
-        # Ground -> Roof registration is copied cell-for-cell; no second orientation decision.
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
                 roof_rows[y][x] = ground[y][x]
@@ -308,12 +284,18 @@ def generate_layers() -> tuple[int, int]:
             "rotation": 0, "placeholder": True,
             "future_transition": "second_floor_to_roof",
         })
-        roof_objects.append({
-            "asset": roof_prop_cycle[(index - 1) % len(roof_prop_cycle)],
-            "gx": max(x0, min(x1, cx - 1)), "gy": max(y0, min(y1, cy - 1)),
-            "width_px": 150, "height_px": 150, "building_id": building_id,
-            "rotation": 0,
-        })
+
+        detail_cells = _detail_cells((x0, y0, x1, y1), (cx, cy))
+        detail_count = min(len(detail_cells), max(2, min(6, 2 + area // 12)))
+        for j, (gx, gy) in enumerate(detail_cells[:detail_count]):
+            asset, ww, hh = ROOF_PROP_SPECS[(index + j - 1) % len(ROOF_PROP_SPECS)]
+            roof_objects.append({
+                "asset": asset, "gx": gx, "gy": gy,
+                "width_px": ww, "height_px": hh,
+                "building_id": building_id,
+                "rotation": ((index + j) % 4) * 90,
+                "deterministic_roof_detail": True,
+            })
 
     roads = _road_cells(ground)
     if roads:
@@ -326,9 +308,10 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v2",
+        "format": "open-night-ground-generated-v3",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation",
+        "roof_registration": "exact_ground_footprint",
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "objects": ground_objects,
     }, separators=(",", ":")) + "\n", encoding="utf-8")
@@ -336,16 +319,14 @@ def generate_layers() -> tuple[int, int]:
     roof_data = {
         "format": "open-night-grid-v1",
         "authority": "grid",
-        "cell_px": data["cell_px"],
-        "width": data["width"],
-        "height": data["height"],
-        "world_w": data["world_w"],
-        "world_h": data["world_h"],
+        "cell_px": data["cell_px"], "width": data["width"], "height": data["height"],
+        "world_w": data["world_w"], "world_h": data["world_h"],
         "source_pack": "city_block",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": {
-            "version": 1,
+            "version": 2,
             "matching_ground": True,
+            "registration": "exact_ground_footprint",
             "orientation_reference": "assets/source_packs/city_block/example.png",
             "orientation_authority": "filename_semantics",
             "random_rotation": False,
@@ -363,11 +344,9 @@ def main() -> None:
     buildings, objects = generate_layers()
     print(
         "V100_GROUND_ROOF_GENERATED",
-        f"buildings={buildings}",
-        f"generated_objects={objects}",
-        "shape=rectangles",
-        "orientation=filename_semantics_no_rotation",
-        "scope=ground,roof",
+        f"buildings={buildings}", f"generated_objects={objects}",
+        "shape=rectangles", "orientation=filename_semantics_no_rotation",
+        "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
 
