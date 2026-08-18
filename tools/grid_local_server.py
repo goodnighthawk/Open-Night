@@ -17,10 +17,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import server
+from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
 
 
 _legacy_validate_map = server.validate_map
+_legacy_request_player_jump = server.request_player_jump
 
 
 def _validate_active_authority(map_config: dict) -> list[str]:
@@ -47,8 +49,26 @@ def _validate_active_authority(map_config: dict) -> list[str]:
     return errors
 
 
+def _request_player_jump_grid(session, now: float | None = None) -> str:
+    """Keep legacy jump timing/poses but make direction depend on held movement.
+
+    server.handle_message stores this packet's movement vector before requesting
+    the jump. Therefore Space+movement produces a directional jump, while Space
+    alone produces zero world-plane velocity rather than falling back to aim.
+    """
+    result = _legacy_request_player_jump(session, now)
+    if result not in {"jump", "double_jump"}:
+        return result
+    speed = server.DOUBLE_JUMP_FORWARD_SPEED if result == "double_jump" else server.JUMP_FORWARD_SPEED
+    vx, vy = directional_jump_velocity(session.input_x, session.input_y, speed)
+    session.jump_velocity_x = vx
+    session.jump_velocity_y = vy
+    return result
+
+
 def main() -> None:
     server.validate_map = _validate_active_authority
+    server.request_player_jump = _request_player_jump_grid
     server.cli_main()
 
 
