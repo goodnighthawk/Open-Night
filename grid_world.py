@@ -46,9 +46,8 @@ class TileCatalog:
     @classmethod
     def load(cls, path: str | Path) -> "TileCatalog":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        entries: dict[str, TileDef] = {}
-        for tile_id, item in raw["tiles"].items():
-            entries[tile_id] = TileDef(
+        entries = {
+            tile_id: TileDef(
                 tile_id=tile_id,
                 image=str(item["image"]),
                 collision=str(item.get("collision", "blocked")),
@@ -56,9 +55,10 @@ class TileCatalog:
                 layer=str(item.get("layer", "ground")),
                 z=int(item.get("z", 0)),
             )
-        objects: dict[str, ObjectDef] = {}
-        for object_id, item in raw.get("objects", {}).items():
-            objects[object_id] = ObjectDef(
+            for tile_id, item in raw["tiles"].items()
+        }
+        objects = {
+            object_id: ObjectDef(
                 object_id=object_id,
                 image=str(item["image"]),
                 kind=str(item.get("kind", "decoration")),
@@ -67,6 +67,8 @@ class TileCatalog:
                 native_width_px=int(item.get("native_width_px", GRID_CELL_PX)),
                 native_height_px=int(item.get("native_height_px", GRID_CELL_PX)),
             )
+            for object_id, item in raw.get("objects", {}).items()
+        }
         return cls(entries, objects)
 
     def __getitem__(self, tile_id: str) -> TileDef:
@@ -79,10 +81,9 @@ class TileCatalog:
 class GridWorld:
     """Authoritative 256 px tile world shared by rendering and gameplay.
 
-    Large visual objects are anchored to grid cells but never define collision:
-    gameplay reads the surface cell beneath the object. This keeps the supplied
-    city-block art and the server's collision contract in exactly one coordinate
-    system without treating arbitrary image alpha as gameplay geometry.
+    The map may store layers either as explicit tile-id matrices or compact ASCII
+    rows plus a legend. Large visual objects are anchored to grid cells but never
+    define collision: gameplay reads the surface cell beneath each object.
     """
 
     def __init__(self, data: dict[str, Any], catalog: TileCatalog):
@@ -93,7 +94,7 @@ class GridWorld:
         self.height = int(data.get("height", GRID_H))
         self.world_w = self.width * self.cell_px
         self.world_h = self.height * self.cell_px
-        self.layers: dict[str, list[list[str]]] = data.get("layers", {})
+        self.layers = self._decode_layers(data)
         self.objects: list[dict[str, Any]] = list(data.get("objects", []))
         self.login_spawns: list[list[float]] = list(data.get("login_spawns", []))
         if self.cell_px != GRID_CELL_PX:
@@ -115,12 +116,33 @@ class GridWorld:
             if not self.in_bounds(gx, gy):
                 raise ValueError(f"grid object {oid!r} anchor outside world: {(gx, gy)}")
 
+    def _decode_layers(self, data: dict[str, Any]) -> dict[str, list[list[str]]]:
+        explicit = data.get("layers")
+        if explicit:
+            return {str(name): [list(row) for row in rows] for name, rows in explicit.items()}
+        ascii_layers = data.get("layers_ascii") or {}
+        legend = {str(code): str(tile_id) for code, tile_id in (data.get("tile_legend") or {}).items()}
+        if not ascii_layers:
+            return {}
+        if not legend:
+            raise ValueError("layers_ascii requires tile_legend")
+        layers: dict[str, list[list[str]]] = {}
+        for name, source_rows in ascii_layers.items():
+            rows: list[list[str]] = []
+            for source in source_rows:
+                text = str(source)
+                if len(text) != self.width:
+                    raise ValueError(f"ASCII layer {name!r} row has width {len(text)}, expected {self.width}")
+                try:
+                    rows.append([legend[ch] for ch in text])
+                except KeyError as exc:
+                    raise ValueError(f"ASCII layer {name!r} uses unknown tile code {exc.args[0]!r}") from exc
+            layers[str(name)] = rows
+        return layers
+
     @classmethod
     def load(cls, map_path: str | Path, catalog_path: str | Path) -> "GridWorld":
-        return cls(
-            json.loads(Path(map_path).read_text(encoding="utf-8")),
-            TileCatalog.load(catalog_path),
-        )
+        return cls(json.loads(Path(map_path).read_text(encoding="utf-8")), TileCatalog.load(catalog_path))
 
     def in_bounds(self, gx: int, gy: int) -> bool:
         return 0 <= gx < self.width and 0 <= gy < self.height
@@ -138,9 +160,7 @@ class GridWorld:
         if not self.in_bounds(gx, gy):
             return "void"
         rows = self.layers.get(layer)
-        if rows is None:
-            return "void"
-        return rows[gy][gx]
+        return "void" if rows is None else rows[gy][gx]
 
     def tile(self, layer: str, gx: int, gy: int) -> TileDef:
         return self.catalog[self.tile_id(layer, gx, gy)]
@@ -154,7 +174,6 @@ class GridWorld:
         return self.tile(layer, gx, gy).walkable
 
     def circle_walkable(self, layer: str, x: float, y: float, radius: float) -> bool:
-        """Conservative player/collision probe against authoritative grid cells."""
         radius = max(0.0, float(radius))
         margin = 0.5
         if x - radius < margin or y - radius < margin or x + radius >= self.world_w - margin or y + radius >= self.world_h - margin:
@@ -163,8 +182,6 @@ class GridWorld:
             return False
         if radius <= 0.0:
             return True
-        # Cardinal + diagonal probes keep a circular player from clipping a blocked
-        # building cell even though the cell center itself remains on pavement.
         diag = radius * 0.7071067811865476
         probes = (
             (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius),
@@ -172,18 +189,7 @@ class GridWorld:
         )
         return all(self.walkable_at(layer, x + ox, y + oy) for ox, oy in probes)
 
-    def move_circle(
-        self,
-        layer: str,
-        x: float,
-        y: float,
-        dx: float,
-        dy: float,
-        radius: float,
-        *,
-        max_step: float | None = None,
-    ) -> tuple[float, float]:
-        """Substepped axis-separated movement using the same cells as rendering."""
+    def move_circle(self, layer: str, x: float, y: float, dx: float, dy: float, radius: float, *, max_step: float | None = None) -> tuple[float, float]:
         x, y, dx, dy = map(float, (x, y, dx, dy))
         distance = max(abs(dx), abs(dy))
         step_limit = max(8.0, min(self.cell_px / 4.0, float(max_step or self.cell_px / 4.0)))
@@ -202,15 +208,12 @@ class GridWorld:
         if self.circle_walkable(layer, x, y, radius):
             return float(x), float(y)
         start_gx, start_gy = self.world_to_cell(x, y)
-        max_ring = max(self.width, self.height)
-        for ring in range(max_ring + 1):
+        for ring in range(max(self.width, self.height) + 1):
             candidates: list[tuple[int, int]] = []
             for gx in range(start_gx - ring, start_gx + ring + 1):
-                candidates.append((gx, start_gy - ring))
-                candidates.append((gx, start_gy + ring))
+                candidates.extend(((gx, start_gy - ring), (gx, start_gy + ring)))
             for gy in range(start_gy - ring + 1, start_gy + ring):
-                candidates.append((start_gx - ring, gy))
-                candidates.append((start_gx + ring, gy))
+                candidates.extend(((start_gx - ring, gy), (start_gx + ring, gy)))
             for gx, gy in candidates:
                 if not self.in_bounds(gx, gy):
                     continue
