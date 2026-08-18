@@ -77,6 +77,7 @@ from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
 from versioning import GAME_VERSION
+from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
 
 HOST = "0.0.0.0"
 PORT = 8765
@@ -93,6 +94,8 @@ BUG_REPORT_SALT = os.getenv("PYMMO_BUG_REPORT_SALT", BUG_ADMIN_TOKEN or "open-ni
 
 ACTIVE_MAP_ID = DEFAULT_MAP_ID
 ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
+GRID_RUNTIME_ACTIVE = ground_grid_enabled(ACTIVE_MAP)
+GRID_WORLD = load_ground_grid() if GRID_RUNTIME_ACTIVE else None
 ACTIVE_MAP_TRANSFER = None
 DB: InventoryDatabase | None = None
 USE_MYSQL = True
@@ -185,6 +188,7 @@ def network_map_payload(map_config: dict) -> dict:
         )
         out = {key: map_config.get(key) for key in keys if key in map_config}
         out["map_payload_mode"] = "local_chunked_v1"
+        out.update(grid_network_metadata(map_config))
         return out
 
     def clean(value):
@@ -2598,6 +2602,8 @@ async def handle_message(session: ClientSession, raw: str) -> None:
 
 
 def choose_safe_player_spawn(map_config: dict) -> tuple[float, float]:
+    if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None:
+        return GRID_WORLD.choose_spawn("ground", PLAYER_RADIUS)
     """Return a guaranteed walkable login position.
 
     CSV/reference-map edits may move roads/buildings independently. A configured spawn
@@ -3028,7 +3034,7 @@ async def simulation_loop() -> None:
                 dy = session.input_y * walk_speed * sprint_mult * dt
             current_level = int(getattr(p, "level", 0))
             water_probe_x, water_probe_y = p.x + dx, p.y + dy
-            wading = current_level == 0 and (
+            wading = (not GRID_RUNTIME_ACTIVE) and current_level == 0 and (
                 point_in_water(p.x, p.y, ACTIVE_MAP)
                 or point_in_water(water_probe_x, water_probe_y, ACTIVE_MAP)
             ) and not (
@@ -3040,9 +3046,14 @@ async def simulation_loop() -> None:
                 dy *= WATER_WALK_SPEED_MULTIPLIER
                 session.boost = False
             movement_start_x, movement_start_y = p.x, p.y
-            p.x, p.y = move_with_collisions(
-                p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
-            )
+            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and current_level == 0:
+                p.x, p.y = GRID_WORLD.move_circle(
+                    "ground", p.x, p.y, dx, dy, PLAYER_RADIUS
+                )
+            else:
+                p.x, p.y = move_with_collisions(
+                    p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
+                )
             previous_level = int(getattr(p, "level", 0))
             next_level = resolve_level_transition(
                 p.x,
@@ -3052,6 +3063,10 @@ async def simulation_loop() -> None:
                 previous_x=movement_start_x,
                 previous_y=movement_start_y,
             )
+            if GRID_RUNTIME_ACTIVE and previous_level == 0:
+                # Grid Ground owns its own future transition cells. Do not let the
+                # retired vector connector table switch levels underneath it.
+                next_level = 0
             p.level = next_level
             if next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0:
                 # Optional authored transition pose. v0.9 defaults this to zero so
@@ -3415,11 +3430,17 @@ def cli_main() -> None:
         else:
             print("WARNING: bug reports can be stored, but PYMMO_BUG_ADMIN_TOKEN is not configured for review.")
 
-    initialize_traffic(TRAFFIC_COUNT)
-    initialize_parked_vehicles()
-    initialize_bicycles()
-    initialize_npcs()
-    initialize_hydrants()
+    if GRID_RUNTIME_ACTIVE:
+        # Old entity routes were authored against the retired vector map and may
+        # cross new buildings. Keep the first playable grid milestone honest by
+        # suppressing them until grid-native routes/spawns are authored.
+        print("Grid Ground runtime active: legacy traffic/NPC surface entities disabled.")
+    else:
+        initialize_traffic(TRAFFIC_COUNT)
+        initialize_parked_vehicles()
+        initialize_bicycles()
+        initialize_npcs()
+        initialize_hydrants()
 
     try:
         asyncio.run(main(args.host, args.port, args.name, discovery=not args.no_discovery))

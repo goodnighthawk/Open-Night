@@ -61,6 +61,8 @@ from character_art import draw_character, reload_character_style
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts, display_label as character_display_label, catalog as character_catalog
 from vehicle_art import draw_car, reload_vehicle_style
 from environment_art import EnvironmentRenderer
+from grid_renderer import GridRenderer
+from grid_runtime import ground_grid_enabled, load_ground_grid
 from interior_art import IsometricInterior
 from bicycle_art import draw_bicycle
 from gameplay.settings import load_settings, set_setting_value, CONFIG_PATH as GAME_SETTINGS_PATH
@@ -1217,6 +1219,8 @@ class Game:
         self._map_transfer_expected_chunks = 0
         self.map_config = get_map(DEFAULT_MAP_ID)
         self.environment = EnvironmentRenderer(self.map_config)
+        self.grid_world = load_ground_grid() if ground_grid_enabled(self.map_config) else None
+        self.grid_renderer = GridRenderer(self.grid_world) if self.grid_world is not None else None
         self.inventory = empty_inventory()
         self.inventory_open = False
         self.map_open = False
@@ -2249,8 +2253,11 @@ class Game:
         # and independent of this visual layer.
         local_world_player = self.players.get(self.local_id or "")
         active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
-        self.environment.set_active_level(active_world_level)
-        self.environment.draw_view(self.screen, self.camera())
+        if active_world_level == 0 and self.grid_renderer is not None:
+            self.grid_renderer.draw_view(self.screen, self.camera(), "ground")
+        else:
+            self.environment.set_active_level(active_world_level)
+            self.environment.draw_view(self.screen, self.camera())
         # Ground street furniture/state must not bleed through the subterranean
         # composition. Underground static detail is already baked into its tiles.
         if active_world_level < 0:
