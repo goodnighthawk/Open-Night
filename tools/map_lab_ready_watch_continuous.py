@@ -3,7 +3,7 @@
 
 Normal ready notifications repeat through the watcher-selected dedicated playback
 device until the user presses Space in the watcher console. Startup audio tests
-remain short single beeps.
+remain short single beeps. Readiness uses the building-scale Map Lab renderer.
 """
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ import sys
 import time
 
 import map_lab_ready_watch as base
+
+# The watcher must validate the same preview the user will actually inspect.
+base.RENDER_SCRIPT = base.ROOT / "tools" / "map_lab_render_zoomed.py"
 
 
 def _drain_console_keys() -> None:
