@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Render actual Ground and Roof frames from the current grid runtime.
-
-This is not concept art. The script runs the deterministic Ground+Roof generator,
-loads the same GridWorld/GridRenderer used by the game, and renders two real
-2560x1440 Pygame framebuffers from repo-resident city_block assets.
-"""
+"""Render actual Ground/exterior and Roof frames from the current grid runtime."""
 from __future__ import annotations
 
 import os
@@ -24,8 +19,10 @@ import pygame
 from grid_renderer import GridRenderer
 from grid_runtime import load_ground_grid, load_roof_grid
 
-GROUND_OUT = ROOT / "assets/grid_v100/GROUND_RUNTIME_PROOF_2560x1440.png"
-ROOF_OUT = ROOT / "assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png"
+GROUND_DETAIL_OUT = ROOT / "assets/grid_v100/GROUND_RUNTIME_PROOF_2560x1440.png"
+ROOF_DETAIL_OUT = ROOT / "assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png"
+GROUND_FULL_OUT = ROOT / "assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
+ROOF_FULL_OUT = ROOT / "assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
 W, H = 2560, 1440
 
 
@@ -44,14 +41,29 @@ def camera_for(world, x: float, y: float) -> tuple[float, float]:
     )
 
 
+def save_detail(renderer: GridRenderer, world, layer: str, x: float, y: float, path: Path) -> None:
+    frame = pygame.Surface((W, H)).convert()
+    renderer.draw_view(frame, camera_for(world, x, y), layer)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(frame, str(path))
+
+
+def save_overview(renderer: GridRenderer, layer: str, path: Path) -> tuple[int, int, int]:
+    frame = pygame.Surface((W, H)).convert()
+    geometry = renderer.draw_overview(frame, layer)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(frame, str(path))
+    return geometry
+
+
 def main() -> None:
     from tools.generate_v100_ground_roof_layers import main as generate_layers
     from tools.build_v100_grid_seed import main as validate_map
 
     generate_layers()
+    load_ground_grid.cache_clear()
+    load_roof_grid.cache_clear()
     validate_map()
-
-    # Generation changed files that load_ground_grid caches, so guarantee a fresh read.
     load_ground_grid.cache_clear()
     load_roof_grid.cache_clear()
 
@@ -60,19 +72,16 @@ def main() -> None:
     try:
         ground = load_ground_grid()
         ground_renderer = GridRenderer(ground)
-        ground_frame = pygame.Surface((W, H)).convert()
         sx, sy = ground.choose_spawn("ground", 18.0)
-        ground_renderer.draw_view(ground_frame, camera_for(ground, sx, sy), "ground")
-        GROUND_OUT.parent.mkdir(parents=True, exist_ok=True)
-        pygame.image.save(ground_frame, str(GROUND_OUT))
+        save_detail(ground_renderer, ground, "ground", sx, sy, GROUND_DETAIL_OUT)
+        ground_tile_px, ground_ox, ground_oy = save_overview(ground_renderer, "ground", GROUND_FULL_OUT)
 
         roof = load_roof_grid()
         roof_renderer = GridRenderer(roof)
-        roof_frame = pygame.Surface((W, H)).convert()
-        rgx, rgy = first_cell(roof, "roof", lambda tid, tile: tid.startswith("bld_"))
+        rgx, rgy = first_cell(roof, "roof", lambda tid, _tile: tid.startswith("bld_"))
         rx, ry = roof.cell_center(rgx, rgy)
-        roof_renderer.draw_view(roof_frame, camera_for(roof, rx, ry), "roof")
-        pygame.image.save(roof_frame, str(ROOF_OUT))
+        save_detail(roof_renderer, roof, "roof", rx, ry, ROOF_DETAIL_OUT)
+        roof_tile_px, roof_ox, roof_oy = save_overview(roof_renderer, "roof", ROOF_FULL_OUT)
 
         road_gx, road_gy = first_cell(ground, "ground", lambda _tid, tile: tile.collision == "road")
         bx, by = first_cell(ground, "ground", lambda tid, tile: tid.startswith("bld_") and tile.collision == "blocked")
@@ -82,6 +91,8 @@ def main() -> None:
             raise SystemExit("Ground road collision/render contract failed")
         if ground_renderer.collision_at("ground", bld_x, bld_y) != "blocked":
             raise SystemExit("Ground building collision/render contract failed")
+        if ground.tile_id("roof", bx, by) != ground.tile_id("ground", bx, by):
+            raise SystemExit("Exterior Roof/Ground footprint registration failed")
         if roof_renderer.collision_at("roof", rx, ry) != "blocked":
             raise SystemExit("Roof building footprint contract failed")
 
@@ -89,7 +100,9 @@ def main() -> None:
             "V100_GROUND_ROOF_RUNTIME_PROOF_OK "
             f"size={W}x{H} cell={ground.cell_px} grid={ground.width}x{ground.height} "
             f"ground_objects={len(ground.objects)} roof_objects={len(roof.objects)} "
-            f"ground={GROUND_OUT.name} roof={ROOF_OUT.name}"
+            f"overview_cell_px={ground_tile_px} overview_origin={ground_ox},{ground_oy} "
+            f"roof_overview_cell_px={roof_tile_px} roof_origin={roof_ox},{roof_oy} "
+            "roof_registration=exact_ground_building_footprint"
         )
     finally:
         pygame.quit()
