@@ -6,6 +6,8 @@ on:
     paths:
       - 'grid_world.py'
       - 'grid_renderer.py'
+      - 'grid_runtime.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
       - 'tools/build_v100_grid_seed.py'
       - 'tools/capture_v100_grid_runtime.py'
       - 'assets/grid_v100/**'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'grid_world.py'
       - 'grid_renderer.py'
+      - 'grid_runtime.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
       - 'tools/build_v100_grid_seed.py'
       - 'tools/capture_v100_grid_runtime.py'
       - 'assets/grid_v100/**'
@@ -34,10 +38,25 @@ jobs:
       - name: Install renderer
         run: python -m pip install --upgrade 'pygame-ce==2.5.8'
       - name: Compile grid runtime
-        run: python -m py_compile grid_world.py grid_renderer.py tools/build_v100_grid_seed.py tools/capture_v100_grid_runtime.py
-      - name: Render grid-native proof
+        run: python -m py_compile grid_world.py grid_renderer.py grid_runtime.py tools/build_v100_grid_seed.py tools/capture_v100_grid_runtime.py
+      - name: Validate committed playable map
+        run: python tools/build_v100_grid_seed.py
+      - name: Detect optional city_block source pack
+        id: pack
+        shell: bash
+        run: |
+          if [ -f city_block.zip ] || [ -f assets/grid_v100/city_block.zip ] || [ -f assets/source_packs/city_block.zip ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+            echo 'city_block.zip available: running real Pygame render proof.'
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'CITY_BLOCK_SOURCE_PACK_EXTERNAL: structural/runtime audit passes without redistributing the user-supplied art pack.'
+          fi
+      - name: Render real grid-native proof
+        if: steps.pack.outputs.available == 'true'
         run: python tools/capture_v100_grid_runtime.py
       - name: Upload grid proof
+        if: steps.pack.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: open-night-v100-grid-runtime-proof
