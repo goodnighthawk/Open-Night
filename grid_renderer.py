@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from functools import lru_cache
 from io import BytesIO
 import os
@@ -86,82 +87,79 @@ class GridRenderer:
 
     @staticmethod
     def _is_dark_building_outline(color: pygame.Color) -> bool:
-        return color.a > 160 and max(color.r, color.g, color.b) < 70
+        return color.a > 160 and max(color.r, color.g, color.b) < 105
 
     @classmethod
     def _suppress_building_perimeter_outline(cls, source: pygame.Surface) -> pygame.Surface:
-        """Remove only the long near-black perimeter strokes from modular building tiles.
+        """Remove dark outline ink from modular edge/corner building tiles.
 
-        The city_block modular floor pieces contain thick dark guide/perimeter lines.
-        They become visually dominant when many pieces are synthesized into large
-        rectangles.  Detect only dark rows/columns spanning >55% of a tile and
-        inpaint those pixels from their nearest coloured neighbours. Short line art,
-        wall seams, roof texture and props remain untouched.
+        The supplied modular pieces contain thick near-black outline strokes. Those
+        strokes become a heavy rectangular frame when the pieces are synthesized
+        into larger buildings. Fill only dark opaque pixels from the nearest coloured
+        opaque neighbour, preserving transparency and the original silhouette.
+        This is applied only to non-fill ``bld_*`` tiles; roof fill and props are not
+        altered.
         """
         image = source.copy()
-        original = source.copy()
         width, height = image.get_size()
-        dark_rows: list[list[bool]] = []
-        row_counts: list[int] = []
-        col_counts = [0] * width
+        dark = [[False] * width for _ in range(height)]
+        visited = [[False] * width for _ in range(height)]
+        queue: deque[tuple[int, int]] = deque()
 
         for y in range(height):
-            row: list[bool] = []
-            count = 0
             for x in range(width):
-                is_dark = cls._is_dark_building_outline(original.get_at((x, y)))
-                row.append(is_dark)
-                if is_dark:
-                    count += 1
-                    col_counts[x] += 1
-            dark_rows.append(row)
-            row_counts.append(count)
+                color = source.get_at((x, y))
+                is_dark = cls._is_dark_building_outline(color)
+                dark[y][x] = is_dark
+                if color.a > 160 and not is_dark:
+                    visited[y][x] = True
+                    queue.append((x, y))
 
-        long_rows = {y for y, count in enumerate(row_counts) if count >= int(width * 0.55)}
-        long_cols = {x for x, count in enumerate(col_counts) if count >= int(height * 0.55)}
-        if not long_rows and not long_cols:
-            return image
-
-        max_search = max(12, int(max(width, height) * 0.08))
-        for y in range(height):
-            for x in range(width):
-                if not dark_rows[y][x] or (y not in long_rows and x not in long_cols):
+        while queue:
+            x, y = queue.popleft()
+            donor = image.get_at((x, y))
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if not (0 <= nx < width and 0 <= ny < height):
                     continue
-
-                neighbours: list[pygame.Color] = []
-                if y in long_rows:
-                    for direction in (-1, 1):
-                        for distance in range(1, max_search + 1):
-                            yy = y + direction * distance
-                            if not 0 <= yy < height:
-                                break
-                            candidate = original.get_at((x, yy))
-                            if candidate.a > 160 and not cls._is_dark_building_outline(candidate):
-                                neighbours.append(candidate)
-                                break
-                if x in long_cols:
-                    for direction in (-1, 1):
-                        for distance in range(1, max_search + 1):
-                            xx = x + direction * distance
-                            if not 0 <= xx < width:
-                                break
-                            candidate = original.get_at((xx, y))
-                            if candidate.a > 160 and not cls._is_dark_building_outline(candidate):
-                                neighbours.append(candidate)
-                                break
-
-                if neighbours:
-                    count = len(neighbours)
-                    image.set_at(
-                        (x, y),
-                        (
-                            sum(c.r for c in neighbours) // count,
-                            sum(c.g for c in neighbours) // count,
-                            sum(c.b for c in neighbours) // count,
-                            original.get_at((x, y)).a,
-                        ),
-                    )
+                if visited[ny][nx] or not dark[ny][nx]:
+                    continue
+                visited[ny][nx] = True
+                alpha = source.get_at((nx, ny)).a
+                image.set_at((nx, ny), (donor.r, donor.g, donor.b, alpha))
+                queue.append((nx, ny))
         return image
+
+    @staticmethod
+    def _proof_compass_enabled() -> bool:
+        return os.getenv("OPEN_NIGHT_PROOF_COMPASS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    @classmethod
+    def _draw_proof_compass(cls, target: pygame.Surface) -> None:
+        """Overlay an unambiguous screen/world-axis compass on proof renders only."""
+        if not cls._proof_compass_enabled():
+            return
+        panel = pygame.Surface((214, 154), pygame.SRCALPHA)
+        panel.fill((14, 17, 22, 224))
+        pygame.draw.rect(panel, (210, 218, 228, 235), panel.get_rect(), width=2, border_radius=8)
+
+        font = pygame.font.Font(None, 28)
+        small = pygame.font.Font(None, 21)
+        cx, cy = 70, 70
+        pygame.draw.line(panel, (235, 239, 245), (cx, 30), (cx, 111), 3)
+        pygame.draw.line(panel, (235, 239, 245), (29, cy), (111, cy), 3)
+        pygame.draw.polygon(panel, (235, 239, 245), ((cx, 20), (cx - 7, 33), (cx + 7, 33)))
+        pygame.draw.polygon(panel, (235, 239, 245), ((121, cy), (108, cy - 7), (108, cy + 7)))
+        pygame.draw.polygon(panel, (235, 239, 245), ((cx, 121), (cx - 7, 108), (cx + 7, 108)))
+        pygame.draw.polygon(panel, (235, 239, 245), ((19, cy), (32, cy - 7), (32, cy + 7)))
+
+        for text, pos in (("N", (62, 2)), ("E", (126, 60)), ("S", (62, 122)), ("W", (2, 60))):
+            panel.blit(font.render(text, True, (245, 247, 250)), pos)
+        panel.blit(small.render("+x = EAST", True, (210, 218, 228)), (145, 37))
+        panel.blit(small.render("+y = SOUTH", True, (210, 218, 228)), (145, 62))
+        panel.blit(small.render("screen up = N", True, (210, 218, 228)), (112, 101))
+
+        x = max(8, target.get_width() - panel.get_width() - 12)
+        target.blit(panel, (x, 12))
 
     @lru_cache(maxsize=256)
     def _tile_surface(self, tile_id: str) -> pygame.Surface:
@@ -249,6 +247,8 @@ class GridRenderer:
             image = self._object_surface(asset_id, width, height, rotation)
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
 
+        self._draw_proof_compass(target)
+
     def draw_overview(self, target: pygame.Surface, layer: str = "ground") -> tuple[int, int, int]:
         """Render the entire map with integer-size preview cells.
 
@@ -290,6 +290,7 @@ class GridRenderer:
             sy = oy + int(round(world_y * scale))
             target.blit(image, (sx, sy))
 
+        self._draw_proof_compass(target)
         return tile_px, ox, oy
 
     def collision_at(self, layer: str, world_x: float, world_y: float) -> str:
