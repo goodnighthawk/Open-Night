@@ -14,7 +14,13 @@ if errorlevel 1 (
     if errorlevel 1 goto :error
 )
 
+rem Proof axis convention used for every Map Lab render:
+rem North = screen up, East = right, South = down, West = left.
+rem Therefore +x = East and +y = South.
+set "OPEN_NIGHT_PROOF_COMPASS=1"
+
 echo [Map Lab] Starting local Ground + Roof visual iteration loop...
+echo [Map Lab] AXES: N=up E=right S=down W=left; +x=E +y=S
 %PY% tools\map_lab.py
 if errorlevel 1 goto :error
 exit /b 0
