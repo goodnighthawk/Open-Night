@@ -58,6 +58,9 @@ jobs:
           path: |
             assets/grid_v100/GROUND_RUNTIME_PROOF_2560x1440.png
             assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png
+            mapfiles/data/map_001_gwb_corridor/grid_v100/ground_grid.json
             mapfiles/data/map_001_gwb_corridor/grid_v100/ground_generated_objects.json
             mapfiles/data/map_001_gwb_corridor/grid_v100/roof_grid.generated.json
           if-no-files-found: error
