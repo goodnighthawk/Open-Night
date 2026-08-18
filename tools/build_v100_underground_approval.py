@@ -8,15 +8,16 @@ create additional walkable space.
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 import build_v100_art_overlays as art
+import v100_underground_detail_pass as detail
 
 OUT = art.OUT / "underground" / "night"
 FULL_PREVIEW = art.OUT / "UNDERGROUND_NIGHT_APPROVAL_PREVIEW.png"
 FOCUS_PREVIEW = art.OUT / "UNDERGROUND_NIGHT_FOCUS_PREVIEW.png"
+PLAYER_SCALE_PREVIEW = art.OUT / "UNDERGROUND_NIGHT_PLAYER_SCALE_PREVIEW.png"
 CONCRETE = "city_concrete_64.png"
 FLOOR = art.ROAD_MATERIAL
 
@@ -52,15 +53,15 @@ def sampled(points, spacing=176.0):
         ax, ay = map(float, a)
         bx, by = map(float, b)
         dx, dy = bx - ax, by - ay
-        length = math.hypot(dx, dy)
-        if length <= 1e-6:
+        seg = math.hypot(dx, dy)
+        if seg <= 1e-6:
             continue
-        ux, uy = dx / length, dy / length
+        ux, uy = dx / seg, dy / seg
         distance = 0.0 if not result else max(0.0, spacing - remaining)
-        while distance <= length:
+        while distance <= seg:
             result.append((ax + ux * distance, ay + uy * distance, ux, uy))
             distance += spacing
-        remaining = max(0.0, length - (distance - spacing))
+        remaining = max(0.0, seg - (distance - spacing))
     return result
 
 
@@ -128,8 +129,7 @@ def paint_tile(tx: int, ty: int, roads: dict, pts_by_id: dict, connectors: list[
         bx, by = b[0] - ox, b[1] - oy
         dx, dy = bx - ax, by - ay
         length = math.hypot(dx, dy) or 1.0
-        ux, uy = dx / length, dy / length
-        nx, ny = -uy, ux
+        nx, ny = -dy / length, dx / length
         steps = max(4, int(length / 13.0))
         for i in range(1, steps):
             t = i / steps
@@ -138,7 +138,31 @@ def paint_tile(tx: int, ty: int, roads: dict, pts_by_id: dict, connectors: list[
             d.line((cx - nx * half, cy - ny * half, cx + nx * half, cy + ny * half), fill=(139, 134, 116, 125), width=2)
         d.line((ax, ay, bx, by), fill=(222, 165, 88, 62), width=2)
 
+    # Production detail is a second cosmetic pass over the same semantic masks.
+    detail.apply(im, tx, ty, roads, pts_by_id, connectors)
     return im
+
+
+def _world_crop(center_x: int, center_y: int, width: int, height: int, cols: int, rows_n: int) -> Image.Image:
+    """Stitch a 1:1 screen-sized crop directly from production tiles."""
+    world_w, world_h = cols * art.TILE, rows_n * art.TILE
+    x0 = max(0, min(world_w - width, int(center_x - width / 2)))
+    y0 = max(0, min(world_h - height, int(center_y - height / 2)))
+    x1, y1 = x0 + width, y0 + height
+    out = Image.new("RGB", (width, height), (3, 4, 5))
+    tx0, ty0 = x0 // art.TILE, y0 // art.TILE
+    tx1, ty1 = (x1 - 1) // art.TILE, (y1 - 1) // art.TILE
+    for ty in range(ty0, ty1 + 1):
+        for tx in range(tx0, tx1 + 1):
+            tile_path = OUT / f"tile_{tx:02d}_{ty:02d}.png"
+            tile = Image.open(tile_path).convert("RGB")
+            tile_x0, tile_y0 = tx * art.TILE, ty * art.TILE
+            wx0, wy0 = max(x0, tile_x0), max(y0, tile_y0)
+            wx1, wy1 = min(x1, tile_x0 + art.TILE), min(y1, tile_y0 + art.TILE)
+            src = (wx0 - tile_x0, wy0 - tile_y0, wx1 - tile_x0, wy1 - tile_y0)
+            dst = (wx0 - x0, wy0 - y0)
+            out.paste(tile.crop(src), dst)
+    return out
 
 
 def build_preview(cols: int, rows_n: int, roads: dict, pts_by_id: dict):
@@ -158,13 +182,16 @@ def build_preview(cols: int, rows_n: int, roads: dict, pts_by_id: dict):
         min_y = max(0, int(min(p[1] for p in all_points) - pad))
         max_x = min(cols * art.TILE, int(max(p[0] for p in all_points) + pad))
         max_y = min(rows_n * art.TILE, int(max(p[1] for p in all_points) + pad))
-        # Crop from the stitched preview using the same scale, then enlarge to a
-        # player-reviewable image without creating alternate art.
+        # Crop from the stitched preview using the same production tiles. This
+        # is a network-composition review, not a separate concept render.
         crop = preview.crop((int(min_x*scale), int(min_y*scale), int(max_x*scale), int(max_y*scale)))
         if crop.width > 0 and crop.height > 0:
             factor = min(2.5, 1400 / max(crop.width, 1), 900 / max(crop.height, 1))
             focus = crop.resize((max(1, int(crop.width*factor)), max(1, int(crop.height*factor))), Image.Resampling.LANCZOS)
             focus.save(FOCUS_PREVIEW, optimize=True)
+
+    # True screen-sized 1:1 review around Broadway / W 181st and its stair.
+    _world_crop(12160, 4672, 1280, 720, cols, rows_n).save(PLAYER_SCALE_PREVIEW, optimize=True)
 
 
 def main():
@@ -184,7 +211,8 @@ def main():
     build_preview(cols, rows_n, roads, pts)
     print(
         f"V100_UNDERGROUND_APPROVAL_OK tiles={cols*rows_n} roads={len(roads)} "
-        f"connectors={len(connectors)} level=-1 preview={FULL_PREVIEW.name} focus={FOCUS_PREVIEW.name}"
+        f"connectors={len(connectors)} level=-1 detail=production_v2 "
+        f"preview={FULL_PREVIEW.name} focus={FOCUS_PREVIEW.name} player_scale={PLAYER_SCALE_PREVIEW.name}"
     )
 
 
