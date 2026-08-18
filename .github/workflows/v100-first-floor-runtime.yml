@@ -7,6 +7,7 @@ on:
       - 'interior_layout.py'
       - 'interior_art.py'
       - 'tools/wire_v100_first_floor_runtime.py'
+      - 'tools/wire_v100_first_floor_runtime_v2.py'
       - 'tools/v100_first_floor_runtime_audit.py'
       - '.github/workflows/v100-first-floor-runtime.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'interior_layout.py'
       - 'interior_art.py'
       - 'tools/wire_v100_first_floor_runtime.py'
+      - 'tools/wire_v100_first_floor_runtime_v2.py'
       - 'tools/v100_first_floor_runtime_audit.py'
       - '.github/workflows/v100-first-floor-runtime.yml'
   workflow_dispatch:
@@ -41,13 +43,13 @@ jobs:
         run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'Pillow>=10,<13'
 
       - name: Apply exact-anchor First Floor wiring
-        run: python tools/wire_v100_first_floor_runtime.py
+        run: python tools/wire_v100_first_floor_runtime_v2.py
 
       - name: Compile patched runtime
         run: |
           python -m py_compile mapfiles/loader.py common.py server.py client.py
           python -m py_compile interior_layout.py interior_art.py
-          python -m py_compile tools/wire_v100_first_floor_runtime.py tools/v100_first_floor_runtime_audit.py
+          python -m py_compile tools/wire_v100_first_floor_runtime.py tools/wire_v100_first_floor_runtime_v2.py tools/v100_first_floor_runtime_audit.py
 
       - name: Audit world registration and player-scale rendering
         run: python tools/v100_first_floor_runtime_audit.py
@@ -70,7 +72,7 @@ jobs:
       - name: Confirm wiring patch is idempotent
         run: |
           first="$(git diff -- mapfiles/loader.py common.py server.py client.py mapfiles/data/map_001_gwb_corridor/map.csv | sha256sum | cut -d' ' -f1)"
-          python tools/wire_v100_first_floor_runtime.py
+          python tools/wire_v100_first_floor_runtime_v2.py
           second="$(git diff -- mapfiles/loader.py common.py server.py client.py mapfiles/data/map_001_gwb_corridor/map.csv | sha256sum | cut -d' ' -f1)"
           test "$first" = "$second"
 
