@@ -84,6 +84,85 @@ class GridRenderer:
             image.set_colorkey((255, 0, 255))
         return image
 
+    @staticmethod
+    def _is_dark_building_outline(color: pygame.Color) -> bool:
+        return color.a > 160 and max(color.r, color.g, color.b) < 70
+
+    @classmethod
+    def _suppress_building_perimeter_outline(cls, source: pygame.Surface) -> pygame.Surface:
+        """Remove only the long near-black perimeter strokes from modular building tiles.
+
+        The city_block modular floor pieces contain thick dark guide/perimeter lines.
+        They become visually dominant when many pieces are synthesized into large
+        rectangles.  Detect only dark rows/columns spanning >55% of a tile and
+        inpaint those pixels from their nearest coloured neighbours. Short line art,
+        wall seams, roof texture and props remain untouched.
+        """
+        image = source.copy()
+        original = source.copy()
+        width, height = image.get_size()
+        dark_rows: list[list[bool]] = []
+        row_counts: list[int] = []
+        col_counts = [0] * width
+
+        for y in range(height):
+            row: list[bool] = []
+            count = 0
+            for x in range(width):
+                is_dark = cls._is_dark_building_outline(original.get_at((x, y)))
+                row.append(is_dark)
+                if is_dark:
+                    count += 1
+                    col_counts[x] += 1
+            dark_rows.append(row)
+            row_counts.append(count)
+
+        long_rows = {y for y, count in enumerate(row_counts) if count >= int(width * 0.55)}
+        long_cols = {x for x, count in enumerate(col_counts) if count >= int(height * 0.55)}
+        if not long_rows and not long_cols:
+            return image
+
+        max_search = max(12, int(max(width, height) * 0.08))
+        for y in range(height):
+            for x in range(width):
+                if not dark_rows[y][x] or (y not in long_rows and x not in long_cols):
+                    continue
+
+                neighbours: list[pygame.Color] = []
+                if y in long_rows:
+                    for direction in (-1, 1):
+                        for distance in range(1, max_search + 1):
+                            yy = y + direction * distance
+                            if not 0 <= yy < height:
+                                break
+                            candidate = original.get_at((x, yy))
+                            if candidate.a > 160 and not cls._is_dark_building_outline(candidate):
+                                neighbours.append(candidate)
+                                break
+                if x in long_cols:
+                    for direction in (-1, 1):
+                        for distance in range(1, max_search + 1):
+                            xx = x + direction * distance
+                            if not 0 <= xx < width:
+                                break
+                            candidate = original.get_at((xx, y))
+                            if candidate.a > 160 and not cls._is_dark_building_outline(candidate):
+                                neighbours.append(candidate)
+                                break
+
+                if neighbours:
+                    count = len(neighbours)
+                    image.set_at(
+                        (x, y),
+                        (
+                            sum(c.r for c in neighbours) // count,
+                            sum(c.g for c in neighbours) // count,
+                            sum(c.b for c in neighbours) // count,
+                            original.get_at((x, y)).a,
+                        ),
+                    )
+        return image
+
     @lru_cache(maxsize=256)
     def _tile_surface(self, tile_id: str) -> pygame.Surface:
         tile = self.world.catalog[tile_id]
@@ -94,6 +173,8 @@ class GridRenderer:
         image = self._load_image(tile.image)
         if image.get_size() != (self.world.cell_px, self.world.cell_px):
             image = pygame.transform.scale(image, (self.world.cell_px, self.world.cell_px))
+        if tile_id.startswith("bld_") and not tile_id.endswith("_fill"):
+            image = self._suppress_building_perimeter_outline(image)
         return image
 
     @lru_cache(maxsize=1024)
