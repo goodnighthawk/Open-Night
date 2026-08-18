@@ -1,7 +1,7 @@
 ﻿key,value,type
 id,map_001_gwb_corridor,str
 name,Open Night — Fort Lee / GWB / Washington Heights,str
-description,"v1.0 Ground runtime-art integration plus authoritative level -1 Underground passage/stair semantics for Washington Heights.",str
+description,"v1.0 Ground + Underground runtime-art integration with authoritative level -1 passage/stair semantics for Washington Heights.",str
 chunked,true,bool
 chunk_size,1024,int
 chunk_cols,16,int
@@ -34,6 +34,7 @@ underground_composition_archive,assets/environment/approved/map_001_gwb_corridor
 underground_composition_world_y,0,int
 underground_composition_source_scale,1.0,float
 underground_runtime_wired,true,bool
+underground_runtime_checkpoint,audited_switching_v1,str
 map_build_id,open_night_v1_0_ground_overlay_underground_runtime_v1,str
 release_version,0.9.0,str
 grid_enabled,true,bool
