@@ -38,12 +38,12 @@ jobs:
         run: python tools/capture_v100_ground_runtime.py
 
       - name: Verify capture
-        run: test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1280x720.png
+        run: test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1920x720.png
 
       - name: Upload Ground runtime capture
         uses: actions/upload-artifact@v4
         with:
-          name: open-night-v100-ground-runtime-capture
-          path: assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1280x720.png
+          name: open-night-v100-ground-runtime-capture-wide
+          path: assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1920x720.png
           if-no-files-found: error
           retention-days: 30
