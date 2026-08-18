@@ -1,20 +1,30 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 from pathlib import Path
 from typing import Any
 
-from grid_world import GridWorld
+from grid_world import GridWorld, TileCatalog
 
 ROOT = Path(__file__).resolve().parent
 GRID_MAP_PATH = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100" / "ground_grid.json"
+GRID_EXTERNAL_OBJECTS_PATH = GRID_MAP_PATH.with_name("ground_external_objects.json")
 GRID_CATALOG_PATH = ROOT / "assets" / "grid_v100" / "tile_catalog.json"
 GRID_MAP_ID = "map_001_gwb_corridor"
 
 
 @lru_cache(maxsize=1)
 def load_ground_grid() -> GridWorld:
-    return GridWorld.load(GRID_MAP_PATH, GRID_CATALOG_PATH)
+    data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
+    if GRID_EXTERNAL_OBJECTS_PATH.is_file():
+        extra = json.loads(GRID_EXTERNAL_OBJECTS_PATH.read_text(encoding="utf-8"))
+        extra_objects = list(extra.get("objects", []))
+        data.setdefault("objects", []).extend(extra_objects)
+        data["external_ground_roof_composite"] = bool(extra_objects)
+        data["external_composite_object_count"] = len(extra_objects)
+        data.setdefault("runtime", {})["external_roofs_visible_on_ground"] = bool(extra_objects)
+    return GridWorld(data, TileCatalog.load(GRID_CATALOG_PATH))
 
 
 def ground_grid_enabled(map_config: dict[str, Any] | None = None) -> bool:
@@ -42,4 +52,6 @@ def grid_network_metadata(map_config: dict[str, Any]) -> dict[str, Any]:
         "world_h": world.world_h,
         "grid_source_pack": str(world.data.get("source_pack", "city_block.zip")),
         "legacy_surface_entities": bool(world.data.get("runtime", {}).get("legacy_surface_entities", False)),
+        "external_ground_roof_composite": bool(world.data.get("external_ground_roof_composite", False)),
+        "external_composite_object_count": int(world.data.get("external_composite_object_count", 0)),
     }
