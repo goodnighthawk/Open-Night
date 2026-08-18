@@ -1,7 +1,7 @@
 ﻿key,value,type
 id,map_001_gwb_corridor,str
 name,Open Night — Fort Lee / GWB / Washington Heights,str
-description,"v0.9.0 consolidation release candidate; Pass 25 final visual-convergence corridor with fixed-scale modular buildings, street detail and hand-authored landmarks; the default and only playable map.",str
+description,"v1.0 Ground runtime-art integration; authoritative Fort Lee / GWB / Washington Heights geometry rendered through the collision-locked v1.0 1024px Ground composition tiles.",str
 chunked,true,bool
 chunk_size,1024,int
 chunk_cols,16,int
@@ -18,7 +18,7 @@ target_lane_width_px,38,int
 target_sidewalk_width_px,44,float
 bicycle_render_scale,0.72,float
 edge_tunnel_count,0,int
-render_style,approved_nyc_gta2_callback_v3,str
+render_style,approved_v100_illustrated_ground_runtime_v1,str
 camera_projection,orthographic_topdown,str
 outdoor_perspective_skew,0,float
 global_map_rotation_deg,0,float
@@ -26,10 +26,10 @@ default_render_mode,night,str
 default_lighting_profile,night_callback,str
 street_lamps_enabled,true,bool
 baked_composition,true,bool
-baked_composition_archive,assets/environment/approved/map_001_gwb_corridor/composition_tiles_v25.zip,str
-baked_composition_world_y,2048,int
-baked_composition_source_scale,0.5,float
-map_build_id,open_night_v0_9_0_pass25_default_only,str
+baked_composition_archive,assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip,str
+baked_composition_world_y,0,int
+baked_composition_source_scale,1.0,float
+map_build_id,open_night_v1_0_ground_overlay_runtime_v1,str
 release_version,0.9.0,str
 grid_enabled,true,bool
 grid_cell_size,32,int
@@ -37,7 +37,7 @@ grid_chunk_cache_limit,30,int
 server_region_chunk_cols,8,int
 server_region_chunk_rows,4,int
 scalability_target_players,1000,int
-render_pass,25,int
+render_pass,100,int
 road_network_rule,terrain_aware_hierarchy_with_staggered_locals_v2,str
 surface_preservation_rule,filtered_reference_polygons_with_district_caps_v1,str
 building_cosmetic_rule,pass25_fixed_scale_modular_massing_landmark_v1,str
@@ -53,5 +53,5 @@ street_detail_density_pass,true,bool
 hand_authored_landmark_pass,true,bool
 final_visual_convergence_pass,true,bool
 visual_convergence_failures,0,int
-approved_visual_checkpoint,pass25,str
+approved_visual_checkpoint,v1_0_illustrated_ground_runtime,str
 runtime_building_collision_inset,40,float
