@@ -66,7 +66,10 @@ def sampled(points, spacing=176.0):
 
 
 def paint_tile(tx: int, ty: int, roads: dict, pts_by_id: dict, connectors: list[dict]) -> Image.Image:
-    im = Image.new("RGBA", (art.TILE, art.TILE), (7, 9, 10, 255))
+    # RGB is intentional. ImageDraw's RGBA mode blends translucent decorative
+    # strokes into this opaque surface instead of writing partially transparent
+    # pixels whose raw RGB would later be exposed by Pygame Surface.convert().
+    im = Image.new("RGB", (art.TILE, art.TILE), (7, 9, 10))
     d = ImageDraw.Draw(im, "RGBA")
     ox, oy = tx * art.TILE, ty * art.TILE
 
@@ -211,7 +214,7 @@ def main():
     build_preview(cols, rows_n, roads, pts)
     print(
         f"V100_UNDERGROUND_APPROVAL_OK tiles={cols*rows_n} roads={len(roads)} "
-        f"connectors={len(connectors)} level=-1 detail=production_v2 "
+        f"connectors={len(connectors)} level=-1 detail=production_v2 opaque=true "
         f"preview={FULL_PREVIEW.name} focus={FOCUS_PREVIEW.name} player_scale={PLAYER_SCALE_PREVIEW.name}"
     )
 
