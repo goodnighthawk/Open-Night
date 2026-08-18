@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the first 64x48 authoritative v1.0 Ground tile grid.
 
-This is deliberately a tile map, not a rasterization of the legacy vector roads.
-The broad district layout may evolve, but every output cell is already a real
-runtime/collision tile ID from assets/grid_v100/tile_catalog.json.
+The map is authored as 256 px cells. Native premade city-block buildings are
+anchored objects spanning multiple cells; those cells are independently marked
+blocked, so the artwork never becomes the collision source.
 """
 from __future__ import annotations
 
@@ -26,48 +26,82 @@ def paint_rect(grid, x0, y0, x1, y1, tile):
 
 
 def main() -> None:
-    # A direct 256 px city_block pavement module is the default substrate.
     ground = blank("pavement_h")
+    for x in range(0, W, 5):
+        paint_rect(ground, x, 0, min(W, x + 1), H, "pavement_v")
 
-    # Add some vertical-pavement bands so the first grid capture proves both
-    # supplied pavement orientations are used directly by the renderer.
-    for x0, x1 in ((0, 2), (11, 13), (16, 18), (23, 25), (28, 30), (36, 38), (42, 44), (49, 51), (55, 57), (62, 64)):
-        paint_rect(ground, x0, 0, x1, H, "pavement_v")
-
-    # Building blocks are authored directly on the grid. Their outlines are
-    # intentionally varied so grid-authoritative does not mean uniform blocks.
-    blocks = [
-        (2, 2, 11, 7, "building_red"), (18, 2, 23, 7, "building_blue"),
-        (30, 2, 36, 7, "building_green"), (44, 2, 49, 7, "building_red"),
-        (57, 2, 62, 7, "building_blue"),
-        (2, 10, 11, 17, "building_blue"), (18, 11, 23, 17, "building_green"),
-        (30, 10, 36, 17, "building_red"), (44, 11, 49, 17, "building_blue"),
-        (57, 10, 62, 17, "building_green"),
-        (2, 22, 10, 29, "building_green"), (18, 22, 23, 29, "building_red"),
-        (30, 22, 36, 29, "building_blue"), (44, 22, 49, 29, "building_green"),
-        (57, 22, 63, 29, "building_red"),
-        (3, 33, 11, 40, "building_red"), (18, 34, 23, 40, "building_blue"),
-        (30, 33, 36, 40, "building_green"), (44, 34, 49, 40, "building_red"),
-        (57, 33, 62, 40, "building_blue"),
-        (2, 44, 10, 48, "building_blue"), (18, 44, 24, 48, "building_green"),
-        (30, 44, 36, 48, "building_red"), (44, 44, 50, 48, "building_blue"),
-        (57, 44, 64, 48, "building_green"),
-    ]
-    for block in blocks:
-        paint_rect(ground, *block)
-
-    # Roads are actual road_fill cells. Corridors vary between one and two cells
-    # wide and include offsets/T-connections rather than a perfectly repeated grid.
-    for x0, x1 in ((13, 16), (25, 28), (38, 42), (51, 55)):
+    # Grid-native streets. These are tile cells, not vector centerlines.
+    vertical_roads = [(7, 9), (19, 22), (34, 36), (49, 52)]
+    horizontal_roads = [(8, 10), (22, 25), (37, 39)]
+    for x0, x1 in vertical_roads:
         paint_rect(ground, x0, 0, x1, H, "road_fill")
-    for y0, y1 in ((8, 10), (18, 21), (30, 33), (41, 44)):
+    for y0, y1 in horizontal_roads:
         paint_rect(ground, 0, y0, W, y1, "road_fill")
 
-    # Break some corridors into asymmetrical neighborhood/service geometry.
-    paint_rect(ground, 0, 12, 13, 14, "road_fill")
-    paint_rect(ground, 42, 14, 64, 16, "road_fill")
-    paint_rect(ground, 8, 33, 10, 41, "road_fill")
-    paint_rect(ground, 55, 27, 64, 29, "road_fill")
+    # Curb/sidewalk cells use the source pack's directional curb modules.
+    for x0, x1 in vertical_roads:
+        for y in range(H):
+            if any(ya <= y < yb for ya, yb in horizontal_roads):
+                continue
+            if x0 - 1 >= 0:
+                ground[y][x0 - 1] = "curb_right"
+            if x1 < W:
+                ground[y][x1] = "curb_left"
+    for y0, y1 in horizontal_roads:
+        for x in range(W):
+            if any(xa <= x < xb for xa, xb in vertical_roads):
+                continue
+            if y0 - 1 >= 0:
+                ground[y0 - 1][x] = "curb_bottom"
+            if y1 < H:
+                ground[y1][x] = "curb_top"
+
+    objects = []
+
+    def add_building(asset: str, gx: int, gy: int, span_w: int, span_h: int):
+        paint_rect(ground, gx, gy, gx + span_w, gy + span_h, "building_blocked")
+        objects.append({"asset": asset, "gx": gx, "gy": gy})
+
+    # Native-size building sprites: red 01 = 5x6 cells; blue 04 = 6x7 cells.
+    for spec in [
+        ("building_red_01", 1, 1, 5, 6),
+        ("building_blue_04", 10, 1, 6, 7),
+        ("building_red_01", 24, 2, 5, 6),
+        ("building_blue_04", 39, 1, 6, 7),
+        ("building_red_01", 55, 1, 5, 6),
+        ("building_blue_04", 1, 12, 6, 7),
+        ("building_red_01", 11, 12, 5, 6),
+        ("building_blue_04", 25, 12, 6, 7),
+        ("building_red_01", 39, 13, 5, 6),
+        ("building_blue_04", 54, 12, 6, 7),
+        ("building_red_01", 2, 28, 5, 6),
+        ("building_blue_04", 11, 28, 6, 7),
+        ("building_red_01", 25, 29, 5, 6),
+        ("building_blue_04", 39, 28, 6, 7),
+        ("building_red_01", 55, 29, 5, 6),
+        ("building_blue_04", 1, 41, 6, 7),
+        ("building_red_01", 11, 41, 5, 6),
+        ("building_blue_04", 25, 41, 6, 7),
+        ("building_red_01", 39, 41, 5, 6),
+        ("building_blue_04", 54, 41, 6, 7),
+    ]:
+        add_building(*spec)
+
+    # Road markings and wear are grid-anchored visual objects; underlying road
+    # cells remain the collision authority.
+    for gx, gy, rot in [(8, 6, 0), (20, 20, 90), (35, 35, 0), (50, 20, 90)]:
+        objects.append({"asset": "crosswalk_white", "gx": gx, "gy": gy, "width_px": 96, "height_px": 300, "rotation": rot})
+    for gx, gy, rot in [(8, 7, 0), (35, 36, 180), (50, 21, 90)]:
+        objects.append({"asset": "stop_white", "gx": gx, "gy": gy, "width_px": 180, "height_px": 100, "rotation": rot})
+    for gx, gy, rot in [(8, 15, 0), (20, 30, 90), (50, 5, 180)]:
+        objects.append({"asset": "arrow_white_short", "gx": gx, "gy": gy, "width_px": 72, "height_px": 112, "rotation": rot})
+    objects.extend([
+        {"asset": "manhole", "gx": 20, "gy": 15, "width_px": 128, "height_px": 126},
+        {"asset": "road_cracks", "gx": 35, "gy": 17, "width_px": 120, "height_px": 244},
+        {"asset": "roof_aircon_large", "gx": 12, "gy": 2, "width_px": 194, "height_px": 200},
+        {"asset": "roof_duct", "gx": 41, "gy": 2, "width_px": 150, "height_px": 277},
+        {"asset": "roof_water_red", "gx": 26, "gy": 13, "width_px": 158, "height_px": 158},
+    ])
 
     data = {
         "format": "open-night-grid-v1",
@@ -78,11 +112,11 @@ def main() -> None:
         "world_h": H * CELL,
         "authority": "grid",
         "layers": {"ground": ground},
-        "objects": [],
+        "objects": objects,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
-    print(f"V100_GRID_SEED_OK cells={W}x{H} cell_px={CELL} output={OUT}")
+    print(f"V100_GRID_SEED_OK cells={W}x{H} objects={len(objects)} cell_px={CELL} output={OUT}")
 
 
 if __name__ == "__main__":
