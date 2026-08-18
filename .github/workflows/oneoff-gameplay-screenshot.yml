@@ -32,7 +32,7 @@ jobs:
           python -u server.py --memory-db --no-discovery --port 8765 --map map_001_gwb_corridor --traffic 8 > artifacts/gameplay/server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
-          python - <<'PY'
+          if ! python - <<'PY'
           import socket, time
           deadline = time.monotonic() + 15
           while time.monotonic() < deadline:
@@ -43,8 +43,13 @@ jobs:
                       break
               time.sleep(0.1)
           else:
-              raise SystemExit('server did not become ready')
+              raise SystemExit(1)
           PY
+          then
+            echo '--- server.log ---'
+            cat artifacts/gameplay/server.log || true
+            exit 1
+          fi
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python - <<'PY'
           import asyncio
           import sys
@@ -92,11 +97,12 @@ jobs:
           print('INGAME_CAPTURE_OK', output, 'local_id=', game.local_id, 'frames_after_connect=', state['connected_frames'])
           PY
       - name: Upload in-game screenshot
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: open-night-oneoff-ingame-screenshot
           path: |
             artifacts/gameplay/OPEN_NIGHT_INGAME_1280x720.png
             artifacts/gameplay/server.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
