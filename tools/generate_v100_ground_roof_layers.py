@@ -39,6 +39,10 @@ ROOF_PROP_SPECS = (
     ("rooflayer_green_roof", 190, 190),
     ("rooflayer_white_box", 146, 146),
 )
+ZEBRA_STRIPE_WIDTH = 44
+ZEBRA_STRIPE_LENGTH = 176
+ZEBRA_STRIPE_GAP = 38
+ZEBRA_EDGE_MARGIN = 36
 
 
 def _write_ppm(path: Path, width: int, height: int, pixel_fn) -> None:
@@ -243,21 +247,60 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
                 "street_marking": "dashed_center_line_horizontal",
             })
 
-    # Full-width zebra piece on each of the four approaches to every intersection.
+    def stripe_offsets(span_px: int) -> list[int]:
+        """Return centered stripe starts across a road-width span."""
+        usable = max(0, span_px - 2 * ZEBRA_EDGE_MARGIN)
+        pitch = ZEBRA_STRIPE_WIDTH + ZEBRA_STRIPE_GAP
+        count = max(3, (usable + ZEBRA_STRIPE_GAP) // pitch)
+        occupied = count * ZEBRA_STRIPE_WIDTH + (count - 1) * ZEBRA_STRIPE_GAP
+        start = max(ZEBRA_EDGE_MARGIN, (span_px - occupied) // 2)
+        return [start + index * pitch for index in range(count)]
+
+    def add_vertical_zebra(gx: int, gy: int, span_px: int, name: str) -> None:
+        # The user-approved grammar keeps each white bar parallel to the road.
+        # On a north/south road that means vertical bars repeated east/west.
+        for stripe_index, offset in enumerate(stripe_offsets(span_px)):
+            objects.append({
+                "asset": "mark_white_crossing_piece", "gx": gx, "gy": gy,
+                "offset_x_px": offset, "offset_y_px": 40,
+                "width_px": ZEBRA_STRIPE_WIDTH, "height_px": ZEBRA_STRIPE_LENGTH,
+                "rotation": 0, "street_marking": name,
+                "zebra_stripe_index": stripe_index,
+            })
+
+    def add_horizontal_zebra(gx: int, gy: int, span_px: int, name: str) -> None:
+        # On an east/west road the same source stripe is rotated once and
+        # repeated north/south, so every bar stays parallel to the lane lines.
+        for stripe_index, offset in enumerate(stripe_offsets(span_px)):
+            objects.append({
+                "asset": "mark_white_crossing_piece", "gx": gx, "gy": gy,
+                "offset_x_px": 40, "offset_y_px": offset,
+                "width_px": ZEBRA_STRIPE_WIDTH, "height_px": ZEBRA_STRIPE_LENGTH,
+                "rotation": 90, "street_marking": name,
+                "zebra_stripe_index": stripe_index,
+            })
+
+    # Proper repeated zebra stripes on each of the four approaches. Each
+    # crossing stays inside its road band and within one approach cell of the
+    # intersection, rather than stretching a single sprite into a giant bar.
     for vx0, vx1 in vertical:
         for hy0, hy1 in horizontal:
             road_w = (vx1 - vx0 + 1) * 256
             road_h = (hy1 - hy0 + 1) * 256
-            cross_w = max(256, road_w - 64)
-            cross_h = max(256, road_h - 64)
             if hy0 - 1 >= 0:
-                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy0 - 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_north"})
+                add_vertical_zebra(vx0, hy0 - 1, road_w, "zebra_north")
             if hy1 + 1 < h:
-                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy1 + 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_south"})
+                add_vertical_zebra(vx0, hy1 + 1, road_w, "zebra_south")
             if vx0 - 1 >= 0:
-                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0 - 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_west"})
+                add_horizontal_zebra(vx0 - 1, hy0, road_h, "zebra_west")
             if vx1 + 1 < w:
-                objects.append({"asset": "mark_white_crossing_piece", "gx": vx1 + 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_east"})
+                add_horizontal_zebra(vx1 + 1, hy0, road_h, "zebra_east")
+
+    zebras = [obj for obj in objects if str(obj.get("street_marking", "")).startswith("zebra_")]
+    if not zebras or any(int(obj["width_px"]) >= int(obj["height_px"]) for obj in zebras):
+        raise RuntimeError("zebra audit failed: expected repeated narrow source stripes")
+    if any(abs(int(obj.get("offset_x_px", 0))) >= 768 or abs(int(obj.get("offset_y_px", 0))) >= 768 for obj in zebras):
+        raise RuntimeError("zebra audit failed: stripe offset escaped its road band")
     return objects
 
 

@@ -282,6 +282,11 @@ class GridWorld:
             if definition.layer != layer:
                 continue
             x, y = self.cell_to_world(int(item["gx"]), int(item["gy"]))
+            # Grid anchors keep authored objects registered to collision cells,
+            # while pixel offsets allow repeated details (notably zebra stripes)
+            # to be positioned inside a 256 px cell without inventing fake tiles.
+            x += int(item.get("offset_x_px", 0))
+            y += int(item.get("offset_y_px", 0))
             width = int(item.get("width_px", definition.native_width_px)); height = int(item.get("height_px", definition.native_height_px))
             if x < right and y < bottom and x + width > left and y + height > top:
                 visible.append((definition.z, asset_id, item, x, y, width, height))
