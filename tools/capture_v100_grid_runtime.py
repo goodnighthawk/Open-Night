@@ -24,6 +24,7 @@ ROOF_DETAIL_OUT = ROOT / "assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png"
 GROUND_FULL_OUT = ROOT / "assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
 ROOF_FULL_OUT = ROOT / "assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
 W, H = 2560, 1440
+REVIEW_ZOOM = 0.5  # 50% review zoom: show twice the gameplay-world width/height.
 
 
 def first_cell(world, layer: str, predicate):
@@ -34,16 +35,22 @@ def first_cell(world, layer: str, predicate):
     raise RuntimeError(f"required {layer} proof cell not present")
 
 
-def camera_for(world, x: float, y: float) -> tuple[float, float]:
+def camera_for(world, x: float, y: float, width: int, height: int) -> tuple[float, float]:
     return (
-        max(0.0, min(world.world_w - W, x - W / 2)),
-        max(0.0, min(world.world_h - H, y - H / 2)),
+        max(0.0, min(max(0.0, world.world_w - width), x - width / 2)),
+        max(0.0, min(max(0.0, world.world_h - height), y - height / 2)),
     )
 
 
 def save_detail(renderer: GridRenderer, world, layer: str, x: float, y: float, path: Path) -> None:
-    frame = pygame.Surface((W, H)).convert()
-    renderer.draw_view(frame, camera_for(world, x, y), layer)
+    # Render the actual runtime at a larger virtual viewport, then downscale the
+    # resulting framebuffer for review. This changes preview zoom only; map scale,
+    # gameplay camera, collision and asset placement are untouched.
+    virtual_w = int(round(W / REVIEW_ZOOM))
+    virtual_h = int(round(H / REVIEW_ZOOM))
+    virtual = pygame.Surface((virtual_w, virtual_h)).convert()
+    renderer.draw_view(virtual, camera_for(world, x, y, virtual_w, virtual_h), layer)
+    frame = pygame.transform.smoothscale(virtual, (W, H))
     path.parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(frame, str(path))
 
@@ -98,7 +105,7 @@ def main() -> None:
 
         print(
             "V100_GROUND_ROOF_RUNTIME_PROOF_OK "
-            f"size={W}x{H} cell={ground.cell_px} grid={ground.width}x{ground.height} "
+            f"size={W}x{H} review_zoom={REVIEW_ZOOM:.2f} cell={ground.cell_px} grid={ground.width}x{ground.height} "
             f"ground_objects={len(ground.objects)} roof_objects={len(roof.objects)} "
             f"overview_cell_px={ground_tile_px} overview_origin={ground_ox},{ground_oy} "
             f"roof_overview_cell_px={roof_tile_px} roof_origin={roof_ox},{roof_oy} "
