@@ -16,14 +16,15 @@ GRID_WORLD_H = GRID_H * GRID_CELL_PX
 #   North = screen up, East = screen right, South = screen down, West = screen left
 #   +x = East, +y = South
 #
-# The supplied city_block curb filenames are visually 180 degrees opposite to
-# these world-facing logical IDs. Translate the full eight-piece set here once;
-# no curb sprite is rotated at render time.
+# User-verified fixed reference: north/south curb centers already match the
+# pack filenames directly and must not be inverted again. East/west edges and
+# the four corners remain translated to the world-facing compass convention.
+# No curb sprite is rotated at render time.
 CURB_WORLD_TO_PACK_IMAGE = {
     "curb_left": "city_block://road_and_pavement_tileset/curb_right_edge.png",
     "curb_right": "city_block://road_and_pavement_tileset/curb_left_edge.png",
-    "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
-    "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
+    "curb_top": "city_block://road_and_pavement_tileset/curb_top_center.png",
+    "curb_bottom": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
     "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
     "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
     "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
