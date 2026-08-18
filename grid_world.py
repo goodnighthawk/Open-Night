@@ -12,17 +12,22 @@ GRID_H = 48
 GRID_WORLD_W = GRID_W * GRID_CELL_PX
 GRID_WORLD_H = GRID_H * GRID_CELL_PX
 
-# Curb orientation follows the supplied city_block filenames directly.
-# example.png is the visual reference; no curb tile is rotated at runtime.
+# Open Night proof/world axes are fixed and unambiguous:
+#   North = screen up, East = screen right, South = screen down, West = screen left
+#   +x = East, +y = South
+#
+# The supplied city_block curb filenames are visually 180 degrees opposite to
+# these world-facing logical IDs. Translate the full eight-piece set here once;
+# no curb sprite is rotated at render time.
 CURB_WORLD_TO_PACK_IMAGE = {
-    "curb_left": "city_block://road_and_pavement_tileset/curb_left_edge.png",
-    "curb_right": "city_block://road_and_pavement_tileset/curb_right_edge.png",
-    "curb_top": "city_block://road_and_pavement_tileset/curb_top_center.png",
-    "curb_bottom": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
-    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
-    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
-    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
-    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
+    "curb_left": "city_block://road_and_pavement_tileset/curb_right_edge.png",
+    "curb_right": "city_block://road_and_pavement_tileset/curb_left_edge.png",
+    "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
+    "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
 }
 
 
@@ -69,7 +74,8 @@ class TileCatalog:
             raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
             raw.setdefault("objects", {}).update(extra.get("objects", {}))
 
-        # Centralized filename-driven curb mapping; no individual curb sprite is rotated.
+        # Centralized orientation translation: map authors use world compass
+        # semantics, while the pack image names are converted here exactly once.
         for tile_id, image in CURB_WORLD_TO_PACK_IMAGE.items():
             if tile_id in raw.get("tiles", {}):
                 raw["tiles"][tile_id]["image"] = image
