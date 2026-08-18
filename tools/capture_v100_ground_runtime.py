@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture a real 1280x720 Ground framebuffer using Open Night's runtime renderer."""
+"""Capture a real 1920x720 Ground framebuffer using Open Night's runtime renderer."""
 from __future__ import annotations
 
 import os
@@ -20,8 +20,8 @@ from environment_art import EnvironmentRenderer
 from mapfiles.loader import load_map_folder
 
 MAP_DIR = ROOT / "mapfiles/data/map_001_gwb_corridor"
-OUT = ROOT / "assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1280x720.png"
-W, H = 1280, 720
+OUT = ROOT / "assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1920x720.png"
+W, H = 1920, 720
 
 
 def main() -> None:
@@ -47,7 +47,6 @@ def main() -> None:
         frame = pygame.Surface((W, H)).convert()
         renderer.draw_view(frame, (cam_x, cam_y))
 
-        # Keep this a clean production framebuffer: no synthetic/debug overlays.
         OUT.parent.mkdir(parents=True, exist_ok=True)
         pygame.image.save(frame, str(OUT))
 
