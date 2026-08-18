@@ -1,4 +1,4 @@
-﻿road_id,point_order,x,y
+road_id,point_order,x,y
 fl_west_avenue,0,512,2048
 fl_west_avenue,1,576,2944
 fl_west_avenue,2,512,3712
@@ -194,3 +194,17 @@ wh_lower_connector,3,14720,8256
 wh_lower_connector,4,14784,9024
 gwb_authored,0,4608,6144
 gwb_authored,1,10752,6144
+ug_broadway_spine,0,12032,2816
+ug_broadway_spine,1,12096,3648
+ug_broadway_spine,2,12160,4672
+ug_broadway_spine,3,12288,6144
+ug_broadway_spine,4,12416,7680
+ug_broadway_spine,5,12544,9024
+ug_181_crosspassage,0,10752,4608
+ug_181_crosspassage,1,12160,4672
+ug_181_crosspassage,2,13824,4608
+ug_181_crosspassage,3,15552,4672
+ug_gwb_service_branch,0,10816,6144
+ug_gwb_service_branch,1,12288,6144
+ug_gwb_service_branch,2,13760,6144
+ug_gwb_service_branch,3,14720,6144
