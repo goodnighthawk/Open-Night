@@ -9,6 +9,14 @@ on:
       - 'mapfiles/**'
       - 'assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip'
       - '.github/workflows/v100-ground-runtime-capture.yml'
+  pull_request:
+    branches: [v0.9.0-consolidation]
+    paths:
+      - 'tools/capture_v100_ground_runtime.py'
+      - 'environment_art.py'
+      - 'mapfiles/**'
+      - 'assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip'
+      - '.github/workflows/v100-ground-runtime-capture.yml'
   workflow_dispatch:
 
 jobs:
