@@ -2247,7 +2247,14 @@ class Game:
         # Static city geometry is pre-rendered from the approved environment texture
         # atlas once per map. Collision/traffic data remains server-authoritative
         # and independent of this visual layer.
+        local_world_player = self.players.get(self.local_id or "")
+        active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
+        self.environment.set_active_level(active_world_level)
         self.environment.draw_view(self.screen, self.camera())
+        # Ground street furniture/state must not bleed through the subterranean
+        # composition. Underground static detail is already baked into its tiles.
+        if active_world_level < 0:
+            return
         self.draw_hydrant_effects()
         self.draw_bike_lanes()
 
@@ -2797,6 +2804,9 @@ class Game:
 
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""
+        local_world_player = self.players.get(self.local_id or "")
+        if local_world_player is not None and int(getattr(local_world_player, "level", 0)) < 0:
+            return
         w, h = self.screen.get_size()
         for raw_pos, color, label, sublabel in (
             (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}"),
@@ -2891,7 +2901,14 @@ class Game:
 
     def draw_player_nameplates(self) -> None:
         """Draw names in final screen space so camera rotation never tilts text."""
+        local_world_player = self.players.get(self.local_id or "")
+        active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
         for player in self.players.values():
+            player_level = int(getattr(player, "level", 0))
+            if active_world_level < 0 and player_level != active_world_level:
+                continue
+            if active_world_level >= 0 and player_level < 0:
+                continue
             if getattr(player, "interior_id", ""):
                 continue
             in_vehicle = bool(getattr(player, "in_vehicle", False))
@@ -3824,40 +3841,54 @@ class Game:
                     world_surface = self._zoom_world_surface
                     self.screen = world_surface
                     self.draw_world()
-                    for stain in self.blood_stains.values():
-                        self.draw_blood_stain(stain)
+                    local_world_player = self.players.get(self.local_id or "")
+                    active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
+                    if active_world_level >= 0:
+                        for stain in self.blood_stains.values():
+                            self.draw_blood_stain(stain)
                     # Grade-separated dynamic draw order.  Vehicles/NPC traffic is
                     # still a Level-0 system; pedestrian players carry authoritative
                     # map levels.  Each elevated deck is redrawn after lower-level
                     # entities and before players standing on that deck.
                     drawables = []
-                    drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
-                    drawables.extend((self.camera_depth(bike.render_x, bike.render_y), "bike", bike) for bike in self.bicycles.values())
-                    drawables.extend((self.camera_depth(npc.render_x, npc.render_y), "npc", npc) for npc in self.npcs.values())
-                    drawables.extend(
-                        (self.camera_depth(player.render_x, player.render_y), "player", player)
-                        for player in self.players.values() if int(getattr(player, "level", 0)) <= 0
-                    )
+                    if active_world_level >= 0:
+                        # Vehicles/NPC traffic and blood are currently a Ground-only
+                        # system. Negative-level players are hidden from the surface.
+                        drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
+                        drawables.extend((self.camera_depth(bike.render_x, bike.render_y), "bike", bike) for bike in self.bicycles.values())
+                        drawables.extend((self.camera_depth(npc.render_x, npc.render_y), "npc", npc) for npc in self.npcs.values())
+                        drawables.extend(
+                            (self.camera_depth(player.render_x, player.render_y), "player", player)
+                            for player in self.players.values() if int(getattr(player, "level", 0)) == 0
+                        )
+                    else:
+                        # Underground players see only players sharing their exact
+                        # authoritative negative level. No Ground traffic leaks in.
+                        drawables.extend(
+                            (self.camera_depth(player.render_x, player.render_y), "player", player)
+                            for player in self.players.values() if int(getattr(player, "level", 0)) == active_world_level
+                        )
                     for _, kind, obj in sorted(drawables, key=lambda row: row[0]):
                         if kind == "car": self.draw_vehicle(obj)
                         elif kind == "bike": self.draw_bicycle_entity(obj)
                         elif kind == "npc": self.draw_npc(obj)
                         else: self.draw_player(obj, local=(obj.id == self.local_id))
 
-                    positive_levels = sorted({
-                        int(float(road.get("level", 0) or 0))
-                        for road in self.map_config.get("roads", []) or []
-                        if int(float(road.get("level", 0) or 0)) > 0
-                    })
-                    for map_level in positive_levels:
-                        self.environment.draw_elevated_overlay(self.screen, self.camera(), map_level)
-                        level_players = [
-                            (self.camera_depth(player.render_x, player.render_y), player)
-                            for player in self.players.values()
-                            if int(getattr(player, "level", 0)) == map_level
-                        ]
-                        for _, player in sorted(level_players, key=lambda row: row[0]):
-                            self.draw_player(player, local=(player.id == self.local_id))
+                    if active_world_level >= 0:
+                        positive_levels = sorted({
+                            int(float(road.get("level", 0) or 0))
+                            for road in self.map_config.get("roads", []) or []
+                            if int(float(road.get("level", 0) or 0)) > 0
+                        })
+                        for map_level in positive_levels:
+                            self.environment.draw_elevated_overlay(self.screen, self.camera(), map_level)
+                            level_players = [
+                                (self.camera_depth(player.render_x, player.render_y), player)
+                                for player in self.players.values()
+                                if int(getattr(player, "level", 0)) == map_level
+                            ]
+                            for _, player in sorted(level_players, key=lambda row: row[0]):
+                                self.draw_player(player, local=(player.id == self.local_id))
                     self.screen = display_surface
                     self._render_camera_override = None
                     if rotation_active:
