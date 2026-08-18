@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_ROOT = ROOT / "artifacts" / "map_lab"
-RENDER_SCRIPT = ROOT / "tools" / "map_lab_render.py"
+RENDER_SCRIPT = ROOT / "tools" / "map_lab_render_zoomed.py"
 
 WATCH_FILES = (
     ROOT / "grid_world.py",
@@ -22,6 +22,7 @@ WATCH_FILES = (
     ROOT / "grid_runtime.py",
     ROOT / "tools" / "generate_v100_ground_roof_layers.py",
     ROOT / "tools" / "map_lab_render.py",
+    ROOT / "tools" / "map_lab_render_zoomed.py",
     ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100" / "ground_grid.json",
     ROOT / "assets" / "grid_v100" / "tile_catalog.json",
     ROOT / "assets" / "grid_v100" / "building_tiles.json",
@@ -97,6 +98,7 @@ def main() -> None:
     url = f"http://127.0.0.1:{port}/current/index.html"
     print(f"[Map Lab] Gallery: {url}")
     print("[Map Lab] WATCH ON — save a map, runtime, generator, catalog, or city_block asset to rerender.")
+    print("[Map Lab] Detail proofs use 0.25x building-scale framing; full-map overview remains separate.")
     print("[Map Lab] GitHub Actions are not involved. Press Ctrl+C here to stop.")
     webbrowser.open(url)
 
