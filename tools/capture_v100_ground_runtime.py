@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -14,7 +19,6 @@ import pygame
 from environment_art import EnvironmentRenderer
 from mapfiles.loader import load_map_folder
 
-ROOT = Path(__file__).resolve().parents[1]
 MAP_DIR = ROOT / "mapfiles/data/map_001_gwb_corridor"
 OUT = ROOT / "assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1280x720.png"
 W, H = 1280, 720
@@ -48,7 +52,6 @@ def main() -> None:
         pygame.image.save(frame, str(OUT))
 
         raw = pygame.image.tostring(frame, "RGB")
-        # Fail if a broken renderer produces an essentially flat image.
         if len(set(raw[::997])) < 12:
             raise SystemExit("Ground runtime capture appears blank/flat")
 
