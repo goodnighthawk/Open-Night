@@ -7,7 +7,7 @@ set "REPO="
 set "REPO_FILE=%LOCALAPPDATA%\OpenNight\map_lab_repo.txt"
 
 rem Prefer the repository beside this BAT when it is already in the repo root.
-if exist "%~dp0tools\map_lab_ready_watch.py" set "REPO=%~dp0"
+if exist "%~dp0tools\map_lab_ready_watch_continuous.py" set "REPO=%~dp0"
 
 rem Otherwise reuse the last repository location selected by the user.
 if not defined REPO if exist "%REPO_FILE%" (
@@ -15,13 +15,13 @@ if not defined REPO if exist "%REPO_FILE%" (
 )
 
 rem Try common GitHub Desktop clone locations.
-if not defined REPO if exist "%USERPROFILE%\Documents\GitHub\Open-Night\tools\map_lab_ready_watch.py" set "REPO=%USERPROFILE%\Documents\GitHub\Open-Night"
-if not defined REPO if exist "%USERPROFILE%\GitHub\Open-Night\tools\map_lab_ready_watch.py" set "REPO=%USERPROFILE%\GitHub\Open-Night"
-if not defined REPO if exist "%USERPROFILE%\OneDrive\Documents\GitHub\Open-Night\tools\map_lab_ready_watch.py" set "REPO=%USERPROFILE%\OneDrive\Documents\GitHub\Open-Night"
-if not defined REPO if exist "%USERPROFILE%\Desktop\Open-Night\tools\map_lab_ready_watch.py" set "REPO=%USERPROFILE%\Desktop\Open-Night"
+if not defined REPO if exist "%USERPROFILE%\Documents\GitHub\Open-Night\tools\map_lab_ready_watch_continuous.py" set "REPO=%USERPROFILE%\Documents\GitHub\Open-Night"
+if not defined REPO if exist "%USERPROFILE%\GitHub\Open-Night\tools\map_lab_ready_watch_continuous.py" set "REPO=%USERPROFILE%\GitHub\Open-Night"
+if not defined REPO if exist "%USERPROFILE%\OneDrive\Documents\GitHub\Open-Night\tools\map_lab_ready_watch_continuous.py" set "REPO=%USERPROFILE%\OneDrive\Documents\GitHub\Open-Night"
+if not defined REPO if exist "%USERPROFILE%\Desktop\Open-Night\tools\map_lab_ready_watch_continuous.py" set "REPO=%USERPROFILE%\Desktop\Open-Night"
 
 rem Validate any saved/discovered location. If it is stale, ask again.
-if defined REPO if not exist "%REPO%\tools\map_lab_ready_watch.py" set "REPO="
+if defined REPO if not exist "%REPO%\tools\map_lab_ready_watch_continuous.py" set "REPO="
 
 if not defined REPO (
     echo.
@@ -32,7 +32,7 @@ if not defined REPO (
     set "REPO=%REPO:"=%"
 )
 
-if not exist "%REPO%\tools\map_lab_ready_watch.py" goto :repo_error
+if not exist "%REPO%\tools\map_lab_ready_watch_continuous.py" goto :repo_error
 
 if not exist "%LOCALAPPDATA%\OpenNight" mkdir "%LOCALAPPDATA%\OpenNight" >nul 2>&1
 >"%REPO_FILE%" echo %REPO%
@@ -54,17 +54,18 @@ if errorlevel 1 (
 
 echo [Map Lab Watch] Checking dedicated alert playback device...
 echo [Map Lab Watch] On first run, choose the monitor/HDMI/DisplayPort or motherboard output you want.
-%PY% tools\map_lab_ready_watch.py --test-beep
+%PY% tools\map_lab_ready_watch_continuous.py --test-beep
 if errorlevel 1 goto :error
 
 echo.
 echo [Map Lab Watch] Starting watcher...
 echo [Map Lab Watch] Leave this window open.
 echo [Map Lab Watch] Small progress will appear here as new commits arrive.
-echo [Map Lab Watch] TRIPLE BEEP = new Map Lab version is ready to inspect.
+echo [Map Lab Watch] READY ALARM repeats until you press SPACE in this window.
 echo [Map Lab Watch] Headphones can remain Windows default; the saved alert device is used directly.
+echo [Map Lab Watch] Ready validation uses the same 0.25x building-scale Map Lab preview you inspect.
 echo.
-%PY% tools\map_lab_ready_watch.py
+%PY% tools\map_lab_ready_watch_continuous.py
 if errorlevel 1 goto :error
 
 popd
@@ -72,7 +73,7 @@ exit /b 0
 
 :repo_error
 echo.
-echo [Map Lab Watch] Could not find tools\map_lab_ready_watch.py in:
+echo [Map Lab Watch] Could not find tools\map_lab_ready_watch_continuous.py in:
 echo   %REPO%
 echo.
 echo Delete "%REPO_FILE%" if you want to choose the repository folder again.
