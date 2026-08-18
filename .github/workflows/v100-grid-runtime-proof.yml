@@ -57,6 +57,17 @@ jobs:
         run: test -f assets/source_packs/city_block/road_and_pavement_tileset/road_fill.png
       - name: Render actual Ground + Roof runtime frames
         run: python tools/capture_v100_grid_runtime.py
+      - name: Smoke-test local Map Lab renderer
+        run: python tools/map_lab_render.py
+      - name: Verify Map Lab proof bundle
+        run: |
+          test -f artifacts/map_lab/current/GROUND_FULL.png
+          test -f artifacts/map_lab/current/GROUND_INTERSECTION.png
+          test -f artifacts/map_lab/current/GROUND_BUILDING.png
+          test -f artifacts/map_lab/current/ROOF_FULL.png
+          test -f artifacts/map_lab/current/ROOF_BUILDING.png
+          test -f artifacts/map_lab/current/TILE_ORIENTATION_TEST.png
+          test -f artifacts/map_lab/current/index.html
       - name: Upload Ground + Roof proofs
         uses: actions/upload-artifact@v4
         with:
