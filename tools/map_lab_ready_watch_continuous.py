@@ -78,7 +78,9 @@ def _continuous_ready_alarm(_count: int = 3) -> None:
     ]
     _drain_console_keys()
 
-    print("[Map Lab Watch] READY ALARM — press SPACE in this window to silence it.")
+    alarm_started = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[Map Lab Watch] READY ALARM STARTED — {alarm_started}")
+    print("[Map Lab Watch] Press SPACE in this window to silence it.")
     print(f"[Map Lab Watch] Alarm output: {device}")
 
     try:
