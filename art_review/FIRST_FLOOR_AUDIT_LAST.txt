@@ -1,0 +1,2 @@
+Interior starter_apartment lost its authored building_id
+AUDIT_EXIT_STATUS=1
