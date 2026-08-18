@@ -31,6 +31,8 @@ ORIENTATION_REFERENCE = CITY_BLOCK_DIR / "example.png"
 
 MAGENTA = (255, 0, 255)
 THEMES = ("blue", "dark_green", "green", "red", "yellow")
+MIN_BUILDING_SIDE = 4
+MIN_BUILDING_AREA = 24
 ROOF_PROP_SPECS = (
     ("rooflayer_aircon_large", 164, 164),
     ("rooflayer_water_red", 154, 154),
@@ -186,6 +188,79 @@ def _road_cells(rows: list[list[str]]) -> list[tuple[int, int]]:
     return [(x, y) for y, row in enumerate(rows) for x, tid in enumerate(row) if tid == "road_fill"]
 
 
+def _contiguous_bands(values: list[int]) -> list[tuple[int, int]]:
+    if not values:
+        return []
+    bands = []
+    start = prev = values[0]
+    for value in values[1:]:
+        if value != prev + 1:
+            bands.append((start, prev))
+            start = value
+        prev = value
+    bands.append((start, prev))
+    return bands
+
+
+def _road_bands(rows: list[list[str]]) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    h, w = len(rows), len(rows[0])
+    vertical_cols = [x for x in range(w) if sum(rows[y][x] == "road_fill" for y in range(h)) >= int(h * 0.75)]
+    horizontal_rows = [y for y in range(h) if sum(rows[y][x] == "road_fill" for x in range(w)) >= int(w * 0.75)]
+    return _contiguous_bands(vertical_cols), _contiguous_bands(horizontal_rows)
+
+
+def _street_markings(rows: list[list[str]]) -> list[dict]:
+    h, w = len(rows), len(rows[0])
+    vertical, horizontal = _road_bands(rows)
+    objects: list[dict] = []
+
+    def in_h_intersection(y: int) -> bool:
+        return any(y0 - 1 <= y <= y1 + 1 for y0, y1 in horizontal)
+
+    def in_v_intersection(x: int) -> bool:
+        return any(x0 - 1 <= x <= x1 + 1 for x0, x1 in vertical)
+
+    # Repeating dashed centre lines between intersections.
+    for x0, x1 in vertical:
+        cx = (x0 + x1) // 2
+        for y in range(1, h - 1, 2):
+            if in_h_intersection(y):
+                continue
+            objects.append({
+                "asset": "mark_yellow_repeating_single", "gx": cx, "gy": y,
+                "width_px": 64, "height_px": 190, "rotation": 0,
+                "street_marking": "dashed_center_line_vertical",
+            })
+
+    for y0, y1 in horizontal:
+        cy = (y0 + y1) // 2
+        for x in range(1, w - 1, 2):
+            if in_v_intersection(x):
+                continue
+            objects.append({
+                "asset": "mark_yellow_repeating_single", "gx": x, "gy": cy,
+                "width_px": 64, "height_px": 190, "rotation": 90,
+                "street_marking": "dashed_center_line_horizontal",
+            })
+
+    # Full-width zebra piece on each of the four approaches to every intersection.
+    for vx0, vx1 in vertical:
+        for hy0, hy1 in horizontal:
+            road_w = (vx1 - vx0 + 1) * 256
+            road_h = (hy1 - hy0 + 1) * 256
+            cross_w = max(256, road_w - 64)
+            cross_h = max(256, road_h - 64)
+            if hy0 - 1 >= 0:
+                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy0 - 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_north"})
+            if hy1 + 1 < h:
+                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0, "gy": hy1 + 1, "width_px": 120, "height_px": cross_w, "rotation": 90, "street_marking": "zebra_south"})
+            if vx0 - 1 >= 0:
+                objects.append({"asset": "mark_white_crossing_piece", "gx": vx0 - 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_west"})
+            if vx1 + 1 < w:
+                objects.append({"asset": "mark_white_crossing_piece", "gx": vx1 + 1, "gy": hy0, "width_px": 120, "height_px": cross_h, "rotation": 0, "street_marking": "zebra_east"})
+    return objects
+
+
 def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> list[tuple[int, int]]:
     x0, y0, x1, y1 = rect
     cx, cy = center
@@ -211,9 +286,17 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
                 rows[y][x] = "pavement_small"
 
     buildings = []
-    for index, group in enumerate(groups, 1):
+    rejected = []
+    for legacy_index, group in enumerate(groups, 1):
         rect = _largest_axis_aligned_rect(group)
         x0, y0, x1, y1 = rect
+        bw, bh = x1 - x0 + 1, y1 - y0 + 1
+        area = bw * bh
+        if bw < MIN_BUILDING_SIDE or bh < MIN_BUILDING_SIDE or area < MIN_BUILDING_AREA:
+            rejected.append({"legacy_index": legacy_index, "rect": [x0, y0, x1, y1], "area": area})
+            continue
+
+        index = len(buildings) + 1
         theme = _theme_for_rect(index, rect)
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
@@ -224,20 +307,25 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
             "footprint_type": "rectangle",
             "theme": theme,
             "rect": [x0, y0, x1, y1],
-            "generated_cells": (x1 - x0 + 1) * (y1 - y0 + 1),
+            "generated_cells": area,
             "legacy_component_cells": len(group),
             "orientation_policy": "filename_semantics_no_rotation",
         })
 
+    # Retire the old plus-sign/crossing pass before adding the new street grammar.
+    data["objects"] = [obj for obj in data.get("objects", []) if not str(obj.get("asset", "")).startswith("mark_")]
     data["layers"] = {"ground": rows}
     data.pop("layers_ascii", None)
     data["building_synthesis"] = {
-        "version": 2,
+        "version": 3,
         "shape_family": "axis_aligned_rectangles",
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "orientation_authority": "filename_semantics",
         "random_rotation": False,
         "roof_registration": "exact_ground_footprint",
+        "minimum_side_cells": MIN_BUILDING_SIDE,
+        "minimum_area_cells": MIN_BUILDING_AREA,
+        "rejected_small_building_count": len(rejected),
         "building_count": len(buildings),
         "buildings": buildings,
     }
@@ -252,7 +340,7 @@ def generate_layers() -> tuple[int, int]:
 
     data = json.loads(GROUND_PATH.read_text(encoding="utf-8"))
     ground, buildings = synthesize_ground(data, _decode_ground(data))
-    ground_objects: list[dict] = []
+    ground_objects: list[dict] = _street_markings(ground)
     roof_objects: list[dict] = []
     roof_rows = [["void" for _ in row] for row in ground]
 
@@ -308,9 +396,10 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v3",
+        "format": "open-night-ground-generated-v4",
         "generation_scope": ["ground", "roof"],
-        "building_synthesis": "filename_semantics_no_rotation",
+        "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
+        "street_markings": "zebra_crossings_and_dashed_center_lines",
         "roof_registration": "exact_ground_footprint",
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "objects": ground_objects,
@@ -324,12 +413,14 @@ def generate_layers() -> tuple[int, int]:
         "source_pack": "city_block",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": {
-            "version": 2,
+            "version": 3,
             "matching_ground": True,
             "registration": "exact_ground_footprint",
             "orientation_reference": "assets/source_packs/city_block/example.png",
             "orientation_authority": "filename_semantics",
             "random_rotation": False,
+            "minimum_side_cells": MIN_BUILDING_SIDE,
+            "minimum_area_cells": MIN_BUILDING_AREA,
         },
         "layers": {"roof": roof_rows},
         "objects": roof_objects,
@@ -345,7 +436,8 @@ def main() -> None:
     print(
         "V100_GROUND_ROOF_GENERATED",
         f"buildings={buildings}", f"generated_objects={objects}",
-        "shape=rectangles", "orientation=filename_semantics_no_rotation",
+        f"min_building_side={MIN_BUILDING_SIDE}", f"min_building_area={MIN_BUILDING_AREA}",
+        "street_markings=zebra+dashed", "orientation=filename_semantics_no_rotation",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
