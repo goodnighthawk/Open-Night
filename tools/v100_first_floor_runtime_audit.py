@@ -37,7 +37,6 @@ from interior_layout import (
     interior_move_world,
     interior_start_world,
     point_walkable,
-    tile_center_world,
 )
 from mapfiles.loader import load_map_folder
 
@@ -70,11 +69,16 @@ def source_contract_checks() -> None:
     common = (ROOT / "common.py").read_text(encoding="utf-8")
     loader = (ROOT / "mapfiles/loader.py").read_text(encoding="utf-8")
 
+    # Test executable/projection markers, not explanatory prose. Comments may
+    # legitimately describe the removed renderer; the runtime must not contain
+    # an isometric transform or the old diamond-grid constants/calls.
     forbidden = (
         "def iso(",
         "TILE_W = 64",
         "TILE_H = 32",
-        "independent 2:1 isometric",
+        "self.iso(",
+        "iso_x =",
+        "iso_y =",
     )
     for marker in forbidden:
         if marker in interior_art:
@@ -113,7 +117,7 @@ def source_contract_checks() -> None:
         fail("Server still uses detached grid interior movement")
     if "interior_x: float = 0.0" not in common or '"interior_x": round(float(self.interior_x), 2)' not in common:
         fail("PlayerState does not serialize world-space First Floor coordinates")
-    if '"building_id": str(row.get("building_id", ""))' not in loader:
+    if '"building_id": str(r.get("building_id", ""))' not in loader:
         fail("Map loader does not preserve explicit interior building binding")
 
 
@@ -148,7 +152,7 @@ def semantic_checks(m: dict) -> list[dict]:
         if not contains_rect(floor, outer):
             fail(f"Interior {room_id} floor escaped building footprint: floor={floor} building={outer}")
 
-        upper = [row for row in layers_by_building.get(resolved, []) if int(row.get("level", -99)) == 1]
+        upper = [row for row in layers_by_building.get(resolved, []) if int(row.get("level_id", -99)) == 1]
         if not upper or not any(bool(row.get("walkable", False)) for row in upper):
             fail(f"Interior {room_id} building {resolved} lacks walkable local First Floor declaration")
 
@@ -176,7 +180,7 @@ def semantic_checks(m: dict) -> list[dict]:
         x, y = sx, sy
         moved = 0.0
         for _ in range(8):
-            nx, ny, aim = interior_move_world(m, room_id, x, y, 1.0, 0.0)
+            nx, ny, _ = interior_move_world(m, room_id, x, y, 1.0, 0.0)
             delta = math.hypot(nx - x, ny - y)
             if delta > 0:
                 moved += delta
