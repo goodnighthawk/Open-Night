@@ -56,16 +56,38 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def _beep_ready() -> None:
+def _system_beep(count: int = 3) -> None:
+    """Play through the Windows default playback device when possible.
+
+    MessageBeep uses the configured Windows system sound, so it follows the
+    active/default playback path (for example HDMI/DisplayPort monitor audio or
+    motherboard/onboard audio). winsound.Beep and the console bell are fallbacks.
+    """
     try:
         import winsound
 
-        for frequency in (880, 1175, 1568):
+        for _ in range(max(1, count)):
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            time.sleep(0.22)
+        return
+    except Exception:
+        pass
+
+    try:
+        import winsound
+
+        for frequency in (880, 1175, 1568)[: max(1, count)]:
             winsound.Beep(frequency, 180)
             time.sleep(0.08)
+        return
     except Exception:
-        # Terminal bell fallback for non-Windows shells / unusual audio setups.
-        print("\a\a\a", end="", flush=True)
+        pass
+
+    print("\a" * max(1, count), end="", flush=True)
+
+
+def _beep_ready() -> None:
+    _system_beep(3)
 
 
 def _is_relevant(path: str) -> bool:
@@ -157,6 +179,11 @@ def _process_remote(remote_sha: str) -> str:
 
 
 def main() -> None:
+    if "--test-beep" in sys.argv:
+        print("[Map Lab Watch] Testing Windows default playback device...")
+        _system_beep(1)
+        return
+
     if not (ROOT / ".git").exists():
         raise SystemExit("Run this from the cloned Open Night repository.")
     if not RENDER_SCRIPT.is_file():
@@ -172,7 +199,8 @@ def main() -> None:
     print("Open Night — Map Lab Ready Watch")
     print(f"Branch: {BRANCH}")
     print(f"Checking origin every {POLL_SECONDS} seconds.")
-    print("TRIPLE BEEP = a new relevant version was pulled and Map Lab proof passed.")
+    print("TRIPLE SYSTEM BEEP = a new relevant version was pulled and Map Lab proof passed.")
+    print("The beep follows the Windows default playback device.")
     print("Leave this window open; press Ctrl+C to stop.\n")
 
     try:
