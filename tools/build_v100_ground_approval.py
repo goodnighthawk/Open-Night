@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 import build_v100_art_overlays as art
+import v100_ground_detail_pass as detail
 
 
 def main():
@@ -30,13 +31,14 @@ def main():
                 roads, pts, buildings, levels,
                 water, green, crosswalks, vegetation,
             )
+            detail.apply(im, tx, ty, mode="night")
             im.save(target / f"tile_{tx:02d}_{ty:02d}.png", optimize=True)
 
     art.build_ground_preview(cols, rows_n)
     print(
         f"V100_GROUND_APPROVAL_OK tiles={cols * rows_n} "
         f"world={cfg['world_w']}x{cfg['world_h']} "
-        "preview=GROUND_NIGHT_APPROVAL_PREVIEW.png"
+        "detail=authored_pass22 preview=GROUND_NIGHT_APPROVAL_PREVIEW.png"
     )
 
 
