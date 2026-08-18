@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Watch v1.0-art-overlay and beep when a new Map Lab iteration is locally testable.
 
-The watcher intentionally uses git rather than GitHub Actions as its readiness gate:
-when a new relevant remote commit appears, it fast-forwards the local branch, runs
-the real Map Lab renderer/validator in a fresh process, and only beeps after that
-render succeeds.
+A dedicated playback device is selected once and stored locally, so the ready
+alert does not follow the Windows default device (for example headphones).
 """
 from __future__ import annotations
 
+from array import array
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BRANCH = "v1.0-art-overlay"
 POLL_SECONDS = max(15, int(os.getenv("OPEN_NIGHT_MAP_LAB_WATCH_SECONDS", "60")))
 STATE_PATH = ROOT / "artifacts" / "map_lab" / "watch_state.json"
+AUDIO_CONFIG_PATH = ROOT / "artifacts" / "map_lab" / "audio_device.json"
 RENDER_SCRIPT = ROOT / "tools" / "map_lab_render.py"
 
 RELEVANT_EXACT = {
@@ -56,38 +57,106 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def _system_beep(count: int = 3) -> None:
-    """Play through the Windows default playback device when possible.
+def _playback_devices() -> list[str]:
+    import pygame
+    from pygame._sdl2 import get_audio_device_names
 
-    MessageBeep uses the configured Windows system sound, so it follows the
-    active/default playback path (for example HDMI/DisplayPort monitor audio or
-    motherboard/onboard audio). winsound.Beep and the console bell are fallbacks.
-    """
+    pygame.init()
     try:
-        import winsound
+        names = [str(name) for name in get_audio_device_names(False)]
+    finally:
+        pygame.mixer.quit()
+        pygame.display.quit()
+    # Keep order but remove duplicate names.
+    return list(dict.fromkeys(names))
 
-        for _ in range(max(1, count)):
-            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-            time.sleep(0.22)
-        return
-    except Exception:
-        pass
 
+def _saved_audio_device() -> str | None:
     try:
-        import winsound
+        raw = json.loads(AUDIO_CONFIG_PATH.read_text(encoding="utf-8"))
+        name = str(raw.get("device_name", "")).strip()
+        return name or None
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
 
-        for frequency in (880, 1175, 1568)[: max(1, count)]:
-            winsound.Beep(frequency, 180)
+
+def _save_audio_device(name: str) -> None:
+    AUDIO_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    AUDIO_CONFIG_PATH.write_text(
+        json.dumps({"device_name": name}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _configure_audio(force: bool = False) -> str:
+    devices = _playback_devices()
+    if not devices:
+        raise RuntimeError("Windows/SDL reported no playback devices.")
+
+    saved = _saved_audio_device()
+    if saved and saved in devices and not force:
+        return saved
+
+    print("\nMap Lab alert playback devices:")
+    for index, name in enumerate(devices, start=1):
+        print(f"  {index}. {name}")
+    print("Choose the MONITOR/HDMI/DisplayPort or motherboard speaker output you can hear without headphones.")
+
+    while True:
+        answer = input("Playback device number: ").strip()
+        try:
+            selected = devices[int(answer) - 1]
+        except (ValueError, IndexError):
+            print("Enter one of the numbers shown above.")
+            continue
+        _save_audio_device(selected)
+        print(f"Saved Map Lab alert device: {selected}")
+        return selected
+
+
+def _tone_samples(frequency: float, duration: float, sample_rate: int = 44100) -> bytes:
+    count = max(1, int(sample_rate * duration))
+    amplitude = int(32767 * 0.45)
+    samples = array(
+        "h",
+        (
+            int(amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate))
+            for i in range(count)
+        ),
+    )
+    return samples.tobytes()
+
+
+def _play_ready_sound(count: int = 3) -> None:
+    """Play directly through the saved output device, not the Windows default."""
+    import pygame
+
+    device = _configure_audio(force=False)
+    current = _playback_devices()
+    if device not in current:
+        print(f"[Map Lab Watch] Saved audio device is unavailable: {device}")
+        device = _configure_audio(force=True)
+
+    pygame.mixer.quit()
+    pygame.mixer.init(
+        frequency=44100,
+        size=-16,
+        channels=1,
+        buffer=512,
+        devicename=device,
+    )
+    try:
+        frequencies = (880.0, 1175.0, 1568.0)
+        for index in range(max(1, count)):
+            frequency = frequencies[min(index, len(frequencies) - 1)]
+            sound = pygame.mixer.Sound(buffer=_tone_samples(frequency, 0.20))
+            channel = sound.play()
+            if channel is not None:
+                while channel.get_busy():
+                    time.sleep(0.01)
             time.sleep(0.08)
-        return
-    except Exception:
-        pass
-
-    print("\a" * max(1, count), end="", flush=True)
-
-
-def _beep_ready() -> None:
-    _system_beep(3)
+    finally:
+        pygame.mixer.quit()
 
 
 def _is_relevant(path: str) -> bool:
@@ -146,7 +215,11 @@ def _render_and_beep(sha: str, paths: list[str]) -> bool:
     print("CHECK MAP_LAB — new visual iteration passed local proof")
     print(f"commit {sha[:12]}")
     print("============================================================\n")
-    _beep_ready()
+    try:
+        _play_ready_sound(3)
+    except Exception as exc:
+        print(f"[Map Lab Watch] READY, but dedicated audio alert failed: {exc}")
+        print("[Map Lab Watch] Run MAP_LAB_READY_WATCH.bat again to reselect/test the playback device.")
     return True
 
 
@@ -179,9 +252,16 @@ def _process_remote(remote_sha: str) -> str:
 
 
 def main() -> None:
+    if "--configure-audio" in sys.argv:
+        device = _configure_audio(force=True)
+        print(f"Testing dedicated device: {device}")
+        _play_ready_sound(1)
+        return
+
     if "--test-beep" in sys.argv:
-        print("[Map Lab Watch] Testing Windows default playback device...")
-        _system_beep(1)
+        device = _configure_audio(force=False)
+        print(f"Testing dedicated device: {device}")
+        _play_ready_sound(1)
         return
 
     if not (ROOT / ".git").exists():
@@ -196,11 +276,13 @@ def main() -> None:
             "Switch branches in GitHub Desktop, then run the watcher again."
         )
 
+    device = _configure_audio(force=False)
     print("Open Night — Map Lab Ready Watch")
     print(f"Branch: {BRANCH}")
+    print(f"Dedicated alert device: {device}")
     print(f"Checking origin every {POLL_SECONDS} seconds.")
-    print("TRIPLE SYSTEM BEEP = a new relevant version was pulled and Map Lab proof passed.")
-    print("The beep follows the Windows default playback device.")
+    print("TRIPLE BEEP = a new relevant version was pulled and Map Lab proof passed.")
+    print("Headphones may remain the Windows default; this alert uses the saved device directly.")
     print("Leave this window open; press Ctrl+C to stop.\n")
 
     try:
