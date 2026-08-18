@@ -41,31 +41,56 @@ jobs:
       - name: Generate collision-accurate Ground/Night art
         run: python tools/build_v100_ground_approval.py
 
+      - name: Package Ground/Night for the existing runtime composition renderer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          source = Path('assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night')
+          archive = Path('assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip')
+          tiles = sorted(source.glob('tile_*.png'))
+          if len(tiles) != 192:
+              raise SystemExit(f'Expected 192 Ground/Night tiles, found {len(tiles)}')
+          archive.parent.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for tile in tiles:
+                  z.write(tile, f'night/{tile.name}')
+          with zipfile.ZipFile(archive, 'r') as z:
+              names = [name for name in z.namelist() if name.startswith('night/tile_') and name.endswith('.png')]
+              if len(names) != 192:
+                  raise SystemExit(f'Runtime archive contains {len(names)} Ground/Night tiles')
+          print(f'Packaged {len(tiles)} runtime tiles -> {archive}')
+          PY
+
       - name: Verify output
         run: |
           test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
           test "$(find assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night -name 'tile_*.png' | wc -l)" -eq 192
+          test -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
 
-      - name: Upload approval artifact
+      - name: Upload approval and runtime artifacts
         uses: actions/upload-artifact@v4
         with:
           name: open-night-v100-ground-night
           path: |
             assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
             assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night/*.png
+            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
           if-no-files-found: error
           retention-days: 30
 
-      - name: Commit generated Ground/Night files
+      - name: Commit generated Ground/Night runtime art
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
           git add assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night
+          git add assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
           if git diff --cached --quiet; then
             echo 'No generated changes to commit.'
           else
-            git commit -m 'v1.0: generate collision-accurate Ground/Night art'
+            git commit -m 'v1.0: package Ground/Night art for runtime'
             git push origin HEAD:v1.0-art-overlay
           fi
