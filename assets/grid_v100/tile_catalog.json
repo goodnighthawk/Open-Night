@@ -1,0 +1,18 @@
+{
+  "cell_px": 256,
+  "tiles": {
+    "void": {"image": "", "collision": "blocked", "kind": "void", "layer": "ground", "z": 0},
+    "road_fill": {"image": "assets/grid_v100/city_block/road_fill.png", "collision": "road", "kind": "road", "layer": "ground", "z": 10},
+    "pavement_h": {"image": "assets/grid_v100/city_block/pavement_horizontal_repeating.png", "collision": "sidewalk", "kind": "sidewalk", "layer": "ground", "z": 20},
+    "pavement_v": {"image": "assets/grid_v100/city_block/pavement_vertical_repeating.png", "collision": "sidewalk", "kind": "sidewalk", "layer": "ground", "z": 20},
+    "pavement_center": {"image": "assets/grid_v100/city_block/pavement_center.png", "collision": "sidewalk", "kind": "sidewalk", "layer": "ground", "z": 20},
+    "curb_left": {"image": "assets/grid_v100/city_block/curb_left_edge.png", "collision": "sidewalk", "kind": "curb", "layer": "ground", "z": 30},
+    "curb_right": {"image": "assets/grid_v100/city_block/curb_right_edge.png", "collision": "sidewalk", "kind": "curb", "layer": "ground", "z": 30},
+    "building_blue": {"image": "assets/grid_v100/city_block/blue_floor_fill.png", "collision": "blocked", "kind": "building", "layer": "ground", "z": 40},
+    "building_red": {"image": "assets/grid_v100/city_block/red_floor_fill.png", "collision": "blocked", "kind": "building", "layer": "ground", "z": 40},
+    "building_green": {"image": "assets/grid_v100/city_block/green_floor_fill.png", "collision": "blocked", "kind": "building", "layer": "ground", "z": 40},
+    "crosswalk": {"image": "assets/grid_v100/city_block/white_crossing_piece.png", "collision": "road", "kind": "decal", "layer": "ground", "z": 60},
+    "manhole": {"image": "assets/grid_v100/city_block/man_hole.png", "collision": "road", "kind": "decal", "layer": "ground", "z": 60},
+    "roof_aircon": {"image": "assets/grid_v100/city_block/aircon_unit.png", "collision": "blocked", "kind": "roof_prop", "layer": "roof", "z": 90}
+  }
+}
