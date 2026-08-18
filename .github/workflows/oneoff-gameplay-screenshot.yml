@@ -5,6 +5,10 @@ on:
     branches: [v1.0-art-overlay]
     paths:
       - '.github/workflows/oneoff-gameplay-screenshot.yml'
+  pull_request:
+    branches: [v0.9.0-consolidation]
+    paths:
+      - '.github/workflows/oneoff-gameplay-screenshot.yml'
   workflow_dispatch:
 
 jobs:
@@ -43,7 +47,6 @@ jobs:
           PY
           SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python - <<'PY'
           import asyncio
-          import os
           import sys
           import time
           from pathlib import Path
