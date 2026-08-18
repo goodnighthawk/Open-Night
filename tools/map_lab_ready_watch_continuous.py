@@ -4,20 +4,17 @@
 Normal ready notifications repeat through the watcher-selected dedicated playback
 device until the user presses Space in the watcher console. Pressing Enter while
 monitoring creates a concise continuation prompt for the current Open Night
-Ground pass, copies it to the Windows clipboard, and opens ChatGPT so the user
-can paste/send the nudge if the active assistant has gone quiet or off-task.
-Startup audio tests remain short single beeps. Readiness uses the building-scale
-Map Lab renderer.
+Ground pass, copies it to the Windows clipboard, and leaves the existing ChatGPT
+conversation untouched so the user can paste/send it there. Startup audio tests
+remain short single beeps. Readiness uses the building-scale Map Lab renderer.
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
-import webbrowser
 
 import map_lab_ready_watch as base
 
@@ -29,7 +26,6 @@ _STOP_EVENT = threading.Event()
 _PING_LOCK = threading.Lock()
 NUDGE_PATH = base.ROOT / "artifacts" / "map_lab" / "gpt_nudge.txt"
 NUDGE_STATE_PATH = base.ROOT / "artifacts" / "map_lab" / "gpt_nudge.json"
-CHATGPT_URL = "https://chatgpt.com/"
 
 
 def _space_pressed() -> bool:
@@ -100,6 +96,8 @@ def _manual_gpt_ping() -> None:
                     "head": sha,
                     "branch": base.BRANCH,
                     "prompt_file": str(NUDGE_PATH),
+                    "clipboard": True,
+                    "browser_opened": False,
                 },
                 indent=2,
             )
@@ -109,24 +107,21 @@ def _manual_gpt_ping() -> None:
 
         copied = _copy_to_clipboard(prompt)
         print("\n============================================================")
-        print(f"[Map Lab Watch] GPT NUDGE — {timestamp}")
+        print(f"[Map Lab Watch] GPT NUDGE READY — {timestamp}")
         print(f"[Map Lab Watch] HEAD {sha[:12]}")
         if copied:
             print("[Map Lab Watch] Continuation prompt copied to clipboard.")
+            print("[Map Lab Watch] Return to THIS Open Night chat and press Ctrl+V, then Enter.")
         else:
             print(f"[Map Lab Watch] Clipboard copy unavailable; prompt saved to {NUDGE_PATH}")
-        print("[Map Lab Watch] Opening ChatGPT. Paste/send the prompt in the active Open Night conversation.")
+        print("[Map Lab Watch] No browser/window was opened.")
         print("============================================================\n")
-        try:
-            webbrowser.open(CHATGPT_URL, new=2)
-        except Exception as exc:
-            print(f"[Map Lab Watch] Could not open ChatGPT automatically: {exc}")
     finally:
         _PING_LOCK.release()
 
 
 def _keyboard_loop() -> None:
-    """Central Windows console key reader: Space acknowledges, Enter nudges GPT."""
+    """Central Windows console key reader: Space acknowledges, Enter prepares GPT nudge."""
     if sys.platform != "win32":
         return
     import msvcrt
@@ -173,7 +168,7 @@ def _continuous_ready_alarm(_count: int = 3) -> None:
     alarm_started = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[Map Lab Watch] READY ALARM STARTED — {alarm_started}")
     print("[Map Lab Watch] Press SPACE in this window to silence it.")
-    print("[Map Lab Watch] Press ENTER at any time to prepare a GPT continuation nudge.")
+    print("[Map Lab Watch] Press ENTER at any time to copy a GPT continuation nudge.")
     print(f"[Map Lab Watch] Alarm output: {device}")
 
     try:
