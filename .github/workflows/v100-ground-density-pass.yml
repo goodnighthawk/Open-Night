@@ -1,0 +1,41 @@
+name: Apply v1.0 Ground Density Pass
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'tools/apply_v100_ground_density_pass.py'
+      - '.github/workflows/v100-ground-density-pass.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-ground-density:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply deterministic Ground density pass
+        run: python tools/apply_v100_ground_density_pass.py
+      - name: Validate authoritative Ground map
+        run: python tools/build_v100_grid_seed.py
+      - name: Compile grid runtime
+        run: python -m py_compile grid_world.py grid_renderer.py grid_runtime.py server.py client.py
+      - name: Commit authored Ground map
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mapfiles/data/map_001_gwb_corridor/grid_v100/ground_grid.json
+          if git diff --cached --quiet; then
+            echo 'Ground density pass already applied.'
+          else
+            git commit -m 'v1.0 grid: author dense irregular Ground detail pass'
+            git push origin HEAD:v1.0-art-overlay
+          fi
