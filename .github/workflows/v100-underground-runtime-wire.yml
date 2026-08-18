@@ -51,9 +51,9 @@ jobs:
 
       - name: Confirm patch is idempotent
         run: |
-          first="$(git diff -- environment_art.py client.py mapfiles/data/map_001_gwb_corridor/map.csv .github/workflows/v100-underground-art.yml | sha256sum | cut -d' ' -f1)"
+          first="$(git diff -- environment_art.py client.py mapfiles/data/map_001_gwb_corridor/map.csv | sha256sum | cut -d' ' -f1)"
           python tools/wire_v100_underground_runtime_v2.py
-          second="$(git diff -- environment_art.py client.py mapfiles/data/map_001_gwb_corridor/map.csv .github/workflows/v100-underground-art.yml | sha256sum | cut -d' ' -f1)"
+          second="$(git diff -- environment_art.py client.py mapfiles/data/map_001_gwb_corridor/map.csv | sha256sum | cut -d' ' -f1)"
           test "$first" = "$second"
 
       - name: Commit audited runtime integration
@@ -63,7 +63,6 @@ jobs:
           git add environment_art.py
           git add client.py
           git add mapfiles/data/map_001_gwb_corridor/map.csv
-          git add .github/workflows/v100-underground-art.yml
           if git diff --cached --quiet; then
             echo 'Underground runtime integration is already applied.'
           else
