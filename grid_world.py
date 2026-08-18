@@ -26,9 +26,21 @@ class TileDef:
         return self.collision in {"walk", "road", "sidewalk", "interior", "transition"}
 
 
+@dataclass(frozen=True)
+class ObjectDef:
+    object_id: str
+    image: str
+    kind: str = "decoration"
+    layer: str = "ground"
+    z: int = 100
+    native_width_px: int = 256
+    native_height_px: int = 256
+
+
 class TileCatalog:
-    def __init__(self, entries: dict[str, TileDef]):
+    def __init__(self, entries: dict[str, TileDef], objects: dict[str, ObjectDef] | None = None):
         self.entries = entries
+        self.objects = objects or {}
 
     @classmethod
     def load(cls, path: str | Path) -> "TileCatalog":
@@ -43,17 +55,32 @@ class TileCatalog:
                 layer=str(item.get("layer", "ground")),
                 z=int(item.get("z", 0)),
             )
-        return cls(entries)
+        objects: dict[str, ObjectDef] = {}
+        for object_id, item in raw.get("objects", {}).items():
+            objects[object_id] = ObjectDef(
+                object_id=object_id,
+                image=str(item["image"]),
+                kind=str(item.get("kind", "decoration")),
+                layer=str(item.get("layer", "ground")),
+                z=int(item.get("z", 100)),
+                native_width_px=int(item.get("native_width_px", GRID_CELL_PX)),
+                native_height_px=int(item.get("native_height_px", GRID_CELL_PX)),
+            )
+        return cls(entries, objects)
 
     def __getitem__(self, tile_id: str) -> TileDef:
         return self.entries[tile_id]
+
+    def object(self, object_id: str) -> ObjectDef:
+        return self.objects[object_id]
 
 
 class GridWorld:
     """Authoritative 256 px tile world.
 
-    Rendering and gameplay query the same cell records. The old vector map may be
-    used by migration tools but is not consulted by this class at runtime.
+    Rendering and gameplay query the same cell records. Large visual objects are
+    anchored to grid cells, but never define collision themselves: the cells under
+    their declared span are the gameplay authority.
     """
 
     def __init__(self, data: dict[str, Any], catalog: TileCatalog):
@@ -71,6 +98,13 @@ class GridWorld:
         for name, rows in self.layers.items():
             if len(rows) != self.height or any(len(row) != self.width for row in rows):
                 raise ValueError(f"layer {name!r} is not {self.width}x{self.height}")
+        for obj in self.objects:
+            oid = str(obj.get("asset", ""))
+            if oid not in self.catalog.objects:
+                raise ValueError(f"grid object references unknown asset {oid!r}")
+            gx, gy = int(obj.get("gx", -1)), int(obj.get("gy", -1))
+            if not self.in_bounds(gx, gy):
+                raise ValueError(f"grid object {oid!r} anchor outside world: {(gx, gy)}")
 
     @classmethod
     def load(cls, map_path: str | Path, catalog_path: str | Path) -> "GridWorld":
@@ -115,3 +149,20 @@ class GridWorld:
         for gy in range(gy0, gy1 + 1):
             for gx in range(gx0, gx1 + 1):
                 yield gx, gy
+
+    def visible_objects(self, camera_x: float, camera_y: float, width_px: int, height_px: int, layer: str):
+        left, top = float(camera_x), float(camera_y)
+        right, bottom = left + width_px, top + height_px
+        visible = []
+        for item in self.objects:
+            asset_id = str(item["asset"])
+            definition = self.catalog.object(asset_id)
+            if definition.layer != layer:
+                continue
+            x, y = self.cell_to_world(int(item["gx"]), int(item["gy"]))
+            width = int(item.get("width_px", definition.native_width_px))
+            height = int(item.get("height_px", definition.native_height_px))
+            if x < right and y < bottom and x + width > left and y + height > top:
+                visible.append((definition.z, asset_id, item, x, y, width, height))
+        visible.sort(key=lambda row: row[0])
+        return visible
