@@ -26,27 +26,32 @@ def paint_rect(grid, x0, y0, x1, y1, tile):
 
 
 def main() -> None:
-    # Full-cell sidewalk/lot material is the default urban substrate.
-    ground = blank("pavement_center")
+    # A direct 256 px city_block pavement module is the default substrate.
+    ground = blank("pavement_h")
+
+    # Add some vertical-pavement bands so the first grid capture proves both
+    # supplied pavement orientations are used directly by the renderer.
+    for x0, x1 in ((0, 2), (11, 13), (16, 18), (23, 25), (28, 30), (36, 38), (42, 44), (49, 51), (55, 57), (62, 64)):
+        paint_rect(ground, x0, 0, x1, H, "pavement_v")
 
     # Building blocks are authored directly on the grid. Their outlines are
     # intentionally varied so grid-authoritative does not mean uniform blocks.
     blocks = [
-        (2, 2, 12, 7, "building_red"), (17, 2, 24, 7, "building_blue"),
-        (29, 2, 37, 7, "building_green"), (43, 2, 50, 7, "building_red"),
-        (56, 2, 63, 7, "building_blue"),
-        (3, 10, 11, 17, "building_blue"), (18, 11, 24, 17, "building_green"),
-        (29, 10, 36, 17, "building_red"), (44, 11, 50, 17, "building_blue"),
-        (56, 10, 62, 17, "building_green"),
-        (2, 22, 10, 29, "building_green"), (17, 22, 24, 29, "building_red"),
-        (29, 22, 36, 29, "building_blue"), (43, 22, 50, 29, "building_green"),
-        (55, 22, 63, 29, "building_red"),
-        (4, 33, 11, 40, "building_red"), (17, 34, 23, 40, "building_blue"),
-        (29, 33, 37, 40, "building_green"), (44, 34, 51, 40, "building_red"),
-        (56, 33, 62, 40, "building_blue"),
-        (2, 44, 10, 48, "building_blue"), (17, 44, 25, 48, "building_green"),
-        (30, 44, 37, 48, "building_red"), (43, 44, 51, 48, "building_blue"),
-        (56, 44, 64, 48, "building_green"),
+        (2, 2, 11, 7, "building_red"), (18, 2, 23, 7, "building_blue"),
+        (30, 2, 36, 7, "building_green"), (44, 2, 49, 7, "building_red"),
+        (57, 2, 62, 7, "building_blue"),
+        (2, 10, 11, 17, "building_blue"), (18, 11, 23, 17, "building_green"),
+        (30, 10, 36, 17, "building_red"), (44, 11, 49, 17, "building_blue"),
+        (57, 10, 62, 17, "building_green"),
+        (2, 22, 10, 29, "building_green"), (18, 22, 23, 29, "building_red"),
+        (30, 22, 36, 29, "building_blue"), (44, 22, 49, 29, "building_green"),
+        (57, 22, 63, 29, "building_red"),
+        (3, 33, 11, 40, "building_red"), (18, 34, 23, 40, "building_blue"),
+        (30, 33, 36, 40, "building_green"), (44, 34, 49, 40, "building_red"),
+        (57, 33, 62, 40, "building_blue"),
+        (2, 44, 10, 48, "building_blue"), (18, 44, 24, 48, "building_green"),
+        (30, 44, 36, 48, "building_red"), (44, 44, 50, 48, "building_blue"),
+        (57, 44, 64, 48, "building_green"),
     ]
     for block in blocks:
         paint_rect(ground, *block)
