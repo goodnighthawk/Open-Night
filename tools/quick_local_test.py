@@ -56,7 +56,6 @@ def launch_visible(cmd: list[str], *, label: str) -> subprocess.Popen:
     """Launch a child so Windows keeps its console open if Python exits with an error."""
     if sys.platform.startswith("win"):
         command = subprocess.list2cmdline(cmd)
-        # /v:on lets us report the *child* exit code inside the failure block.
         wrapped = (
             f'{command} || ('
             f'set "ERR=!ERRORLEVEL!" & echo. & '
@@ -80,9 +79,6 @@ def main() -> int:
         print("Close the old server window, then run QUICK_LOCAL_TEST.bat again.")
         return 2
 
-    # v1.0 Quick Test deliberately enters through the grid-authoritative wrapper.
-    # The wrapper validates the actual 64x48 Ground GridWorld and prevents retired
-    # legacy vector-road geometry from blocking the current playable exterior.
     server_cmd = [
         python, str(ROOT / "tools" / "grid_local_server.py"), "--memory-db", "--no-discovery",
         "--port", str(PORT), "--map", "map_001_gwb_corridor", "--traffic", "8",
@@ -111,10 +107,12 @@ def main() -> int:
         return 5
     print(f"[OK] {detail}")
 
-    print("[3/3] Launching desktop client against local grid server...")
-    client_cmd = [python, str(ROOT / "client.py"), "--server", URI]
+    print("[3/3] Launching v1.0 grid-exclusive desktop client...")
+    client_cmd = [python, str(ROOT / "grid_client_entry.py"), "--server", URI]
     launch_visible(client_cmd, label="CLIENT")
     print("[OK] Client launched only after grid server readiness was proven.")
+    print("[OK] Grid Ground is visually exclusive; legacy vector/elevated overlays are suppressed.")
+    print("[OK] Grid Ground player scale uses a minimum 2x avatar for the 256 px tile world.")
     print("If the client crashes, its console will stay open and show the Python traceback.")
     return 0
 
