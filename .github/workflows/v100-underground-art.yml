@@ -111,14 +111,14 @@ jobs:
           assert cfg['underground_composition_archive'] == expected
           assert float(cfg['underground_composition_source_scale']) == 1.0
           assert float(cfg['underground_composition_world_y']) == 0.0
-          assert cfg['underground_runtime_wired'].lower() == 'false'
+          assert cfg['underground_runtime_wired'].lower() == 'true'
 
           with zipfile.ZipFile(expected, 'r') as z:
               actual = set(z.namelist())
           names = {f'night/tile_{x:02d}_{y:02d}.png' for x in range(16) for y in range(12)}
           if names - actual:
               raise SystemExit(f'Missing runtime tiles: {sorted(names-actual)[:5]}')
-          print('V100_UNDERGROUND_ART_CONTRACT_OK level=-1 archive=192 player_preview=1280x720 runtime_wired=false')
+          print('V100_UNDERGROUND_ART_CONTRACT_OK level=-1 archive=192 player_preview=1280x720 runtime_wired=true')
           PY
 
       - name: Upload Underground approval artifact
