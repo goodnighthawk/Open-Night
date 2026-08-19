@@ -14,7 +14,7 @@ from typing import Iterable
 
 TRAFFIC_ROUTE_LIMIT = 24
 PEDESTRIAN_ROUTE_LIMIT = 18
-PEDESTRIAN_TARGET = 36
+PEDESTRIAN_TARGET = 108
 
 
 def _group_runs(values: Iterable[int]) -> list[list[int]]:
@@ -167,6 +167,8 @@ def _build_pedestrian_routes(world) -> list[dict]:
         if not all(_segment_surface(world, points[i], points[(i + 1) % len(points)], "walk") or
                    _segment_surface(world, points[i], points[(i + 1) % len(points)], "sidewalk")
                    for i in range(len(points))):
+            # Mixed walk/sidewalk labels are valid; the exact cell test below is
+            # authoritative, so only reject if a segment leaves pavement entirely.
             valid = True
             for i in range(len(points)):
                 a, b = points[i], points[(i + 1) % len(points)]
@@ -289,6 +291,8 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     server_module.initialize_npcs()
     server_module.initialize_hydrants()
 
+    # Initial spawn filtering is deterministic. Never allow one invalid body to
+    # poison the traffic simulation simply because a catalog car is unusually wide.
     safe_cars = []
     for car in server_module.traffic_vehicles:
         if _grid_vehicle_blocked(world, car, car.x, car.y, car.angle):
