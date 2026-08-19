@@ -31,18 +31,25 @@ def main() -> None:
     if game.grid_world is None or game.grid_renderer is None:
         raise RuntimeError("canonical v1.0 client did not initialize GridWorld")
 
+    buildings = {str(item["building_id"]): item for item in game.grid_world.data["building_synthesis"]["buildings"]}
     fires = [item for item in game.grid_world.objects if str(item.get("asset")) == "placeholder_fire_escape"]
     lamps = [item for item in game.grid_world.objects if item.get("lighting_kind") == "sidewalk_lamp"]
-    if not fires or not lamps:
-        raise RuntimeError("HUD proof requires exterior fire escapes and synchronized streetlamps")
+    shifted_fires = [
+        fire for fire in fires
+        if buildings.get(str(fire.get("building_id")), {}).get("center_shift_cells") not in (None, [0, 0])
+    ]
+    if not shifted_fires or not lamps:
+        raise RuntimeError("HUD proof requires a centered building, exterior fire escape and synchronized streetlamps")
 
     def cell_distance(a: dict, b: dict) -> int:
         return abs(int(a["gx"]) - int(b["gx"])) + abs(int(a["gy"]) - int(b["gy"]))
 
-    target_fire = min(fires, key=lambda fire: min(cell_distance(fire, lamp) for lamp in lamps))
-    target_lamp = min(lamps, key=lambda lamp: cell_distance(target_fire, lamp))
-    target_x, target_y = game.grid_world.cell_center(int(target_fire["gx"]), int(target_fire["gy"]))
-    x, y = game.grid_world.nearest_walkable("ground", target_x, target_y, game_client.PLAYER_RADIUS)
+    choices = [(cell_distance(fire, lamp), fire, lamp) for fire in shifted_fires for lamp in lamps
+               if cell_distance(fire, lamp) > 0]
+    _distance, target_fire, target_lamp = min(choices, key=lambda row: row[0])
+    midpoint_x = (int(target_fire["gx"]) + int(target_lamp["gx"]) + 1.0) * game.grid_world.cell_px * 0.5
+    midpoint_y = (int(target_fire["gy"]) + int(target_lamp["gy"]) + 1.0) * game.grid_world.cell_px * 0.5
+    x, y = game.grid_world.nearest_walkable("ground", midpoint_x, midpoint_y, game_client.PLAYER_RADIUS)
     local = game_client.RemotePlayer({
         "id": "runtime-proof-local", "name": "RuntimeProof",
         "x": x, "y": y, "aim": -1.5707963267948966,
@@ -51,15 +58,27 @@ def main() -> None:
     game.local_id = local.id
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
-    game.notice = "v1.0 runtime proof — HUD, minimap, player and GridWorld"
+    game.notice = "v1.0 proof — centered building, exterior fire escape, synced lamp, player + HUD"
     game.notice_until = 10**12
 
+    # Reproduce the canonical gameplay render path rather than drawing world/UI
+    # methods directly onto the display surface. This verifies the player at the
+    # same logical zoom transform used in Game.run().
+    display_surface = game.screen
+    view_size = game.logical_view_size()
+    world_surface = pygame.Surface(view_size).convert()
+    game.screen = world_surface
+    game._render_camera_override = None
     game.draw_world()
     game.draw_player(local, True)
+    game.screen = display_surface
+    if game.camera_zoom < 0.999:
+        pygame.transform.smoothscale(world_surface, display_surface.get_size(), display_surface)
+    else:
+        pygame.transform.scale(world_surface, display_surface.get_size(), display_surface)
     game.draw_player_nameplates()
     game.draw_job_location_labels()
     game.draw_hud()
-    game.draw_local_minimap()
     zoom = game.tiny_font.render(f"ZOOM {game.camera_zoom:.2f}x", True, game_client.MUTED_TEXT)
     game.screen.blit(zoom, (game.screen.get_width() - zoom.get_width() - 18, 48))
     rotation = game.tiny_font.render(

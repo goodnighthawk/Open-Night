@@ -204,6 +204,7 @@ def apply_world_refinement(world):
             if roof_rows is not None:
                 roof_rows[y][x] = tile_id
         building["layout_refinement"] = "road_bounded_lot_center_v1"
+        building["center_shift_cells"] = [dx, dy]
 
     for item in world.objects:
         building_id = str(item.get("building_id", ""))
@@ -258,8 +259,28 @@ def _install_outline_refinement() -> None:
         return maximum < 165 and luminance < 135
 
     GridRenderer._is_dark_building_outline = staticmethod(is_outline)
+    original_tile_surface = GridRenderer._tile_surface
+    themes = ("dark_green", "blue", "green", "red", "yellow")
+
+    @lru_cache(maxsize=256)
+    def tile_surface_without_black_frame(self, tile_id: str):
+        image = original_tile_surface(self, tile_id)
+        if not tile_id.startswith("bld_"):
+            return image
+        theme = next((name for name in themes if tile_id.startswith(f"bld_{name}_")), None)
+        if theme is None or tile_id == f"bld_{theme}_fill":
+            return image
+        # Edge pieces contain transparent perimeter pixels. In the old renderer
+        # those holes exposed the near-black framebuffer as a heavy box outline.
+        # Composite the edge art over its matching opaque roof/facade fill tile so
+        # the silhouette remains authored while no black framebuffer leaks through.
+        underlay = original_tile_surface(self, f"bld_{theme}_fill").copy()
+        underlay.blit(image, (0, 0))
+        return underlay
+
+    GridRenderer._tile_surface = tile_surface_without_black_frame
     try:
-        GridRenderer._tile_surface.cache_clear()
+        original_tile_surface.cache_clear()
         GridRenderer._tile_surface_scaled.cache_clear()
     except AttributeError:
         pass
