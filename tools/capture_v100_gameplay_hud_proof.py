@@ -66,6 +66,11 @@ def main() -> None:
     # same logical zoom transform used in Game.run().
     display_surface = game.screen
     view_size = game.logical_view_size()
+    game.camera_controller.update(
+        (x, y), (view_size[0] // 2, view_size[1] // 2), view_size,
+        (game.grid_world.world_w, game.grid_world.world_h), 1.0 / 60.0,
+        force_center=True,
+    )
     world_surface = pygame.Surface(view_size).convert()
     game.screen = world_surface
     game._render_camera_override = None
