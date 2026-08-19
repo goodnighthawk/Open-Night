@@ -64,6 +64,7 @@ ROAD_WEAR_TARGET = 36
 CURB_DETAIL_TARGET = 24
 STREET_EDGE_AWNING_TARGET = 18
 STREET_LAMP_MIN_SEGMENT = 5
+MANHOLE_ANCHORS = ((48, 9), (57, 21), (12, 26), (3, 39))
 ROAD_WEAR_SPECS = (
     ("overlay_road_puddle", 116, 202),
     ("overlay_oil_splash", 130, 108),
@@ -982,15 +983,14 @@ def generate_layers() -> tuple[int, int]:
         raise RuntimeError("roof surface effect audit is not deterministic across repeated generation")
     roof_objects.extend(surface_effects)
 
-    roads = _road_cells(ground)
-    if roads:
-        for index in range(4):
-            x, y = roads[(index + 1) * len(roads) // 5]
-            ground_objects.append({
-                "asset": "overlay_man_hole", "gx": x, "gy": y,
-                "width_px": 128, "height_px": 128, "rotation": 0,
-                "future_transition": "crouch_on_manhole_to_underground",
-            })
+    if any(ground[y][x] != "road_fill" for x, y in MANHOLE_ANCHORS):
+        raise RuntimeError("stable manhole transition anchor escaped authoritative road geometry")
+    for x, y in MANHOLE_ANCHORS:
+        ground_objects.append({
+            "asset": "overlay_man_hole", "gx": x, "gy": y,
+            "width_px": 128, "height_px": 128, "rotation": 0,
+            "future_transition": "crouch_on_manhole_to_underground",
+        })
 
     GROUND_GENERATED.write_text(json.dumps({
         "format": "open-night-ground-generated-v9",

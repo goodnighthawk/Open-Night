@@ -106,8 +106,8 @@ def mean_rgb_disk(surface: pygame.Surface, cx: int, cy: int, radius: int) -> tup
 
 def save_lighting_proof(renderer: GridRenderer, world, spawn: tuple[float, float]) -> dict:
     lamps = [obj for obj in world.objects if obj.get("composition_pass") == "street_lighting_v1"]
-    if len(lamps) != 47:
-        raise SystemExit(f"runtime lighting proof expected 47 lamps, got {len(lamps)}")
+    if len(lamps) != 45:
+        raise SystemExit(f"runtime lighting proof expected 45 lamps, got {len(lamps)}")
     sx, sy = spawn
     lamp = min(
         lamps,
@@ -193,15 +193,20 @@ def save_overview(renderer: GridRenderer, layer: str, path: Path) -> tuple[int, 
 
 
 def save_road_morphology_proof(renderer: GridRenderer, world) -> None:
-    """Capture the actual offset T-pair and shifted south edge exit."""
-    virtual_w, virtual_h = 3072, 2048
-    target_w, target_h = 1280, 720
-    center_x, center_y = world.cell_center(47, 43)
-    virtual = pygame.Surface((virtual_w, virtual_h)).convert()
-    renderer.draw_view(
-        virtual, camera_for(world, center_x, center_y, virtual_w, virtual_h), "ground"
-    )
-    frame = pygame.transform.smoothscale(virtual, (target_w, target_h))
+    """Capture both authoritative T caps of the central pedestrian passage."""
+    panel_virtual_w, panel_virtual_h = 2048, 2304
+    frame = pygame.Surface((1280, 720)).convert()
+    for panel_index, center_gy in enumerate((26, 37)):
+        center_x, center_y = world.cell_center(29, center_gy)
+        virtual = pygame.Surface((panel_virtual_w, panel_virtual_h)).convert()
+        renderer.draw_view(
+            virtual,
+            camera_for(world, center_x, center_y, panel_virtual_w, panel_virtual_h),
+            "ground",
+        )
+        panel = pygame.transform.smoothscale(virtual, (640, 720))
+        frame.blit(panel, (panel_index * 640, 0))
+    pygame.draw.line(frame, (108, 111, 104), (639, 0), (639, 719), 2)
     ROAD_MORPHOLOGY_PROOF_OUT.parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(frame, str(ROAD_MORPHOLOGY_PROOF_OUT))
 
@@ -236,9 +241,9 @@ def main() -> None:
         road_junctions = junction_counts(ground.layers["ground"])
         if (
             road_meta.get("composition_pass") != "road_morphology_v1"
-            or road_meta.get("shape") != "offset_south_spur_t_pair"
-            or road_cells != 1044
-            or road_junctions != (2, 11)
+            or road_meta.get("shape") != "offset_south_spur_plus_central_superblock"
+            or road_cells != 1008
+            or road_junctions != (4, 9)
             or len(road_components(ground.layers["ground"])) != 1
         ):
             raise SystemExit(
@@ -378,7 +383,7 @@ def main() -> None:
         ROAD_MORPHOLOGY_AUDIT_OUT.write_text(json.dumps({
             "authority": "GridWorld collision and render cells",
             "composition_pass": "road_morphology_v1",
-            "shape": "offset_south_spur_t_pair",
+            "shape": "offset_south_spur_plus_central_superblock",
             "road_cell_count": road_cells,
             "road_component_count": len(road_components(ground.layers["ground"])),
             "t_junction_count": road_junctions[0],
@@ -386,6 +391,8 @@ def main() -> None:
             "old_centerline_x": 44,
             "offset_centerline_x": 49,
             "offset_centerline_cells": 5,
+            "central_closed_centerline_x": 29,
+            "central_pedestrian_bounds": [27, 26, 31, 37],
             "south_edge_exit_shifted": True,
             "marking_count": len(markings),
             "zebra_stripe_count": sum(str(obj["street_marking"]).startswith("zebra_") for obj in markings),
@@ -415,7 +422,7 @@ def main() -> None:
             f"roof_palette={len(roof_palette)}details/{len(palette_assets)}families "
             f"roof_surface={len(roof_surface)}effects/{len(surface_themes)}themes "
             f"morphology={len(notched_buildings)}notched/{removed_building_cells}open-cells "
-            f"road_morphology={road_junctions[0]}T+{road_junctions[1]}four-way/{road_cells}road-cells "
+            f"road_morphology={road_junctions[0]}T+{road_junctions[1]}four-way/{road_cells}road-cells/central-superblock "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:

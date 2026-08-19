@@ -36,7 +36,7 @@ def road_bands(rows: list[list[str]]) -> tuple[list[tuple[int, int]], list[tuple
 
 
 def apply_road_morphology(rows: list[list[str]]) -> tuple[list[list[str]], dict]:
-    """Offset one peripheral road spur to make a staggered T-junction pair.
+    """Apply one offset spur and one central pedestrian superblock.
 
     The selected corridor is the second vertical band from the east, south of
     the southern horizontal road.  Its old mouth is capped and a parallel spur
@@ -81,21 +81,40 @@ def apply_road_morphology(rows: list[list[str]]) -> tuple[list[list[str]], dict]
             result[y][x] = "road_fill"
         result[y][new_right] = "curb_left"
 
+    # Close the central vertical through-road between the middle and southern
+    # arterials.  Straight curb caps and a five-cell pavement passage create a
+    # true superblock without touching either neighboring building footprint.
+    central_vx0, central_vx1 = vertical[1]
+    central_left, central_right = central_vx0 - 1, central_vx1 + 1
+    middle_y1 = horizontal[1][1]
+    south_y0 = horizontal[2][0]
+    central_north_cap, central_south_cap = middle_y1 + 1, south_y0 - 1
+    for x in range(central_left, central_right + 1):
+        result[central_north_cap][x] = "curb_top"
+        result[central_south_cap][x] = "curb_bottom"
+    for y in range(central_north_cap + 1, central_south_cap):
+        for x in range(central_left, central_right + 1):
+            result[y][x] = "pavement_small"
+
     metadata = {
-        "version": 1,
+        "version": 2,
         "composition_pass": ROAD_PASS,
-        "shape": "offset_south_spur_t_pair",
+        "shape": "offset_south_spur_plus_central_superblock",
         "arterial_band": [south_y0, south_y1],
         "closed_vertical_band": [vx0, vx1],
         "offset_vertical_band": [new_vx0, new_vx1],
         "offset_centerline_cells": new_vx0 + 1 - ((vx0 + vx1) // 2),
         "south_spur_y_range": [cap_y, len(result) - 1],
-        "road_cells_removed": 21,
+        "central_closed_vertical_band": [central_vx0, central_vx1],
+        "central_pedestrian_bounds": [
+            central_left, central_north_cap, central_right, central_south_cap,
+        ],
+        "road_cells_removed": 57,
         "road_cells_added": 21,
-        "road_cell_delta": 0,
-        "changed_cell_count": 70,
-        "t_junction_count": 2,
-        "four_way_junction_count": 11,
+        "road_cell_delta": -36,
+        "changed_cell_count": 130,
+        "t_junction_count": 4,
+        "four_way_junction_count": 9,
         "inner_curb_tiles_required": False,
     }
     return result, metadata
