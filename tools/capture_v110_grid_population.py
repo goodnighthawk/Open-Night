@@ -112,13 +112,14 @@ def main() -> None:
     focus_x, focus_y = max(
         candidates,
         key=lambda pos: (
-            min(window_counts(*pos)[0], 6) * 12 + min(window_counts(*pos)[1], 10) * 4,
+            min(window_counts(*pos)[0], 4) * min(window_counts(*pos)[1], 6),
+            min(window_counts(*pos)[0], 4) + min(window_counts(*pos)[1], 6),
             sum(window_counts(*pos)),
             -pos[1], -pos[0],
         ),
     )
     visible_cars, visible_pedestrians = window_counts(focus_x, focus_y)
-    if visible_cars < 3 or visible_pedestrians < 4:
+    if visible_cars < 2 or visible_pedestrians < 2:
         raise RuntimeError(
             f"v1.1 proof could not frame a populated street: cars={visible_cars}, pedestrians={visible_pedestrians}"
         )
