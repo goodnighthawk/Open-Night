@@ -16,12 +16,17 @@ GRID_ROOF_PATH = GRID_MAP_PATH.with_name("roof_grid.generated.json")
 GRID_CATALOG_PATH = ROOT / "assets" / "grid_v100" / "tile_catalog.json"
 GRID_MAP_ID = "map_001_gwb_corridor"
 THEMES = ("blue", "dark_green", "green", "red", "yellow")
-ROOF_PROP_SPECS = (
-    ("rooflayer_aircon_large", 164, 164),
-    ("rooflayer_water_red", 154, 154),
-    ("rooflayer_green_roof", 190, 190),
-    ("rooflayer_white_box", 146, 146),
-)
+ROOF_PROP_DRAW_SIZES = {
+    "rooflayer_aircon": (190, 101), "rooflayer_aircon_large": (160, 165),
+    "rooflayer_blue_roof": (190, 135), "rooflayer_green_roof": (180, 181),
+    "rooflayer_grey_roof": (180, 181), "rooflayer_orange_roof": (188, 150),
+    "rooflayer_water_brown": (154, 154), "rooflayer_water_green": (154, 154),
+    "rooflayer_water_red": (154, 154), "rooflayer_open_pipe_top": (100, 115),
+    "rooflayer_pipe": (100, 100), "rooflayer_pipe_work_02": (52, 198),
+    "rooflayer_pipe_work_04": (190, 145), "rooflayer_white_box": (158, 150),
+    "rooflayer_white_box_02": (130, 170), "rooflayer_white_box_03": (97, 124),
+}
+ROOF_ARCHETYPE_NAMES = ("mechanical", "waterworks", "mixed_service", "low_profile")
 
 
 def _decode_ground(data: dict) -> list[list[str]]:
@@ -154,6 +159,38 @@ def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> l
     return out
 
 
+def _roof_palette(building: dict) -> tuple[str, list[str]]:
+    building_id = str(building["building_id"])
+    theme = str(building["theme"])
+    digest = hashlib.sha256(
+        f"open-night-roof-palette-v1|{building_id}|{theme}".encode("ascii")
+    ).digest()
+    theme_cap = {
+        "blue": "rooflayer_blue_roof", "dark_green": "rooflayer_green_roof",
+        "green": "rooflayer_green_roof", "red": "rooflayer_orange_roof",
+        "yellow": "rooflayer_orange_roof",
+    }[theme]
+    theme_tank = {
+        "blue": "rooflayer_water_brown", "dark_green": "rooflayer_water_green",
+        "green": "rooflayer_water_green", "red": "rooflayer_water_red",
+        "yellow": "rooflayer_water_brown",
+    }[theme]
+    archetypes = (
+        ["rooflayer_aircon_large", "rooflayer_aircon", "rooflayer_pipe_work_04",
+         "rooflayer_white_box_02", "rooflayer_white_box_03", "rooflayer_pipe"],
+        [theme_tank, "rooflayer_open_pipe_top", "rooflayer_pipe", "rooflayer_pipe_work_02",
+         "rooflayer_white_box_02", "rooflayer_aircon"],
+        [theme_cap, "rooflayer_aircon", theme_tank, "rooflayer_white_box",
+         "rooflayer_pipe_work_04", "rooflayer_open_pipe_top"],
+        [theme_cap, "rooflayer_grey_roof", "rooflayer_white_box", "rooflayer_white_box_02",
+         "rooflayer_white_box_03", "rooflayer_pipe"],
+    )
+    archetype_index = int.from_bytes(digest[:2], "big") % len(archetypes)
+    palette = list(archetypes[archetype_index])
+    start = digest[2] % len(palette)
+    return ROOF_ARCHETYPE_NAMES[archetype_index], palette[start:] + palette[:start]
+
+
 def _generated_ground_objects(rows: list[list[str]], buildings: list[dict]) -> list[dict]:
     objects = []
     for building in buildings:
@@ -202,13 +239,19 @@ def _fallback_roof_data(ground_data: dict, rows: list[list[str]], buildings: lis
         })
         candidates = _detail_cells((x0, y0, x1, y1), (cx, cy))
         detail_count = min(len(candidates), max(2, min(6, 2 + area // 12)))
+        roof_archetype, roof_palette = _roof_palette(building)
         for j, (gx, gy) in enumerate(candidates[:detail_count]):
-            asset, ww, hh = ROOF_PROP_SPECS[(index + j - 1) % len(ROOF_PROP_SPECS)]
+            asset = roof_palette[j]
+            ww, hh = ROOF_PROP_DRAW_SIZES[asset]
+            rotation = ((index + j) % 4) * 90
+            final_w, final_h = (hh, ww) if rotation in {90, 270} else (ww, hh)
             roof_objects.append({
                 "asset": asset, "gx": gx, "gy": gy,
+                "offset_x_px": (256 - final_w) // 2, "offset_y_px": (256 - final_h) // 2,
                 "width_px": ww, "height_px": hh, "building_id": building_id,
-                "rotation": ((index + j) % 4) * 90,
-                "deterministic_roof_detail": True,
+                "rotation": rotation, "deterministic_roof_detail": True,
+                "composition_pass": "roof_palette_v1", "roof_archetype": roof_archetype,
+                "roof_theme": str(building["theme"]), "decorative_only": True,
             })
     return {
         "format": "open-night-grid-v1",

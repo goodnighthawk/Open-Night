@@ -240,6 +240,25 @@ def main() -> None:
         rx, ry = roof.cell_center(rgx, rgy)
         roof_luminance = save_detail(roof_renderer, roof, "roof", rx, ry, ROOF_DETAIL_OUT)
         roof_tile_px, roof_ox, roof_oy = save_overview(roof_renderer, "roof", ROOF_FULL_OUT)
+        roof_palette = [obj for obj in roof.objects if obj.get("composition_pass") == "roof_palette_v1"]
+        roof_surface = [obj for obj in roof.objects if obj.get("composition_pass") == "roof_surface_v1"]
+        palette_assets = sorted({str(obj["asset"]) for obj in roof_palette})
+        palette_archetypes = sorted({str(obj["roof_archetype"]) for obj in roof_palette})
+        palette_buildings = {str(obj["building_id"]) for obj in roof_palette}
+        surface_themes = sorted({str(obj["roof_theme"]) for obj in roof_surface})
+        if (
+            len(roof_palette) != 124 or len(palette_assets) != 15
+            or len(palette_archetypes) != 4 or len(palette_buildings) != 25
+        ):
+            raise SystemExit(
+                "runtime roof palette proof failed: "
+                f"details={len(roof_palette)} assets={len(palette_assets)} "
+                f"archetypes={len(palette_archetypes)} buildings={len(palette_buildings)}"
+            )
+        if len(roof_surface) != 12 or len(surface_themes) != 5:
+            raise SystemExit(
+                f"runtime roof surface proof failed: effects={len(roof_surface)} themes={surface_themes}"
+            )
 
         road_gx, road_gy = first_cell(ground, "ground", lambda _tid, tile: tile.collision == "road")
         bx, by = first_cell(ground, "ground", lambda tid, tile: tid.startswith("bld_") and tile.collision == "blocked")
@@ -282,6 +301,22 @@ def main() -> None:
             "roof_edge_mass_count": len(roof_masses),
             "roof_edge_asset_families": sorted({str(obj["asset"]) for obj in roof_masses}),
             "roof_buildings_covered": len({str(obj["building_id"]) for obj in roof_masses}),
+            "roof_palette": {
+                "composition_pass": "roof_palette_v1",
+                "detail_count": len(roof_palette),
+                "asset_family_count": len(palette_assets),
+                "asset_families": palette_assets,
+                "archetype_count": len(palette_archetypes),
+                "archetypes": palette_archetypes,
+                "buildings_covered": len(palette_buildings),
+            },
+            "roof_surface": {
+                "composition_pass": "roof_surface_v1",
+                "effect_count": len(roof_surface),
+                "theme_count": len(surface_themes),
+                "themes": surface_themes,
+                "native_asset_size_px": [308, 442],
+            },
             "gameplay_geometry_sha256_before": geometry_hash_before,
             "gameplay_geometry_sha256_after": geometry_hash_after,
             "gameplay_geometry_unchanged": True,
@@ -299,6 +334,8 @@ def main() -> None:
             f"geometry_sha256={geometry_hash_after[:12]} "
             f"street_lamps={lighting_audit['lamp_count']} aligned_delta_px=0 "
             f"silhouette={len(facade_breaks)}facade+{len(roof_masses)}roof-edge "
+            f"roof_palette={len(roof_palette)}details/{len(palette_assets)}families "
+            f"roof_surface={len(roof_surface)}effects/{len(surface_themes)}themes "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:

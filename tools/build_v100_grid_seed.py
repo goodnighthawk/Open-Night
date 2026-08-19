@@ -175,6 +175,69 @@ def main() -> None:
     if any(max(int(obj["width_px"]), int(obj["height_px"])) > 200 for obj in roof_masses):
         raise SystemExit("Roof edge mass exceeds one-cell containment budget")
 
+    roof_palette = [obj for obj in world.objects if obj.get("composition_pass") == "roof_palette_v1"]
+    if len(roof_palette) != 124:
+        raise SystemExit(f"roof palette v1 expected 124 inboard details, got {len(roof_palette)}")
+    if len({str(obj["asset"]) for obj in roof_palette}) != 15:
+        raise SystemExit("roof palette v1 must exercise exactly 15 true equipment families")
+    if {str(obj.get("roof_archetype")) for obj in roof_palette} != {
+        "mechanical", "waterworks", "mixed_service", "low_profile"
+    }:
+        raise SystemExit("roof palette v1 did not exercise all four coherent archetypes")
+    palette_by_building: dict[str, list[dict]] = {}
+    for obj in roof_palette:
+        building_id = str(obj.get("building_id"))
+        palette_by_building.setdefault(building_id, []).append(obj)
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        x0, y0, x1, y1 = rect_by_id[building_id]
+        if not (x0 < gx < x1 and y0 < gy < y1):
+            raise SystemExit(f"roof palette detail is not strictly inboard: {building_id} at {(gx, gy)}")
+        if not obj.get("decorative_only") or any(
+            key in obj for key in ("collision", "future_transition", "emits_light")
+        ):
+            raise SystemExit(f"roof palette detail carries gameplay authority: {building_id}")
+        if max(int(obj["width_px"]), int(obj["height_px"])) > 200:
+            raise SystemExit(f"roof palette detail exceeds one-cell budget: {building_id}")
+    if set(palette_by_building) != set(rect_by_id):
+        raise SystemExit("roof palette v1 does not cover all 25 buildings")
+    if any(len({str(obj["asset"]) for obj in items}) != len(items) for items in palette_by_building.values()):
+        raise SystemExit("roof palette v1 repeats an equipment family within one building")
+
+    surface_effects = [obj for obj in world.objects if obj.get("composition_pass") == "roof_surface_v1"]
+    expected_surface_quotas = {"blue": 1, "dark_green": 4, "green": 2, "red": 2, "yellow": 3}
+    actual_surface_quotas = {
+        theme: sum(str(obj.get("roof_theme")) == theme for obj in surface_effects)
+        for theme in expected_surface_quotas
+    }
+    if len(surface_effects) != 12 or actual_surface_quotas != expected_surface_quotas:
+        raise SystemExit(
+            f"roof surface v1 quota mismatch: count={len(surface_effects)} themes={actual_surface_quotas}"
+        )
+    if len({str(obj.get("building_id")) for obj in surface_effects}) != len(surface_effects):
+        raise SystemExit("roof surface v1 duplicated a building")
+    for obj in surface_effects:
+        building_id = str(obj["building_id"])
+        theme = str(obj["roof_theme"])
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        x0, y0, x1, y1 = rect_by_id[building_id]
+        if world.tile_id("ground", gx, gy) != f"bld_{theme}_fill":
+            raise SystemExit(f"roof surface v1 theme mismatch: {building_id} at {(gx, gy)}")
+        rotation = int(obj["rotation"])
+        final_w, final_h = (442, 308) if rotation == 90 else (308, 442)
+        left = gx * world.cell_px + int(obj["offset_x_px"])
+        top = gy * world.cell_px + int(obj["offset_y_px"])
+        if not (
+            x0 * world.cell_px <= left
+            and top >= y0 * world.cell_px
+            and left + final_w <= (x1 + 1) * world.cell_px
+            and top + final_h <= (y1 + 1) * world.cell_px
+        ):
+            raise SystemExit(f"roof surface v1 escaped its collision footprint: {building_id}")
+        if not obj.get("decorative_only") or any(
+            key in obj for key in ("collision", "future_transition", "emits_light")
+        ):
+            raise SystemExit(f"roof surface v1 carries gameplay authority: {building_id}")
+
     spawn = world.choose_spawn("ground", 18.0)
     print(
         "V100_GRID_MAP_OK",
@@ -185,6 +248,8 @@ def main() -> None:
         f"density_v2={len(road_wear)}road+{len(curb_details)}curb+{len(awnings)}awnings",
         f"street_lighting_v1={len(lamps)}same-record-lamps",
         f"silhouette_v1={len(facade_breaks)}facade+{len(roof_masses)}roof-edge",
+        f"roof_palette_v1={len(roof_palette)}details+15families+4archetypes",
+        f"roof_surface_v1={len(surface_effects)}native-effects",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

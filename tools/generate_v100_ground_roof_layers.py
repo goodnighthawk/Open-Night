@@ -33,12 +33,18 @@ MAGENTA = (255, 0, 255)
 THEMES = ("blue", "dark_green", "green", "red", "yellow")
 MIN_BUILDING_SIDE = 4
 MIN_BUILDING_AREA = 24
-ROOF_PROP_SPECS = (
-    ("rooflayer_aircon_large", 164, 164),
-    ("rooflayer_water_red", 154, 154),
-    ("rooflayer_green_roof", 190, 190),
-    ("rooflayer_white_box", 146, 146),
-)
+ROOF_PROP_DRAW_SIZES = {
+    "rooflayer_aircon": (190, 101), "rooflayer_aircon_large": (160, 165),
+    "rooflayer_blue_roof": (190, 135), "rooflayer_green_roof": (180, 181),
+    "rooflayer_grey_roof": (180, 181), "rooflayer_orange_roof": (188, 150),
+    "rooflayer_water_brown": (154, 154), "rooflayer_water_green": (154, 154),
+    "rooflayer_water_red": (154, 154), "rooflayer_open_pipe_top": (100, 115),
+    "rooflayer_pipe": (100, 100), "rooflayer_pipe_work_02": (52, 198),
+    "rooflayer_pipe_work_04": (190, 145), "rooflayer_white_box": (158, 150),
+    "rooflayer_white_box_02": (130, 170), "rooflayer_white_box_03": (97, 124),
+}
+ROOF_ARCHETYPE_NAMES = ("mechanical", "waterworks", "mixed_service", "low_profile")
+ROOF_SURFACE_EFFECT_QUOTAS = {"blue": 1, "dark_green": 4, "green": 2, "red": 2, "yellow": 3}
 ZEBRA_STRIPE_WIDTH = 44
 ZEBRA_STRIPE_LENGTH = 176
 ZEBRA_STRIPE_GAP = 38
@@ -338,6 +344,91 @@ def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> l
         if x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out:
             out.append((x, y))
     return out
+
+
+def _roof_palette(building: dict) -> tuple[str, list[str]]:
+    """Return one coherent, deterministic six-piece equipment family."""
+    building_id = str(building["building_id"])
+    theme = str(building["theme"])
+    digest = hashlib.sha256(
+        f"open-night-roof-palette-v1|{building_id}|{theme}".encode("ascii")
+    ).digest()
+    theme_cap = {
+        "blue": "rooflayer_blue_roof", "dark_green": "rooflayer_green_roof",
+        "green": "rooflayer_green_roof", "red": "rooflayer_orange_roof",
+        "yellow": "rooflayer_orange_roof",
+    }[theme]
+    theme_tank = {
+        "blue": "rooflayer_water_brown", "dark_green": "rooflayer_water_green",
+        "green": "rooflayer_water_green", "red": "rooflayer_water_red",
+        "yellow": "rooflayer_water_brown",
+    }[theme]
+    archetypes = (
+        ["rooflayer_aircon_large", "rooflayer_aircon", "rooflayer_pipe_work_04",
+         "rooflayer_white_box_02", "rooflayer_white_box_03", "rooflayer_pipe"],
+        [theme_tank, "rooflayer_open_pipe_top", "rooflayer_pipe", "rooflayer_pipe_work_02",
+         "rooflayer_white_box_02", "rooflayer_aircon"],
+        [theme_cap, "rooflayer_aircon", theme_tank, "rooflayer_white_box",
+         "rooflayer_pipe_work_04", "rooflayer_open_pipe_top"],
+        [theme_cap, "rooflayer_grey_roof", "rooflayer_white_box", "rooflayer_white_box_02",
+         "rooflayer_white_box_03", "rooflayer_pipe"],
+    )
+    archetype_index = int.from_bytes(digest[:2], "big") % len(archetypes)
+    palette = list(archetypes[archetype_index])
+    start = digest[2] % len(palette)
+    palette = palette[start:] + palette[:start]
+    return ROOF_ARCHETYPE_NAMES[archetype_index], palette
+
+
+def _roof_surface_effect_objects(
+    rows: list[list[str]], buildings: list[dict], roof_objects: list[dict]
+) -> list[dict]:
+    """Add sparse native-aspect theme seams without wallpaper repetition."""
+    reserved = {
+        (str(obj.get("building_id")), int(obj["gx"]), int(obj["gy"]))
+        for obj in roof_objects if obj.get("building_id")
+    }
+    chosen: list[dict] = []
+    for theme in THEMES:
+        themed = [building for building in buildings if str(building["theme"]) == theme]
+        themed.sort(key=lambda building: hashlib.sha256(
+            f"open-night-roof-surface-v1|building|{building['building_id']}|{theme}".encode("ascii")
+        ).digest())
+        quota = ROOF_SURFACE_EFFECT_QUOTAS[theme]
+        if len(themed) < quota:
+            raise RuntimeError(f"roof surface effect quota exceeds {theme} building count")
+        for building in themed[:quota]:
+            building_id = str(building["building_id"])
+            x0, y0, x1, y1 = map(int, building["rect"])
+            candidates = [
+                (gx, gy) for gy in range(y0 + 1, y1) for gx in range(x0 + 1, x1)
+                if rows[gy][gx] == f"bld_{theme}_fill"
+                and (building_id, gx, gy) not in reserved
+            ]
+            candidates.sort(key=lambda cell: hashlib.sha256(
+                f"open-night-roof-surface-v1|cell|{building_id}|{cell[0]}|{cell[1]}".encode("ascii")
+            ).digest())
+            if not candidates:
+                raise RuntimeError(f"roof surface effect has no unreserved interior cell for {building_id}")
+            gx, gy = candidates[0]
+            digest = hashlib.sha256(
+                f"open-night-roof-surface-v1|rotation|{building_id}".encode("ascii")
+            ).digest()
+            rotation = 90 if digest[0] & 1 else 0
+            final_w, final_h = (442, 308) if rotation == 90 else (308, 442)
+            chosen.append({
+                "asset": f"rooflayer_effect_{theme}", "gx": gx, "gy": gy,
+                "offset_x_px": (256 - final_w) // 2, "offset_y_px": (256 - final_h) // 2,
+                "width_px": 308, "height_px": 442, "rotation": rotation,
+                "building_id": building_id, "roof_theme": theme,
+                "composition_pass": "roof_surface_v1", "surface_kind": "theme_seam_overlay",
+                "decorative_only": True,
+            })
+    if len(chosen) != sum(ROOF_SURFACE_EFFECT_QUOTAS.values()):
+        raise RuntimeError("roof surface effect audit produced the wrong total quota")
+    if len({obj["building_id"] for obj in chosen}) != len(chosen):
+        raise RuntimeError("roof surface effect audit duplicated a building")
+    return chosen
 
 
 def _stable_density_rank(kind: str, gx: int, gy: int) -> bytes:
@@ -790,14 +881,20 @@ def generate_layers() -> tuple[int, int]:
 
         detail_cells = _detail_cells((x0, y0, x1, y1), (cx, cy))
         detail_count = min(len(detail_cells), max(2, min(6, 2 + area // 12)))
+        roof_archetype, roof_palette = _roof_palette(building)
         for j, (gx, gy) in enumerate(detail_cells[:detail_count]):
-            asset, ww, hh = ROOF_PROP_SPECS[(index + j - 1) % len(ROOF_PROP_SPECS)]
+            asset = roof_palette[j]
+            ww, hh = ROOF_PROP_DRAW_SIZES[asset]
+            rotation = ((index + j) % 4) * 90
+            final_w, final_h = (hh, ww) if rotation in {90, 270} else (ww, hh)
             roof_objects.append({
                 "asset": asset, "gx": gx, "gy": gy,
+                "offset_x_px": (256 - final_w) // 2, "offset_y_px": (256 - final_h) // 2,
                 "width_px": ww, "height_px": hh,
                 "building_id": building_id,
-                "rotation": ((index + j) % 4) * 90,
-                "deterministic_roof_detail": True,
+                "rotation": rotation, "deterministic_roof_detail": True,
+                "composition_pass": "roof_palette_v1", "roof_archetype": roof_archetype,
+                "roof_theme": str(building["theme"]), "decorative_only": True,
             })
 
     silhouette_ground, silhouette_roof = _building_silhouette_objects(
@@ -808,6 +905,11 @@ def generate_layers() -> tuple[int, int]:
         raise RuntimeError("building silhouette audit is not deterministic across repeated generation")
     ground_objects.extend(silhouette_ground)
     roof_objects.extend(silhouette_roof)
+    surface_effects = _roof_surface_effect_objects(ground, buildings, roof_objects)
+    surface_repeat = _roof_surface_effect_objects(ground, buildings, roof_objects)
+    if json.dumps(surface_effects, sort_keys=True) != json.dumps(surface_repeat, sort_keys=True):
+        raise RuntimeError("roof surface effect audit is not deterministic across repeated generation")
+    roof_objects.extend(surface_effects)
 
     roads = _road_cells(ground)
     if roads:
@@ -820,7 +922,7 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v7",
+        "format": "open-night-ground-generated-v8",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
         "street_markings": "zebra_crossings_and_dashed_center_lines",
@@ -846,6 +948,17 @@ def generate_layers() -> tuple[int, int]:
             "facade_break_count": len(silhouette_ground),
             "roof_edge_mass_count": len(silhouette_roof),
             "ground_geometry_sha256": geometry_after_density,
+        },
+        "roof_palette": {
+            "composition_pass": "roof_palette_v1",
+            "archetypes": list(ROOF_ARCHETYPE_NAMES),
+            "registered_asset_family_count": len(ROOF_PROP_DRAW_SIZES),
+        },
+        "roof_surface": {
+            "composition_pass": "roof_surface_v1",
+            "native_asset_size_px": [308, 442],
+            "effect_count": len(surface_effects),
+            "theme_quotas": ROOF_SURFACE_EFFECT_QUOTAS,
         },
         "roof_registration": "exact_ground_footprint",
         "orientation_reference": "assets/source_packs/city_block/example.png",
@@ -874,6 +987,16 @@ def generate_layers() -> tuple[int, int]:
             "geometry_policy": "collision_neutral_overlay",
             "roof_edge_mass_count": len(silhouette_roof),
         },
+        "roof_palette": {
+            "composition_pass": "roof_palette_v1",
+            "archetypes": list(ROOF_ARCHETYPE_NAMES),
+            "detail_count": sum(obj.get("composition_pass") == "roof_palette_v1" for obj in roof_objects),
+        },
+        "roof_surface": {
+            "composition_pass": "roof_surface_v1",
+            "effect_count": len(surface_effects),
+            "theme_quotas": ROOF_SURFACE_EFFECT_QUOTAS,
+        },
         "layers": {"roof": roof_rows},
         "objects": roof_objects,
         "login_spawns": [],
@@ -893,6 +1016,8 @@ def main() -> None:
         f"density_v2={ROAD_WEAR_TARGET}road+{CURB_DETAIL_TARGET}curb+{STREET_EDGE_AWNING_TARGET}awnings",
         "lighting=one-lamp-per-usable-curb-segment,same-record-emitter",
         f"silhouette_v1={buildings - STREET_EDGE_AWNING_TARGET}facade+{buildings}roof-edge",
+        f"roof_palette_v1={len(ROOF_PROP_DRAW_SIZES)}families+{len(ROOF_ARCHETYPE_NAMES)}archetypes",
+        f"roof_surface_v1={sum(ROOF_SURFACE_EFFECT_QUOTAS.values())}native-effects",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
