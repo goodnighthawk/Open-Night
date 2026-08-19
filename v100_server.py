@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""Canonical Open Night v1.0 authoritative server entry.
+"""Canonical Open Night v1.1 authoritative server entry.
 
 The mature server remains the implementation library for multiplayer, persistence,
-chat, vehicles and other gameplay. v1.0 installs the curb-safe GridWorld layout
-and 0.5x world normalization before importing the server so authoritative
-collision and network metadata use the same 128 px logical cell scale.
+chat, vehicles and other gameplay. v1.0 installed the curb-safe GridWorld layout
+and 0.5x world normalization; v1.1 additionally derives traffic and pedestrian
+routes from that same normalized GridWorld before the simulation starts.
 """
 
 import v100_runtime_refinement
@@ -16,6 +16,7 @@ import v100_scale_normalization
 v100_scale_normalization.install()
 
 import server
+import v110_grid_population
 from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
 
@@ -44,6 +45,17 @@ def validate_active_authority(map_config: dict) -> list[str]:
         world.choose_spawn("ground", server.PLAYER_RADIUS)
     except Exception as exc:
         errors.append(f"grid: no valid Ground spawn: {exc}")
+
+    if not errors:
+        try:
+            audit = v110_grid_population.prepare_and_initialize(server, map_config, world)
+        except Exception as exc:
+            errors.append(f"grid population: {exc}")
+        else:
+            if int(server.TRAFFIC_COUNT) > 0 and int(audit.get("traffic_spawned", 0)) < 1:
+                errors.append("grid population: traffic requested but no safe traffic cars spawned")
+            if int(audit.get("pedestrians_spawned", 0)) < 1:
+                errors.append("grid population: no safe pedestrians spawned")
     return errors
 
 

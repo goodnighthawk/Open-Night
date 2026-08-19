@@ -1,0 +1,66 @@
+name: Build v1.1 Grid Population Runtime
+
+on:
+  push:
+    branches: [v1.1-bug-review]
+    paths:
+      - 'server.py'
+      - 'client.py'
+      - 'v100_server.py'
+      - 'v100_client.py'
+      - 'v110_grid_population.py'
+      - 'v100_runtime_refinement.py'
+      - 'v100_safe_layout.py'
+      - 'v100_scale_normalization.py'
+      - 'grid_world.py'
+      - 'grid_runtime.py'
+      - 'grid_renderer.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
+      - 'tools/capture_v110_grid_population.py'
+      - '.github/workflows/v110-grid-population.yml'
+  workflow_dispatch:
+
+jobs:
+  grid-population-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'websockets>=16,<18' 'mysql-connector-python>=9,<10' 'Pillow>=10,<13'
+      - name: Compile v1.1 population runtime
+        run: python -m py_compile v100_server.py v100_client.py v110_grid_population.py server.py client.py grid_world.py grid_runtime.py tools/capture_v110_grid_population.py
+      - name: Render and exercise GridWorld-native traffic + pedestrians
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/capture_v110_grid_population.py
+      - name: Verify v1.1 population proof bundle
+        run: |
+          test -f assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png
+          test -f assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          audit = json.loads(Path('assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json').read_text())
+          assert audit['traffic_spawned'] >= 6, audit
+          assert audit['pedestrians_spawned'] >= 12, audit
+          assert audit['traffic_moved_after_2_5s'] >= 3, audit
+          assert audit['npcs_moved_after_2_5s'] >= 8, audit
+          assert not audit['blocked_traffic_after_2_5s'], audit
+          assert audit['grid_cell_px'] == 128, audit
+          print(json.dumps(audit, indent=2, sort_keys=True))
+          PY
+      - name: Upload v1.1 full-stack population proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v110-grid-population-runtime
+          path: |
+            assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png
+            assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json
+          if-no-files-found: error
+          retention-days: 30
