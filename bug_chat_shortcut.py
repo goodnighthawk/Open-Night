@@ -8,6 +8,8 @@ Enter.  The existing ``/bug`` submit path remains the single authority for
 capturing the screenshot and saving/queueing the report.
 """
 
+import time
+
 import pygame
 
 import client as game_client
@@ -42,7 +44,7 @@ def install() -> None:
             self.chat_select_all = False
             self.sms_open = False
             self.notice = "Describe the bug, then press Enter"
-            self.notice_until = pygame.time.get_ticks() / 1000.0 + 3.0
+            self.notice_until = time.monotonic() + 3.0
             return True
 
         return original(self, event)
