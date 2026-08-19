@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from grid_runtime import GRID_MAP_PATH, load_ground_grid
 from building_morphology import footprint_for, role_for_cell
+from road_morphology import junction_counts, road_components
 
 
 def expected_footprint_tile(theme: str, x: int, y: int, cells: set[tuple[int, int]]) -> str:
@@ -105,6 +106,80 @@ def main() -> None:
     if len(inner_tiles) != len(notched):
         raise SystemExit(f"building morphology expected one inner corner per notch, got {len(inner_tiles)}")
 
+    road_meta = world.data.get("road_morphology") or {}
+    expected_road_meta = {
+        "composition_pass": "road_morphology_v1",
+        "shape": "offset_south_spur_t_pair",
+        "closed_vertical_band": [43, 45],
+        "offset_vertical_band": [48, 50],
+        "offset_centerline_cells": 5,
+        "road_cells_removed": 21,
+        "road_cells_added": 21,
+        "road_cell_delta": 0,
+        "changed_cell_count": 70,
+        "t_junction_count": 2,
+        "four_way_junction_count": 11,
+    }
+    for key, expected_value in expected_road_meta.items():
+        if road_meta.get(key) != expected_value:
+            raise SystemExit(
+                f"road morphology v1 metadata mismatch for {key}: "
+                f"{road_meta.get(key)!r} != {expected_value!r}"
+            )
+    ground_rows = world.layers["ground"]
+    road_cells = sum(tile_id == "road_fill" for row in ground_rows for tile_id in row)
+    if road_cells != 1044:
+        raise SystemExit(f"road morphology v1 must preserve 1044 road cells, got {road_cells}")
+    if len(road_components(ground_rows)) != 1:
+        raise SystemExit("road morphology v1 disconnected the authoritative road network")
+    if junction_counts(ground_rows) != (2, 11):
+        raise SystemExit(f"road morphology v1 junction audit failed: {junction_counts(ground_rows)}")
+    if any(world.tile_id("ground", x, 41) != "curb_top" for x in range(42, 47)):
+        raise SystemExit("road morphology v1 old south mouth is not cleanly capped")
+    if any(world.tile_id("ground", x, y) != "pavement_small"
+           for y in range(42, 48) for x in range(42, 47)):
+        raise SystemExit("road morphology v1 old south spur is not connected pavement")
+    if any(world.tile_id("ground", x, y) != "road_fill"
+           for y in range(41, 48) for x in range(48, 51)):
+        raise SystemExit("road morphology v1 offset south spur is incomplete")
+    if world.tile_id("ground", 47, 41) != "curb_tr_outer" or world.tile_id("ground", 51, 41) != "curb_tl_outer":
+        raise SystemExit("road morphology v1 offset mouth is missing outer curb corners")
+    if any(world.tile_id("ground", 47, y) != "curb_right" or world.tile_id("ground", 51, y) != "curb_left"
+           for y in range(42, 48)):
+        raise SystemExit("road morphology v1 offset spur is missing straight sidewalk curbs")
+    if any(world.tile_id("ground", x, 47) == "road_fill" for x in range(43, 46)):
+        raise SystemExit("road morphology v1 retained the obsolete south edge exit")
+    if not all(world.tile_id("ground", x, 47) == "road_fill" for x in range(48, 51)):
+        raise SystemExit("road morphology v1 offset south edge exit is not playable")
+
+    walkable = {
+        (x, y) for y, row in enumerate(ground_rows) for x, tile_id in enumerate(row)
+        if world.catalog[tile_id].walkable
+    }
+    pending = {next(iter(walkable))}
+    reached: set[tuple[int, int]] = set()
+    while pending:
+        x, y = pending.pop()
+        if (x, y) in reached:
+            continue
+        reached.add((x, y))
+        pending.update(
+            neighbor for neighbor in ((x-1,y),(x+1,y),(x,y-1),(x,y+1))
+            if neighbor in walkable and neighbor not in reached
+        )
+    if reached != walkable:
+        raise SystemExit(f"road morphology v1 disconnected {len(walkable - reached)} walkable cells")
+
+    markings = [obj for obj in world.objects if obj.get("street_marking")]
+    zebras = [obj for obj in markings if str(obj["street_marking"]).startswith("zebra_")]
+    dashes = [obj for obj in markings if str(obj["street_marking"]).startswith("dashed_")]
+    if (len(markings), len(zebras), len(dashes)) != (521, 400, 121):
+        raise SystemExit(
+            f"road morphology v1 marking counts mismatch: {len(markings)}/{len(zebras)}/{len(dashes)}"
+        )
+    if any(world.tile_id("ground", int(obj["gx"]), int(obj["gy"])) != "road_fill" for obj in markings):
+        raise SystemExit("road morphology v1 left a phantom marking outside road cells")
+
     premade_overlays = [
         obj for obj in world.objects
         if str(obj.get("asset", "")).startswith("building_")
@@ -146,8 +221,8 @@ def main() -> None:
         raise SystemExit(f"Ground density v2 did not use all four awning variants: {sorted(awning_assets)}")
 
     lamps = [obj for obj in world.objects if obj.get("composition_pass") == "street_lighting_v1"]
-    if len(lamps) != 48:
-        raise SystemExit(f"street lighting v1 expected 48 eligible curb segments, got {len(lamps)}")
+    if len(lamps) != 47:
+        raise SystemExit(f"street lighting v1 expected 47 eligible curb segments, got {len(lamps)}")
     if len({str(obj.get("lighting_id")) for obj in lamps}) != len(lamps):
         raise SystemExit("street lighting v1 fixture/light authority IDs are not unique")
     expected = {
@@ -290,6 +365,7 @@ def main() -> None:
         f"roof_palette_v1={len(roof_palette)}details+15families+4archetypes",
         f"roof_surface_v1={len(surface_effects)}native-effects",
         f"morphology_v1={len(notched)}notched/40open-cells",
+        f"road_morphology_v1={road_cells}road/2T+11four-way/5cell-offset",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

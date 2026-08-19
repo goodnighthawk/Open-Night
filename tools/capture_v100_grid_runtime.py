@@ -20,6 +20,7 @@ import pygame
 
 from grid_renderer import GridRenderer
 from grid_runtime import load_ground_grid, load_roof_grid
+from road_morphology import junction_counts, road_components
 
 GROUND_DETAIL_OUT = ROOT / "assets/grid_v100/GROUND_RUNTIME_PROOF_2560x1440.png"
 ROOF_DETAIL_OUT = ROOT / "assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png"
@@ -29,6 +30,8 @@ NIGHT_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json"
 LIGHTING_PROOF_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png"
 LIGHTING_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json"
 SILHOUETTE_AUDIT_OUT = ROOT / "assets/grid_v100/BUILDING_SILHOUETTE_RUNTIME_AUDIT.json"
+ROAD_MORPHOLOGY_PROOF_OUT = ROOT / "assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_PROOF_1280x720.png"
+ROAD_MORPHOLOGY_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_AUDIT.json"
 W, H = 2560, 1440
 REVIEW_ZOOM = 0.5  # 50% review zoom: show twice the gameplay-world width/height.
 GROUND_NIGHT_MEAN_RANGE = (0.08, 0.25)
@@ -103,8 +106,8 @@ def mean_rgb_disk(surface: pygame.Surface, cx: int, cy: int, radius: int) -> tup
 
 def save_lighting_proof(renderer: GridRenderer, world, spawn: tuple[float, float]) -> dict:
     lamps = [obj for obj in world.objects if obj.get("composition_pass") == "street_lighting_v1"]
-    if len(lamps) != 48:
-        raise SystemExit(f"runtime lighting proof expected 48 lamps, got {len(lamps)}")
+    if len(lamps) != 47:
+        raise SystemExit(f"runtime lighting proof expected 47 lamps, got {len(lamps)}")
     sx, sy = spawn
     lamp = min(
         lamps,
@@ -189,6 +192,20 @@ def save_overview(renderer: GridRenderer, layer: str, path: Path) -> tuple[int, 
     return geometry
 
 
+def save_road_morphology_proof(renderer: GridRenderer, world) -> None:
+    """Capture the actual offset T-pair and shifted south edge exit."""
+    virtual_w, virtual_h = 3072, 2048
+    target_w, target_h = 1280, 720
+    center_x, center_y = world.cell_center(47, 43)
+    virtual = pygame.Surface((virtual_w, virtual_h)).convert()
+    renderer.draw_view(
+        virtual, camera_for(world, center_x, center_y, virtual_w, virtual_h), "ground"
+    )
+    frame = pygame.transform.smoothscale(virtual, (target_w, target_h))
+    ROAD_MORPHOLOGY_PROOF_OUT.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(frame, str(ROAD_MORPHOLOGY_PROOF_OUT))
+
+
 def main() -> None:
     from tools.generate_v100_ground_roof_layers import main as generate_layers
     from tools.build_v100_grid_seed import main as validate_map
@@ -214,9 +231,24 @@ def main() -> None:
                 f"runtime morphology proof expected 10 notches/40 open cells, got "
                 f"{len(notched_buildings)}/{removed_building_cells}"
             )
+        road_meta = ground.data.get("road_morphology") or {}
+        road_cells = sum(tile_id == "road_fill" for row in ground.layers["ground"] for tile_id in row)
+        road_junctions = junction_counts(ground.layers["ground"])
+        if (
+            road_meta.get("composition_pass") != "road_morphology_v1"
+            or road_meta.get("shape") != "offset_south_spur_t_pair"
+            or road_cells != 1044
+            or road_junctions != (2, 11)
+            or len(road_components(ground.layers["ground"])) != 1
+        ):
+            raise SystemExit(
+                f"runtime road morphology proof failed: meta={road_meta} "
+                f"road_cells={road_cells} junctions={road_junctions}"
+            )
         geometry_hash_before = gameplay_geometry_hash(ground)
         sx, sy = ground.choose_spawn("ground", 18.0)
         ground_luminance = save_detail(ground_renderer, ground, "ground", sx, sy, GROUND_DETAIL_OUT)
+        save_road_morphology_proof(ground_renderer, ground)
         lighting_audit = save_lighting_proof(ground_renderer, ground, (sx, sy))
         silhouette = [obj for obj in ground.objects if obj.get("composition_pass") == "building_silhouette_v1"]
         facade_breaks = [obj for obj in silhouette if obj.get("silhouette_kind") == "facade_break"]
@@ -342,6 +374,32 @@ def main() -> None:
             "gameplay_geometry_unchanged": True,
             "roof_registration": "exact_ground_building_footprint",
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        markings = [obj for obj in ground.objects if obj.get("street_marking")]
+        ROAD_MORPHOLOGY_AUDIT_OUT.write_text(json.dumps({
+            "authority": "GridWorld collision and render cells",
+            "composition_pass": "road_morphology_v1",
+            "shape": "offset_south_spur_t_pair",
+            "road_cell_count": road_cells,
+            "road_component_count": len(road_components(ground.layers["ground"])),
+            "t_junction_count": road_junctions[0],
+            "four_way_junction_count": road_junctions[1],
+            "old_centerline_x": 44,
+            "offset_centerline_x": 49,
+            "offset_centerline_cells": 5,
+            "south_edge_exit_shifted": True,
+            "marking_count": len(markings),
+            "zebra_stripe_count": sum(str(obj["street_marking"]).startswith("zebra_") for obj in markings),
+            "phantom_marking_count": sum(
+                ground.tile_id("ground", int(obj["gx"]), int(obj["gy"])) != "road_fill"
+                for obj in markings
+            ),
+            "lamp_count": len([obj for obj in ground.objects if obj.get("composition_pass") == "street_lighting_v1"]),
+            "building_cell_count": sum(int(b["generated_cells"]) for b in morphology_buildings),
+            "roof_registration": "exact_ground_building_footprint",
+            "gameplay_geometry_sha256_before": geometry_hash_before,
+            "gameplay_geometry_sha256_after": geometry_hash_after,
+            "gameplay_geometry_unchanged_during_render": True,
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
         print(
             "V100_GROUND_ROOF_RUNTIME_PROOF_OK "
@@ -357,6 +415,7 @@ def main() -> None:
             f"roof_palette={len(roof_palette)}details/{len(palette_assets)}families "
             f"roof_surface={len(roof_surface)}effects/{len(surface_themes)}themes "
             f"morphology={len(notched_buildings)}notched/{removed_building_cells}open-cells "
+            f"road_morphology={road_junctions[0]}T+{road_junctions[1]}four-way/{road_cells}road-cells "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:

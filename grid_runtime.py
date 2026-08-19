@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from building_morphology import assign_notches, footprint_for, role_for_cell, transition_anchors
+from road_morphology import apply_road_morphology
 
 from grid_world import GridWorld, TileCatalog
 
@@ -137,6 +138,11 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
         building["generated_cells"] = len(footprint)
         building["envelope_cells"] = (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1)
 
+    rows, road_morphology = apply_road_morphology(rows)
+    if any(not rows[y][x].startswith("bld_") for building in buildings
+           for x, y in footprint_for(tuple(map(int, building["rect"])), building.get("notch"))):
+        raise ValueError("road morphology pass overlapped an authoritative building footprint")
+
     data["building_synthesis"] = {
         "version": 4,
         "shape_family": "rectangles_and_single_corner_notches",
@@ -151,6 +157,7 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
         "buildings": buildings,
         "runtime_synthesized": True,
     }
+    data["road_morphology"] = road_morphology
     return rows, buildings
 
 

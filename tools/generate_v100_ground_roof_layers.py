@@ -30,6 +30,7 @@ from building_morphology import (
     footprint_for as _footprint_for, role_for_cell as _role_for_footprint_cell,
     transition_anchors,
 )
+from road_morphology import apply_road_morphology, vertical_road_segments
 
 MAP_DIR = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100"
 GROUND_PATH = MAP_DIR / "ground_grid.json"
@@ -250,19 +251,17 @@ def _road_bands(rows: list[list[str]]) -> tuple[list[tuple[int, int]], list[tupl
 def _street_markings(rows: list[list[str]]) -> list[dict]:
     h, w = len(rows), len(rows[0])
     vertical, horizontal = _road_bands(rows)
+    vertical_segments = vertical_road_segments(rows)
     objects: list[dict] = []
 
     def in_h_intersection(y: int) -> bool:
         return any(y0 - 1 <= y <= y1 + 1 for y0, y1 in horizontal)
 
-    def in_v_intersection(x: int) -> bool:
-        return any(x0 - 1 <= x <= x1 + 1 for x0, x1 in vertical)
-
     # Repeating dashed centre lines between intersections.
-    for x0, x1 in vertical:
+    for x0, x1, segment_y0, segment_y1 in vertical_segments:
         cx = (x0 + x1) // 2
-        for y in range(1, h - 1, 2):
-            if in_h_intersection(y):
+        for y in range(max(1, segment_y0), min(h - 1, segment_y1 + 1), 2):
+            if in_h_intersection(y) or rows[y][cx] != "road_fill":
                 continue
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": cx, "gy": y,
@@ -273,7 +272,10 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
     for y0, y1 in horizontal:
         cy = (y0 + y1) // 2
         for x in range(1, w - 1, 2):
-            if in_v_intersection(x):
+            if rows[cy][x] != "road_fill" or any(
+                segment_y0 <= cy <= segment_y1 and vx0 - 1 <= x <= vx1 + 1
+                for vx0, vx1, segment_y0, segment_y1 in vertical_segments
+            ):
                 continue
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": x, "gy": cy,
@@ -317,17 +319,19 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
     # Proper repeated zebra stripes on each of the four approaches. Each
     # crossing stays inside its road band and within one approach cell of the
     # intersection, rather than stretching a single sprite into a giant bar.
-    for vx0, vx1 in vertical:
+    for vx0, vx1, segment_y0, segment_y1 in vertical_segments:
         for hy0, hy1 in horizontal:
+            if segment_y1 < hy0 or segment_y0 > hy1:
+                continue
             road_w = (vx1 - vx0 + 1) * 256
             road_h = (hy1 - hy0 + 1) * 256
-            if hy0 - 1 >= 0:
+            if hy0 - 1 >= 0 and all(rows[hy0 - 1][x] == "road_fill" for x in range(vx0, vx1 + 1)):
                 add_vertical_zebra(vx0, hy0 - 1, road_w, "zebra_north")
-            if hy1 + 1 < h:
+            if hy1 + 1 < h and all(rows[hy1 + 1][x] == "road_fill" for x in range(vx0, vx1 + 1)):
                 add_vertical_zebra(vx0, hy1 + 1, road_w, "zebra_south")
-            if vx0 - 1 >= 0:
+            if vx0 - 1 >= 0 and all(rows[y][vx0 - 1] == "road_fill" for y in range(hy0, hy1 + 1)):
                 add_horizontal_zebra(vx0 - 1, hy0, road_h, "zebra_west")
-            if vx1 + 1 < w:
+            if vx1 + 1 < w and all(rows[y][vx1 + 1] == "road_fill" for y in range(hy0, hy1 + 1)):
                 add_horizontal_zebra(vx1 + 1, hy0, road_h, "zebra_east")
 
     zebras = [obj for obj in objects if str(obj.get("street_marking", "")).startswith("zebra_")]
@@ -335,6 +339,8 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
         raise RuntimeError("zebra audit failed: expected repeated narrow source stripes")
     if any(abs(int(obj.get("offset_x_px", 0))) >= 768 or abs(int(obj.get("offset_y_px", 0))) >= 768 for obj in zebras):
         raise RuntimeError("zebra audit failed: stripe offset escaped its road band")
+    if any(rows[int(obj["gy"])][int(obj["gx"])] != "road_fill" for obj in objects):
+        raise RuntimeError("street marking audit found a road marking anchored off authoritative road cells")
     return objects
 
 
@@ -851,9 +857,15 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
         _audit_footprint(rows, footprint, theme)
         building["generated_cells"] = len(footprint)
 
+    rows, road_morphology = apply_road_morphology(rows)
+    if any(not rows[y][x].startswith("bld_") for building in buildings
+           for x, y in _footprint_for(tuple(map(int, building["rect"])), building.get("notch"))):
+        raise RuntimeError("road morphology pass overlapped an authoritative building footprint")
+
     # Retire the old plus-sign/crossing pass before adding the new street grammar.
     data["objects"] = [obj for obj in data.get("objects", []) if not str(obj.get("asset", "")).startswith("mark_")]
     data["layers"] = {"ground": rows}
+    data["road_morphology"] = road_morphology
     data.pop("layers_ascii", None)
     data["building_synthesis"] = {
         "version": 4,
