@@ -82,6 +82,30 @@ def main() -> None:
     if len(world.objects) < 120:
         raise SystemExit(f"playable map has too few authored detail objects: {len(world.objects)}")
 
+    density = [obj for obj in world.objects if obj.get("composition_pass") == "ground_density_v2"]
+    road_wear = [obj for obj in density if obj.get("density_kind") == "road_wear"]
+    curb_details = [obj for obj in density if obj.get("density_kind") == "curb_detail"]
+    awnings = [obj for obj in density if obj.get("density_kind") == "street_edge_awning"]
+    if (len(road_wear), len(curb_details), len(awnings)) != (36, 24, 18):
+        raise SystemExit(
+            "Ground density v2 count mismatch: "
+            f"road_wear={len(road_wear)} curb_detail={len(curb_details)} awnings={len(awnings)}"
+        )
+    if any(world.tile_id("ground", int(obj["gx"]), int(obj["gy"])) != "road_fill" for obj in road_wear):
+        raise SystemExit("Ground density v2 road wear escaped road collision cells")
+    valid_curbs = {"curb_left", "curb_right", "curb_top", "curb_bottom"}
+    if any(world.tile_id("ground", int(obj["gx"]), int(obj["gy"])) not in valid_curbs for obj in curb_details):
+        raise SystemExit("Ground density v2 curb detail escaped curb semantics")
+    for obj in awnings:
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        if not world.tile_id("ground", gx, gy).startswith("bld_"):
+            raise SystemExit("Ground density v2 awning escaped its building frontage")
+        if gy + 1 >= world.height or not world.catalog[world.tile_id("ground", gx, gy + 1)].walkable:
+            raise SystemExit("Ground density v2 awning has no walkable street frontage")
+    awning_assets = {str(obj["asset"]) for obj in awnings}
+    if len(awning_assets) != 4:
+        raise SystemExit(f"Ground density v2 did not use all four awning variants: {sorted(awning_assets)}")
+
     spawn = world.choose_spawn("ground", 18.0)
     print(
         "V100_GRID_MAP_OK",
@@ -89,6 +113,7 @@ def main() -> None:
         f"building_cells={building_cells}",
         f"modular_buildings={len(buildings)}",
         f"objects={len(world.objects)}",
+        f"density_v2={len(road_wear)}road+{len(curb_details)}curb+{len(awnings)}awnings",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

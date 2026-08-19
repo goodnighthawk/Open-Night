@@ -43,6 +43,19 @@ ZEBRA_STRIPE_WIDTH = 44
 ZEBRA_STRIPE_LENGTH = 176
 ZEBRA_STRIPE_GAP = 38
 ZEBRA_EDGE_MARGIN = 36
+ROAD_WEAR_TARGET = 36
+CURB_DETAIL_TARGET = 24
+STREET_EDGE_AWNING_TARGET = 18
+ROAD_WEAR_SPECS = (
+    ("overlay_road_puddle", 116, 202),
+    ("overlay_oil_splash", 130, 108),
+    ("overlay_pot_hole", 112, 130),
+    ("overlay_road_cracks", 94, 190),
+    ("overlay_curb_drain", 80, 116),
+)
+AWNING_ASSETS = (
+    "roof_awning_blue", "roof_awning_green", "roof_awning_red", "roof_awning_yellow",
+)
 
 
 def _write_ppm(path: Path, width: int, height: int, pixel_fn) -> None:
@@ -320,6 +333,142 @@ def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> l
     return out
 
 
+def _stable_density_rank(kind: str, gx: int, gy: int) -> bytes:
+    return hashlib.sha256(f"open-night-ground-density-v2|{kind}|{gx}|{gy}".encode("ascii")).digest()
+
+
+def _ground_density_objects(
+    rows: list[list[str]], buildings: list[dict], street_objects: list[dict]
+) -> list[dict]:
+    """Add collision-neutral wet-road wear and street-edge awnings.
+
+    Selection is hash-ranked and count-bounded, never random. Road wear stays on
+    straight ``road_fill`` cells outside marking/intersection reservations;
+    awnings stay on the south perimeter of a building with a walkable frontage.
+    No tile or collision value is modified by this composition pass.
+    """
+    h, w = len(rows), len(rows[0])
+    vertical, horizontal = _road_bands(rows)
+    marked = {
+        (int(obj["gx"]), int(obj["gy"]))
+        for obj in street_objects
+        if obj.get("street_marking")
+    }
+
+    def in_band(value: int, bands: list[tuple[int, int]], margin: int = 0) -> bool:
+        return any(start - margin <= value <= end + margin for start, end in bands)
+
+    road_candidates: list[tuple[int, int, str]] = []
+    for gy, row in enumerate(rows):
+        for gx, tile_id in enumerate(row):
+            if tile_id != "road_fill" or (gx, gy) in marked:
+                continue
+            vertical_straight = in_band(gx, vertical) and not in_band(gy, horizontal, 1)
+            horizontal_straight = in_band(gy, horizontal) and not in_band(gx, vertical, 1)
+            if vertical_straight ^ horizontal_straight:
+                road_candidates.append((gx, gy, "vertical" if vertical_straight else "horizontal"))
+
+    road_candidates.sort(key=lambda item: _stable_density_rank("road", item[0], item[1]))
+    selected_roads: list[tuple[int, int, str]] = []
+    for candidate in road_candidates:
+        gx, gy, _axis = candidate
+        if any(abs(gx - x) + abs(gy - y) < 3 for x, y, _ in selected_roads):
+            continue
+        selected_roads.append(candidate)
+        if len(selected_roads) == min(ROAD_WEAR_TARGET, len(road_candidates)):
+            break
+    if len(selected_roads) < ROAD_WEAR_TARGET:
+        for candidate in road_candidates:
+            if candidate not in selected_roads:
+                selected_roads.append(candidate)
+            if len(selected_roads) == min(ROAD_WEAR_TARGET, len(road_candidates)):
+                break
+
+    objects: list[dict] = []
+    for index, (gx, gy, axis) in enumerate(selected_roads):
+        asset, width_px, height_px = ROAD_WEAR_SPECS[index % len(ROAD_WEAR_SPECS)]
+        digest = _stable_density_rank(asset, gx, gy)
+        rotation = 180 if digest[0] & 1 else 0
+        objects.append({
+            "asset": asset, "gx": gx, "gy": gy,
+            "offset_x_px": (256 - width_px) // 2 + int(digest[1] % 25) - 12,
+            "offset_y_px": (256 - height_px) // 2 + int(digest[2] % 25) - 12,
+            "width_px": width_px, "height_px": height_px,
+            "rotation": rotation, "road_axis": axis,
+            "composition_pass": "ground_density_v2", "density_kind": "road_wear",
+        })
+
+    curb_candidates: list[tuple[int, int, str]] = []
+    curb_ids = {"curb_left", "curb_right", "curb_top", "curb_bottom"}
+    for gy, row in enumerate(rows):
+        for gx, tile_id in enumerate(row):
+            if tile_id not in curb_ids:
+                continue
+            if tile_id in {"curb_left", "curb_right"} and in_band(gy, horizontal, 2):
+                continue
+            if tile_id in {"curb_top", "curb_bottom"} and in_band(gx, vertical, 2):
+                continue
+            curb_candidates.append((gx, gy, tile_id))
+    curb_candidates.sort(key=lambda item: _stable_density_rank("curb", item[0], item[1]))
+    for gx, gy, tile_id in curb_candidates[:CURB_DETAIL_TARGET]:
+        rotation = 90 if tile_id in {"curb_top", "curb_bottom"} else 0
+        if tile_id in {"curb_right", "curb_bottom"}:
+            rotation += 180
+        objects.append({
+            "asset": "overlay_curb_drain", "gx": gx, "gy": gy,
+            "offset_x_px": 88, "offset_y_px": 70,
+            "width_px": 80, "height_px": 116, "rotation": rotation,
+            "curb_tile": tile_id,
+            "composition_pass": "ground_density_v2", "density_kind": "curb_detail",
+        })
+
+    frontage_candidates: list[tuple[bytes, dict, int]] = []
+    for building in buildings:
+        x0, y0, x1, y1 = map(int, building["rect"])
+        cx = (x0 + x1) // 2
+        if y1 + 1 >= h:
+            continue
+        frontage = rows[y1 + 1][cx]
+        if not (frontage.startswith("pavement") or frontage.startswith("curb_")):
+            continue
+        edge_cells = [x for x in range(x0 + 1, x1) if x != cx]
+        if not edge_cells:
+            continue
+        edge_cells.sort(key=lambda x: _stable_density_rank("awning-cell", x, y1))
+        frontage_candidates.append((_stable_density_rank("awning", cx, y1), building, edge_cells[0]))
+    frontage_candidates.sort(key=lambda item: item[0])
+
+    for index, (digest, building, awning_x) in enumerate(frontage_candidates[:STREET_EDGE_AWNING_TARGET]):
+        _x0, _y0, _x1, y1 = map(int, building["rect"])
+        asset = AWNING_ASSETS[index % len(AWNING_ASSETS)]
+        objects.append({
+            "asset": asset, "gx": awning_x, "gy": y1,
+            "offset_x_px": 16, "offset_y_px": 159,
+            "width_px": 224, "height_px": 89, "rotation": 0,
+            "building_id": str(building["building_id"]), "edge": "south",
+            "composition_pass": "ground_density_v2", "density_kind": "street_edge_awning",
+        })
+
+    road_wear = [obj for obj in objects if obj["density_kind"] == "road_wear"]
+    curb_details = [obj for obj in objects if obj["density_kind"] == "curb_detail"]
+    awnings = [obj for obj in objects if obj["density_kind"] == "street_edge_awning"]
+    if len(road_wear) != ROAD_WEAR_TARGET:
+        raise RuntimeError(f"ground density audit expected {ROAD_WEAR_TARGET} road-wear objects, got {len(road_wear)}")
+    if len(awnings) != min(STREET_EDGE_AWNING_TARGET, len(frontage_candidates)):
+        raise RuntimeError("ground density audit produced an unexpected awning count")
+    if len(curb_details) != min(CURB_DETAIL_TARGET, len(curb_candidates)):
+        raise RuntimeError("ground density audit produced an unexpected curb-detail count")
+    if any(rows[int(obj["gy"])][int(obj["gx"])] != "road_fill" for obj in road_wear):
+        raise RuntimeError("ground density audit found road wear outside road collision cells")
+    if any((int(obj["gx"]), int(obj["gy"])) in marked for obj in road_wear):
+        raise RuntimeError("ground density audit found road wear on a reserved street marking")
+    if any(rows[int(obj["gy"])][int(obj["gx"])] not in curb_ids for obj in curb_details):
+        raise RuntimeError("ground density audit found a curb detail outside curb semantics")
+    if any(not rows[int(obj["gy"])][int(obj["gx"])].startswith("bld_") for obj in awnings):
+        raise RuntimeError("ground density audit found an awning outside a building perimeter")
+    return objects
+
+
 def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[str]], list[dict]]:
     groups = _building_components(original)
     rows = [list(row) for row in original]
@@ -384,6 +533,19 @@ def generate_layers() -> tuple[int, int]:
     data = json.loads(GROUND_PATH.read_text(encoding="utf-8"))
     ground, buildings = synthesize_ground(data, _decode_ground(data))
     ground_objects: list[dict] = _street_markings(ground)
+    geometry_before_density = hashlib.sha256(
+        json.dumps(ground, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    density_objects = _ground_density_objects(ground, buildings, ground_objects)
+    density_repeat = _ground_density_objects(ground, buildings, ground_objects)
+    if json.dumps(density_objects, sort_keys=True) != json.dumps(density_repeat, sort_keys=True):
+        raise RuntimeError("ground density audit is not deterministic across repeated generation")
+    geometry_after_density = hashlib.sha256(
+        json.dumps(ground, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if geometry_after_density != geometry_before_density:
+        raise RuntimeError("ground density pass mutated authoritative grid geometry")
+    ground_objects.extend(density_objects)
     roof_objects: list[dict] = []
     roof_rows = [["void" for _ in row] for row in ground]
 
@@ -439,10 +601,18 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v4",
+        "format": "open-night-ground-generated-v5",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
         "street_markings": "zebra_crossings_and_dashed_center_lines",
+        "composition_pass": "ground_density_v2",
+        "density_summary": {
+            "road_wear": sum(obj.get("density_kind") == "road_wear" for obj in density_objects),
+            "curb_detail": sum(obj.get("density_kind") == "curb_detail" for obj in density_objects),
+            "street_edge_awnings": sum(obj.get("density_kind") == "street_edge_awning" for obj in density_objects),
+            "geometry_sha256_before": geometry_before_density,
+            "geometry_sha256_after": geometry_after_density,
+        },
         "roof_registration": "exact_ground_footprint",
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "objects": ground_objects,
@@ -481,6 +651,7 @@ def main() -> None:
         f"buildings={buildings}", f"generated_objects={objects}",
         f"min_building_side={MIN_BUILDING_SIDE}", f"min_building_area={MIN_BUILDING_AREA}",
         "street_markings=zebra+dashed", "orientation=filename_semantics_no_rotation",
+        f"density_v2={ROAD_WEAR_TARGET}road+{CURB_DETAIL_TARGET}curb+{STREET_EDGE_AWNING_TARGET}awnings",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
