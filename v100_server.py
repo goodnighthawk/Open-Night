@@ -3,10 +3,17 @@ from __future__ import annotations
 """Canonical Open Night v1.0 authoritative server entry.
 
 The mature server remains the implementation library for multiplayer, persistence,
-chat, vehicles and other gameplay. For the v1.0 map, this entry replaces only the
-retired vector-map authority with GridWorld validation/collision semantics and the
-movement-held jump contract.
+chat, vehicles and other gameplay. v1.0 installs the curb-safe GridWorld layout
+and 0.5x world normalization before importing the server so authoritative
+collision and network metadata use the same 128 px logical cell scale.
 """
+
+import v100_runtime_refinement
+import v100_safe_layout
+v100_safe_layout.install(v100_runtime_refinement)
+v100_runtime_refinement.install()
+import v100_scale_normalization
+v100_scale_normalization.install()
 
 import server
 from gameplay.jump_contract import directional_jump_velocity
@@ -23,8 +30,10 @@ def validate_active_authority(map_config: dict) -> list[str]:
 
     world = load_ground_grid()
     errors: list[str] = []
-    if world.cell_px != 256:
-        errors.append(f"grid: expected 256px cells, got {world.cell_px}")
+    if world.cell_px != v100_scale_normalization.TARGET_CELL_PX:
+        errors.append(
+            f"grid: expected {v100_scale_normalization.TARGET_CELL_PX}px normalized cells, got {world.cell_px}"
+        )
     if world.width != 64 or world.height != 48:
         errors.append(f"grid: expected 64x48 cells, got {world.width}x{world.height}")
     if world.world_w != world.width * world.cell_px:
