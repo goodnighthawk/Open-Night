@@ -18,6 +18,23 @@ on:
       - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
       - 'tools/capture_v110_grid_population.py'
       - '.github/workflows/v110-grid-population.yml'
+  pull_request:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'server.py'
+      - 'client.py'
+      - 'v100_server.py'
+      - 'v100_client.py'
+      - 'v110_grid_population.py'
+      - 'v100_runtime_refinement.py'
+      - 'v100_safe_layout.py'
+      - 'v100_scale_normalization.py'
+      - 'grid_world.py'
+      - 'grid_runtime.py'
+      - 'grid_renderer.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
+      - 'tools/capture_v110_grid_population.py'
+      - '.github/workflows/v110-grid-population.yml'
   workflow_dispatch:
 
 jobs:
