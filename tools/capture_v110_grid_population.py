@@ -93,14 +93,37 @@ def main() -> None:
         for npc in server.npc_pedestrians
     }
 
-    # Frame the densest useful road/sidewalk pair so the proof necessarily shows
-    # both systems rather than choosing an arbitrary login spawn far from traffic.
+    # Choose the actual densest gameplay window after the simulation has run.
+    # The proof must make several cars and pedestrians visually obvious rather
+    # than relying on counts that happen to be elsewhere in the world.
     cars = list(server.traffic_vehicles)
     pedestrians = [npc for npc in server.npc_pedestrians if npc.kind == "pedestrian"]
-    pair = min(((_distance(car, npc), car, npc) for car in cars for npc in pedestrians), key=lambda row: row[0])
-    _, focus_car, focus_npc = pair
-    focus_x = (focus_car.x + focus_npc.x) * 0.5
-    focus_y = (focus_car.y + focus_npc.y) * 0.5
+    game.camera_zoom = PROOF_ZOOM
+    view_size = game.logical_view_size()
+    half_w = view_size[0] * 0.46
+    half_h = view_size[1] * 0.46
+
+    def window_counts(cx: float, cy: float) -> tuple[int, int]:
+        car_count = sum(abs(car.x - cx) <= half_w and abs(car.y - cy) <= half_h for car in cars)
+        npc_count = sum(abs(npc.x - cx) <= half_w and abs(npc.y - cy) <= half_h for npc in pedestrians)
+        return car_count, npc_count
+
+    candidates = [(float(obj.x), float(obj.y)) for obj in [*cars, *pedestrians]]
+    focus_x, focus_y = max(
+        candidates,
+        key=lambda pos: (
+            min(window_counts(*pos)[0], 6) * 12 + min(window_counts(*pos)[1], 10) * 4,
+            sum(window_counts(*pos)),
+            -pos[1], -pos[0],
+        ),
+    )
+    visible_cars, visible_pedestrians = window_counts(focus_x, focus_y)
+    if visible_cars < 3 or visible_pedestrians < 4:
+        raise RuntimeError(
+            f"v1.1 proof could not frame a populated street: cars={visible_cars}, pedestrians={visible_pedestrians}"
+        )
+    focus_car = min(cars, key=lambda car: math.hypot(car.x - focus_x, car.y - focus_y))
+    focus_npc = min(pedestrians, key=lambda npc: math.hypot(npc.x - focus_x, npc.y - focus_y))
     x, y = game.grid_world.nearest_walkable("ground", focus_x, focus_y, game_client.PLAYER_RADIUS)
     local = game_client.RemotePlayer({
         "id": "v110-proof-local", "name": "V110Proof", "x": x, "y": y,
@@ -111,14 +134,12 @@ def main() -> None:
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
     game.notice = (
-        f"v1.1 GridWorld population proof — {len(game.vehicles)} traffic cars • "
-        f"{len(game.npcs)} ambient NPCs"
+        f"v1.1 GridWorld population proof — {visible_cars} cars + "
+        f"{visible_pedestrians} pedestrians in this gameplay window"
     )
     game.notice_until = 10**12
-    game.camera_zoom = PROOF_ZOOM
 
     display_surface = game.screen
-    view_size = game.logical_view_size()
     game.camera_controller.update(
         (x, y), (view_size[0] // 2, view_size[1] // 2), view_size,
         (game.grid_world.world_w, game.grid_world.world_h), dt, force_center=True,
@@ -178,6 +199,8 @@ def main() -> None:
         "blocked_traffic_after_2_5s": blocked_cars,
         "focus_car": focus_car.vehicle_id,
         "focus_npc": focus_npc.npc_id,
+        "visible_cars_in_proof_window": visible_cars,
+        "visible_pedestrians_in_proof_window": visible_pedestrians,
         "player_cell": list(game.grid_world.world_to_cell(x, y)),
         "full_stack_panels": ["gameplay_player_hud_population", "actual_M_map", "authoritative_ground_overview"],
     })
