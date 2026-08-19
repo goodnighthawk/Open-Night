@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-"""Railway entry point for Open Night.
-
-Installs optional production integrations, then executes server.py as __main__ so
-its existing CLI and startup behavior stay unchanged.
-"""
-
-import runpy
+"""Railway entry point for the Open Night v1.0 grid-authoritative server."""
 
 from bug_github_mirror import install_database_bug_mirror
+from v100_server import main as run_v100_server
 
 
 if __name__ == "__main__":
     install_database_bug_mirror()
-    runpy.run_module("server", run_name="__main__")
+    run_v100_server()
