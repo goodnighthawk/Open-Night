@@ -21,6 +21,7 @@ import v100_client
 OUT = ROOT / "assets" / "grid_v100" / "GAMEPLAY_HUD_RUNTIME_PROOF_1280x720.png"
 OVERVIEW = ROOT / "assets" / "grid_v100" / "GROUND_REFINED_RUNTIME_OVERVIEW_2560x1440.png"
 AUDIT = ROOT / "assets" / "grid_v100" / "GAMEPLAY_HUD_RUNTIME_AUDIT.json"
+PROOF_ZOOM = 0.55
 
 
 def main() -> None:
@@ -58,12 +59,13 @@ def main() -> None:
     game.local_id = local.id
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
-    game.notice = "v1.0 proof — centered building, exterior fire escape, synced lamp, player + HUD"
+    game.notice = "v1.0 proof — wide gameplay, centered building, exterior fire escape, synced lamp, player + HUD"
     game.notice_until = 10**12
 
-    # Reproduce the canonical gameplay render path rather than drawing world/UI
-    # methods directly onto the display surface. This verifies the player at the
-    # same logical zoom transform used in Game.run().
+    # Deliberately zoom farther out than the normal review capture so several
+    # complete blocks are visible and building scale can be judged against the
+    # player, roads, sidewalks and HUD in the canonical gameplay transform.
+    game.camera_zoom = PROOF_ZOOM
     display_surface = game.screen
     view_size = game.logical_view_size()
     game.camera_controller.update(
@@ -92,17 +94,38 @@ def main() -> None:
     game.screen.blit(rotation, (game.screen.get_width() - rotation.get_width() - 18, 64))
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    pygame.image.save(game.screen, OUT)
+    gameplay_frame = game.screen.copy()
+    pygame.image.save(gameplay_frame, OUT)
 
-    overview = pygame.Surface((2560, 1440)).convert()
-    game.grid_renderer.draw_overview(overview, "ground")
-    pygame.image.save(overview, OVERVIEW)
+    # Capture the actual M-map from the same client/player state, on top of the
+    # same gameplay framebuffer. This proves the main map rather than a separate
+    # renderer-only approximation.
+    game.screen.blit(gameplay_frame, (0, 0))
+    game.map_open = True
+    game.draw_world_map()
+    mmap_frame = game.screen.copy()
+    game.map_open = False
+
+    # Existing artifact path becomes a compact review board: wide canonical
+    # gameplay (top-left), actual M-map (top-right), and the full authoritative
+    # Ground overview across the bottom. No workflow contract needs to change.
+    raw_overview = pygame.Surface((2560, 1440)).convert()
+    game.grid_renderer.draw_overview(raw_overview, "ground")
+    review = pygame.Surface((2560, 1440)).convert()
+    review.fill((12, 12, 14))
+    review.blit(pygame.transform.smoothscale(gameplay_frame, (1280, 720)), (0, 0))
+    review.blit(pygame.transform.smoothscale(mmap_frame, (1280, 720)), (1280, 0))
+    review.blit(pygame.transform.smoothscale(raw_overview, (2560, 720)), (0, 720))
+    pygame.image.save(review, OVERVIEW)
 
     refinement = dict(game.grid_world.data.get("runtime_refinement") or {})
     audit = {
-        "proof": "canonical_v100_gameplay_hud",
+        "proof": "canonical_v100_gameplay_hud_and_m_map",
         "screen_px": list(game.screen.get_size()),
+        "camera_zoom": PROOF_ZOOM,
         "grid_cell": list(game.grid_world.world_to_cell(x, y)),
+        "m_map_capture": True,
+        "review_board_panels": ["wide_gameplay_hud", "actual_M_map", "full_ground_overview"],
         "proof_target": {
             "building_id": str(target_fire.get("building_id", "")),
             "fire_escape_cell": [int(target_fire["gx"]), int(target_fire["gy"])],
@@ -110,7 +133,7 @@ def main() -> None:
             "lamp_cell": [int(target_lamp["gx"]), int(target_lamp["gy"])],
             "fire_to_lamp_cell_distance": cell_distance(target_fire, target_lamp),
         },
-        "hud_calls": ["Game.draw_hud", "Game.draw_local_minimap", "Game.draw_player", "Game.draw_player_nameplates"],
+        "hud_calls": ["Game.draw_hud", "Game.draw_local_minimap", "Game.draw_player", "Game.draw_player_nameplates", "Game.draw_world_map"],
         "grid_authority": True,
         "runtime_refinement": refinement,
     }
