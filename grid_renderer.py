@@ -23,6 +23,13 @@ class GridRenderer:
     Collision remains Ground-authoritative.
     """
 
+    # Open Night's approved exterior is a cool, low-key night scene.  Grade the
+    # assembled authoritative framebuffer rather than baking edits into source
+    # sprites, so collision, cell semantics and exact Roof registration remain
+    # untouched.  Gameplay actors are drawn later by the client and stay clear.
+    GROUND_NIGHT_MULTIPLY = (105, 115, 145)
+    GROUND_NIGHT_AMBIENT = (2, 4, 8)
+
     def __init__(self, world: GridWorld):
         self.world = world
         self._city_block_zip: zipfile.ZipFile | None = None
@@ -196,6 +203,15 @@ class GridRenderer:
             image = pygame.transform.rotate(image, -float(rotation))
         return image
 
+    @classmethod
+    def _apply_ground_night_grade(cls, target: pygame.Surface, area: pygame.Rect | None = None) -> None:
+        """Apply the approved cool night grade to an assembled Ground frame."""
+        area = target.get_rect() if area is None else pygame.Rect(area).clip(target.get_rect())
+        if area.width <= 0 or area.height <= 0:
+            return
+        target.fill(cls.GROUND_NIGHT_MULTIPLY, area, special_flags=pygame.BLEND_RGB_MULT)
+        target.fill(cls.GROUND_NIGHT_AMBIENT, area, special_flags=pygame.BLEND_RGB_ADD)
+
     def _draw_cells(
         self,
         target: pygame.Surface,
@@ -247,6 +263,8 @@ class GridRenderer:
             image = self._object_surface(asset_id, width, height, rotation)
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
 
+        if layer == "ground":
+            self._apply_ground_night_grade(target)
         self._draw_proof_compass(target)
 
     def draw_overview(self, target: pygame.Surface, layer: str = "ground") -> tuple[int, int, int]:
@@ -290,6 +308,8 @@ class GridRenderer:
             sy = oy + int(round(world_y * scale))
             target.blit(image, (sx, sy))
 
+        if layer == "ground":
+            self._apply_ground_night_grade(target, pygame.Rect(ox, oy, map_w, map_h))
         self._draw_proof_compass(target)
         return tile_px, ox, oy
 
