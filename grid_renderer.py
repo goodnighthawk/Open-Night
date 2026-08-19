@@ -212,6 +212,58 @@ class GridRenderer:
         target.fill(cls.GROUND_NIGHT_MULTIPLY, area, special_flags=pygame.BLEND_RGB_MULT)
         target.fill(cls.GROUND_NIGHT_AMBIENT, area, special_flags=pygame.BLEND_RGB_ADD)
 
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _light_pool_surface(radius: int, color: tuple[int, int, int], intensity: float) -> pygame.Surface:
+        """Build a soft additive pool; the caller supplies the shared fixture anchor."""
+        radius = max(1, int(radius))
+        pool = pygame.Surface((radius * 2 + 1, radius * 2 + 1), pygame.SRCALPHA)
+        center = (radius, radius)
+        for step in range(64, 0, -1):
+            fraction = step / 64.0
+            strength = float(intensity) * (1.0 - fraction) ** 2
+            rgb = tuple(max(0, min(255, int(round(channel * strength)))) for channel in color)
+            pygame.draw.circle(pool, (*rgb, 255), center, max(1, int(round(radius * fraction))))
+        return pool
+
+    def _draw_ground_light_pools(
+        self,
+        target: pygame.Surface,
+        camera: tuple[float, float],
+        *,
+        scale: float = 1.0,
+        origin: tuple[int, int] = (0, 0),
+        clip: pygame.Rect | None = None,
+    ) -> int:
+        """Render emitters from the exact same GridWorld records as lamp fixtures."""
+        cam_x, cam_y = map(float, camera)
+        ox, oy = origin
+        previous_clip = target.get_clip()
+        if clip is not None:
+            target.set_clip(clip)
+        count = 0
+        try:
+            for item in self.world.objects:
+                if not item.get("emits_light"):
+                    continue
+                world_x = int(item["gx"]) * self.world.cell_px + int(item.get("offset_x_px", 0))
+                world_y = int(item["gy"]) * self.world.cell_px + int(item.get("offset_y_px", 0))
+                center_x = world_x + int(item["light_offset_x_px"])
+                center_y = world_y + int(item["light_offset_y_px"])
+                radius = max(1, int(round(float(item["light_radius_px"]) * scale)))
+                sx = ox + int(round((center_x - cam_x) * scale))
+                sy = oy + int(round((center_y - cam_y) * scale))
+                if sx + radius < 0 or sy + radius < 0 or sx - radius >= target.get_width() or sy - radius >= target.get_height():
+                    continue
+                color = tuple(int(channel) for channel in item["light_color_rgb"])
+                intensity = float(item["light_intensity"])
+                pool = self._light_pool_surface(radius, color, intensity)
+                target.blit(pool, (sx - radius, sy - radius), special_flags=pygame.BLEND_RGB_ADD)
+                count += 1
+        finally:
+            target.set_clip(previous_clip)
+        return count
+
     def _draw_cells(
         self,
         target: pygame.Surface,
@@ -265,6 +317,7 @@ class GridRenderer:
 
         if layer == "ground":
             self._apply_ground_night_grade(target)
+            self._draw_ground_light_pools(target, (cam_x, cam_y))
         self._draw_proof_compass(target)
 
     def draw_overview(self, target: pygame.Surface, layer: str = "ground") -> tuple[int, int, int]:
@@ -310,6 +363,10 @@ class GridRenderer:
 
         if layer == "ground":
             self._apply_ground_night_grade(target, pygame.Rect(ox, oy, map_w, map_h))
+            self._draw_ground_light_pools(
+                target, (0.0, 0.0), scale=scale, origin=(ox, oy),
+                clip=pygame.Rect(ox, oy, map_w, map_h),
+            )
         self._draw_proof_compass(target)
         return tile_px, ox, oy
 

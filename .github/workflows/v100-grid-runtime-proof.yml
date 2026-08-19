@@ -70,6 +70,8 @@ jobs:
       - name: Verify GridWorld UI proof bundle
         run: |
           test -f assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json
           test -f assets/grid_v100/GRID_MINIMAP_RUNTIME_PROOF_1280x720.png
           test -f assets/grid_v100/GRID_WORLD_MAP_RUNTIME_PROOF_1280x720.png
           test -f assets/grid_v100/GRID_UI_LEGACY_INDEPENDENCE.json
@@ -94,6 +96,8 @@ jobs:
             assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png
             assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png
             assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json
+            assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json
             assets/grid_v100/GRID_MINIMAP_RUNTIME_PROOF_1280x720.png
             assets/grid_v100/GRID_WORLD_MAP_RUNTIME_PROOF_1280x720.png
             assets/grid_v100/GRID_UI_LEGACY_INDEPENDENCE.json

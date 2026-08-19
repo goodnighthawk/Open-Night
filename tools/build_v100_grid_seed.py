@@ -106,6 +106,40 @@ def main() -> None:
     if len(awning_assets) != 4:
         raise SystemExit(f"Ground density v2 did not use all four awning variants: {sorted(awning_assets)}")
 
+    lamps = [obj for obj in world.objects if obj.get("composition_pass") == "street_lighting_v1"]
+    if len(lamps) != 48:
+        raise SystemExit(f"street lighting v1 expected 48 eligible curb segments, got {len(lamps)}")
+    if len({str(obj.get("lighting_id")) for obj in lamps}) != len(lamps):
+        raise SystemExit("street lighting v1 fixture/light authority IDs are not unique")
+    expected = {
+        "curb_top": ("north", 0, 93, 48),
+        "curb_right": ("east", 90, 79, 93),
+        "curb_bottom": ("south", 180, 34, 79),
+        "curb_left": ("west", 270, 48, 34),
+    }
+    reserved = {
+        (int(obj["gx"]), int(obj["gy"]))
+        for obj in density if obj.get("density_kind") == "curb_detail"
+    }
+    for obj in lamps:
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        tile_id = world.tile_id("ground", gx, gy)
+        if tile_id not in expected or world.catalog[tile_id].collision != "sidewalk":
+            raise SystemExit(f"street lamp escaped sidewalk curb semantics at {(gx, gy)}: {tile_id}")
+        direction, rotation, light_x, light_y = expected[tile_id]
+        actual = (
+            obj.get("road_direction"), int(obj.get("rotation", -1)),
+            int(obj.get("light_offset_x_px", -1)), int(obj.get("light_offset_y_px", -1)),
+        )
+        if actual != (direction, rotation, light_x, light_y):
+            raise SystemExit(f"street lamp fixture/emitter transform mismatch at {(gx, gy)}: {actual}")
+        if not obj.get("emits_light") or obj.get("asset") != "street_lamp_10_night":
+            raise SystemExit(f"street lamp is missing its same-record emitter at {(gx, gy)}")
+        if (gx, gy) in reserved:
+            raise SystemExit(f"street lamp overlaps a curb detail at {(gx, gy)}")
+    if {obj.get("road_direction") for obj in lamps} != {"north", "east", "south", "west"}:
+        raise SystemExit("street lighting v1 does not cover all four road orientations")
+
     spawn = world.choose_spawn("ground", 18.0)
     print(
         "V100_GRID_MAP_OK",
@@ -114,6 +148,7 @@ def main() -> None:
         f"modular_buildings={len(buildings)}",
         f"objects={len(world.objects)}",
         f"density_v2={len(road_wear)}road+{len(curb_details)}curb+{len(awnings)}awnings",
+        f"street_lighting_v1={len(lamps)}same-record-lamps",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

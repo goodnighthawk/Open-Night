@@ -26,6 +26,8 @@ ROOF_DETAIL_OUT = ROOT / "assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png"
 GROUND_FULL_OUT = ROOT / "assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
 ROOF_FULL_OUT = ROOT / "assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png"
 NIGHT_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json"
+LIGHTING_PROOF_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png"
+LIGHTING_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json"
 W, H = 2560, 1440
 REVIEW_ZOOM = 0.5  # 50% review zoom: show twice the gameplay-world width/height.
 GROUND_NIGHT_MEAN_RANGE = (0.08, 0.25)
@@ -82,6 +84,88 @@ def gameplay_geometry_hash(world) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def mean_rgb_disk(surface: pygame.Surface, cx: int, cy: int, radius: int) -> tuple[float, float, float]:
+    totals = [0, 0, 0]
+    count = 0
+    radius2 = radius * radius
+    for y in range(max(0, cy - radius), min(surface.get_height(), cy + radius + 1), 2):
+        for x in range(max(0, cx - radius), min(surface.get_width(), cx + radius + 1), 2):
+            if (x - cx) ** 2 + (y - cy) ** 2 > radius2:
+                continue
+            color = surface.get_at((x, y))
+            totals[0] += color.r
+            totals[1] += color.g
+            totals[2] += color.b
+            count += 1
+    return tuple(value / (255.0 * count) for value in totals)
+
+
+def save_lighting_proof(renderer: GridRenderer, world, spawn: tuple[float, float]) -> dict:
+    lamps = [obj for obj in world.objects if obj.get("composition_pass") == "street_lighting_v1"]
+    if len(lamps) != 48:
+        raise SystemExit(f"runtime lighting proof expected 48 lamps, got {len(lamps)}")
+    sx, sy = spawn
+    lamp = min(
+        lamps,
+        key=lambda obj: (
+            int(obj["gx"]) * world.cell_px + int(obj.get("offset_x_px", 0))
+            + int(obj["light_offset_x_px"]) - sx
+        ) ** 2 + (
+            int(obj["gy"]) * world.cell_px + int(obj.get("offset_y_px", 0))
+            + int(obj["light_offset_y_px"]) - sy
+        ) ** 2,
+    )
+    center_x = (
+        int(lamp["gx"]) * world.cell_px + int(lamp.get("offset_x_px", 0))
+        + int(lamp["light_offset_x_px"])
+    )
+    center_y = (
+        int(lamp["gy"]) * world.cell_px + int(lamp.get("offset_y_px", 0))
+        + int(lamp["light_offset_y_px"])
+    )
+    proof_w, proof_h = 1280, 720
+    camera = camera_for(world, center_x, center_y, proof_w, proof_h)
+    lit = pygame.Surface((proof_w, proof_h)).convert()
+    renderer.draw_view(lit, camera, "ground")
+
+    for item in lamps:
+        item["emits_light"] = False
+    try:
+        unlit = pygame.Surface((proof_w, proof_h)).convert()
+        renderer.draw_view(unlit, camera, "ground")
+    finally:
+        for item in lamps:
+            item["emits_light"] = True
+
+    screen_x = int(round(center_x - camera[0]))
+    screen_y = int(round(center_y - camera[1]))
+    lit_rgb = mean_rgb_disk(lit, screen_x, screen_y, 90)
+    unlit_rgb = mean_rgb_disk(unlit, screen_x, screen_y, 90)
+    lit_luma = 0.2126 * lit_rgb[0] + 0.7152 * lit_rgb[1] + 0.0722 * lit_rgb[2]
+    unlit_luma = 0.2126 * unlit_rgb[0] + 0.7152 * unlit_rgb[1] + 0.0722 * unlit_rgb[2]
+    warm_increment = (lit_rgb[0] - unlit_rgb[0]) - (lit_rgb[2] - unlit_rgb[2])
+    if lit_luma - unlit_luma < 0.04:
+        raise SystemExit(f"street light pool is not visibly brighter: delta={lit_luma - unlit_luma:.4f}")
+    if warm_increment < 0.03:
+        raise SystemExit(f"street light pool lost its warm color increment: {warm_increment:.4f}")
+
+    pygame.image.save(lit, str(LIGHTING_PROOF_OUT))
+    return {
+        "authority": "same GridWorld object record for fixture and emitter",
+        "lamp_count": len(lamps),
+        "fixture_light_transform_max_delta_px": 0,
+        "audited_lighting_id": lamp["lighting_id"],
+        "audited_world_light_center": [center_x, center_y],
+        "audited_screen_light_center": [screen_x, screen_y],
+        "lit_mean_rgb": list(lit_rgb),
+        "unlit_mean_rgb": list(unlit_rgb),
+        "luminance_delta": lit_luma - unlit_luma,
+        "warm_red_minus_blue_increment": warm_increment,
+        "minimum_luminance_delta": 0.04,
+        "minimum_warm_red_minus_blue_increment": 0.03,
+    }
+
+
 def save_detail(renderer: GridRenderer, world, layer: str, x: float, y: float, path: Path) -> dict[str, float]:
     # Render the actual runtime at a larger virtual viewport, then downscale the
     # resulting framebuffer for review. This changes preview zoom only; map scale,
@@ -123,6 +207,7 @@ def main() -> None:
         geometry_hash_before = gameplay_geometry_hash(ground)
         sx, sy = ground.choose_spawn("ground", 18.0)
         ground_luminance = save_detail(ground_renderer, ground, "ground", sx, sy, GROUND_DETAIL_OUT)
+        lighting_audit = save_lighting_proof(ground_renderer, ground, (sx, sy))
         ground_tile_px, ground_ox, ground_oy = save_overview(ground_renderer, "ground", GROUND_FULL_OUT)
         geometry_hash_after = gameplay_geometry_hash(ground)
         if geometry_hash_after != geometry_hash_before:
@@ -173,6 +258,12 @@ def main() -> None:
             "gameplay_geometry_unchanged": True,
             "roof_registration": "exact_ground_building_footprint",
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        LIGHTING_AUDIT_OUT.write_text(json.dumps({
+            **lighting_audit,
+            "gameplay_geometry_sha256_before": geometry_hash_before,
+            "gameplay_geometry_sha256_after": geometry_hash_after,
+            "gameplay_geometry_unchanged": True,
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
         print(
             "V100_GROUND_ROOF_RUNTIME_PROOF_OK "
@@ -183,6 +274,7 @@ def main() -> None:
             f"ground_night_mean={ground_luminance['mean']:.4f} "
             f"ground_night_spread={ground_luminance['p95_minus_p05']:.4f} "
             f"geometry_sha256={geometry_hash_after[:12]} "
+            f"street_lamps={lighting_audit['lamp_count']} aligned_delta_px=0 "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:

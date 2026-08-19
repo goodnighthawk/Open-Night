@@ -46,6 +46,7 @@ ZEBRA_EDGE_MARGIN = 36
 ROAD_WEAR_TARGET = 36
 CURB_DETAIL_TARGET = 24
 STREET_EDGE_AWNING_TARGET = 18
+STREET_LAMP_MIN_SEGMENT = 5
 ROAD_WEAR_SPECS = (
     ("overlay_road_puddle", 116, 202),
     ("overlay_oil_splash", 130, 108),
@@ -337,6 +338,105 @@ def _stable_density_rank(kind: str, gx: int, gy: int) -> bytes:
     return hashlib.sha256(f"open-night-ground-density-v2|{kind}|{gx}|{gy}".encode("ascii")).digest()
 
 
+def _street_lighting_objects(rows: list[list[str]], reserved_objects: list[dict]) -> list[dict]:
+    """Place one nonblocking lamp per usable straight curb segment.
+
+    A single object record owns the fixture and emitter.  The renderer derives
+    both world transforms from that record, so light and lamp cannot drift apart.
+    """
+    h, w = len(rows), len(rows[0])
+    vertical, horizontal = _road_bands(rows)
+    reserved = {(int(obj["gx"]), int(obj["gy"])) for obj in reserved_objects}
+    curb_ids = {"curb_left", "curb_right", "curb_top", "curb_bottom"}
+
+    def near_band(value: int, bands: list[tuple[int, int]]) -> bool:
+        return any(start - 2 <= value <= end + 2 for start, end in bands)
+
+    candidates: set[tuple[int, int]] = set()
+    for gy, row in enumerate(rows):
+        for gx, tile_id in enumerate(row):
+            if tile_id not in curb_ids or gx in {0, w - 1} or gy in {0, h - 1}:
+                continue
+            if tile_id in {"curb_left", "curb_right"} and near_band(gy, horizontal):
+                continue
+            if tile_id in {"curb_top", "curb_bottom"} and near_band(gx, vertical):
+                continue
+            road_neighbors = sum(
+                rows[gy + dy][gx + dx] == "road_fill"
+                for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
+            )
+            if road_neighbors == 1:
+                candidates.add((gx, gy))
+
+    segments: list[list[tuple[int, int]]] = []
+    seen: set[tuple[int, int]] = set()
+    for start in sorted(candidates, key=lambda cell: (cell[1], cell[0])):
+        if start in seen:
+            continue
+        gx, gy = start
+        tile_id = rows[gy][gx]
+        axis = (0, 1) if tile_id in {"curb_left", "curb_right"} else (1, 0)
+        segment: list[tuple[int, int]] = []
+        stack = [start]
+        seen.add(start)
+        while stack:
+            cell = stack.pop()
+            segment.append(cell)
+            for sign in (-1, 1):
+                nxt = (cell[0] + axis[0] * sign, cell[1] + axis[1] * sign)
+                if nxt in candidates and nxt not in seen and rows[nxt[1]][nxt[0]] == tile_id:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        segment.sort(key=lambda cell: (cell[1], cell[0]))
+        if len(segment) >= STREET_LAMP_MIN_SEGMENT:
+            segments.append(segment)
+
+    direction_rotation = {"north": 0, "east": 90, "south": 180, "west": 270}
+    # Exact bulb/head pixel after the corresponding 128x128 sprite rotation.
+    light_offsets = {0: (93, 48), 90: (79, 93), 180: (34, 79), 270: (48, 34)}
+    objects: list[dict] = []
+    for segment_index, segment in enumerate(segments, 1):
+        midpoint = (len(segment) - 1) / 2.0
+        choices = sorted(
+            (cell for cell in segment if cell not in reserved),
+            key=lambda cell: (
+                abs(segment.index(cell) - midpoint),
+                _stable_density_rank("street-lamp", cell[0], cell[1]),
+            ),
+        )
+        if not choices:
+            raise RuntimeError("street lighting segment has no unreserved curb anchor")
+        gx, gy = choices[0]
+        road_direction = next(
+            name for dx, dy, name in ((0, -1, "north"), (1, 0, "east"), (0, 1, "south"), (-1, 0, "west"))
+            if rows[gy + dy][gx + dx] == "road_fill"
+        )
+        rotation = direction_rotation[road_direction]
+        light_x, light_y = light_offsets[rotation]
+        objects.append({
+            "asset": "street_lamp_10_night", "gx": gx, "gy": gy,
+            "offset_x_px": 64, "offset_y_px": 64,
+            "width_px": 128, "height_px": 128, "rotation": rotation,
+            "curb_tile": rows[gy][gx], "road_direction": road_direction,
+            "composition_pass": "street_lighting_v1", "lighting_kind": "sidewalk_lamp",
+            "lighting_id": f"grid_lamp_{segment_index:02d}",
+            "decorative_only": True, "emits_light": True,
+            "light_offset_x_px": light_x, "light_offset_y_px": light_y,
+            "light_radius_px": 280, "light_color_rgb": [255, 188, 92],
+            "light_intensity": 0.28,
+        })
+
+    if not objects or len(objects) != len(segments):
+        raise RuntimeError("street lighting audit did not place one lamp per eligible curb segment")
+    if len({(obj["gx"], obj["gy"]) for obj in objects}) != len(objects):
+        raise RuntimeError("street lighting audit found duplicate fixture anchors")
+    if {obj["road_direction"] for obj in objects} != set(direction_rotation):
+        raise RuntimeError("street lighting audit did not cover all four curb orientations")
+    if any((obj["gx"], obj["gy"]) in reserved for obj in objects):
+        raise RuntimeError("street lighting audit overlapped an existing street object")
+    return objects
+
+
 def _ground_density_objects(
     rows: list[list[str]], buildings: list[dict], street_objects: list[dict]
 ) -> list[dict]:
@@ -546,6 +646,11 @@ def generate_layers() -> tuple[int, int]:
     if geometry_after_density != geometry_before_density:
         raise RuntimeError("ground density pass mutated authoritative grid geometry")
     ground_objects.extend(density_objects)
+    lighting_objects = _street_lighting_objects(ground, ground_objects)
+    lighting_repeat = _street_lighting_objects(ground, ground_objects)
+    if json.dumps(lighting_objects, sort_keys=True) != json.dumps(lighting_repeat, sort_keys=True):
+        raise RuntimeError("street lighting audit is not deterministic across repeated generation")
+    ground_objects.extend(lighting_objects)
     roof_objects: list[dict] = []
     roof_rows = [["void" for _ in row] for row in ground]
 
@@ -601,7 +706,7 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v5",
+        "format": "open-night-ground-generated-v6",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
         "street_markings": "zebra_crossings_and_dashed_center_lines",
@@ -610,6 +715,14 @@ def generate_layers() -> tuple[int, int]:
             "road_wear": sum(obj.get("density_kind") == "road_wear" for obj in density_objects),
             "curb_detail": sum(obj.get("density_kind") == "curb_detail" for obj in density_objects),
             "street_edge_awnings": sum(obj.get("density_kind") == "street_edge_awning" for obj in density_objects),
+            "geometry_sha256_before": geometry_before_density,
+            "geometry_sha256_after": geometry_after_density,
+        },
+        "street_lighting": {
+            "composition_pass": "street_lighting_v1",
+            "fixture_and_emitter_authority": "same_grid_object_record",
+            "lamp_count": len(lighting_objects),
+            "eligible_curb_segment_min_cells": STREET_LAMP_MIN_SEGMENT,
             "geometry_sha256_before": geometry_before_density,
             "geometry_sha256_after": geometry_after_density,
         },
@@ -652,6 +765,7 @@ def main() -> None:
         f"min_building_side={MIN_BUILDING_SIDE}", f"min_building_area={MIN_BUILDING_AREA}",
         "street_markings=zebra+dashed", "orientation=filename_semantics_no_rotation",
         f"density_v2={ROAD_WEAR_TARGET}road+{CURB_DETAIL_TARGET}curb+{STREET_EDGE_AWNING_TARGET}awnings",
+        "lighting=one-lamp-per-usable-curb-segment,same-record-emitter",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
