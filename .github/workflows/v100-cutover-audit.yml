@@ -5,21 +5,33 @@ on:
     branches: [v1.0-art-overlay]
     paths:
       - 'grid_client_entry.py'
+      - 'v100_client.py'
+      - 'v100_server.py'
       - 'grid_runtime.py'
       - 'grid_world.py'
       - 'tools/grid_local_server.py'
       - 'tools/quick_local_test.py'
       - 'gameplay/jump_contract.py'
+      - 'RUN_CLIENT.bat'
+      - 'RUN_SERVER.bat'
+      - 'main.py'
+      - 'railway_entry.py'
       - 'docs/V100_LEGACY_MAP_CUTOVER.md'
       - '.github/workflows/v100-cutover-audit.yml'
   pull_request:
     paths:
       - 'grid_client_entry.py'
+      - 'v100_client.py'
+      - 'v100_server.py'
       - 'grid_runtime.py'
       - 'grid_world.py'
       - 'tools/grid_local_server.py'
       - 'tools/quick_local_test.py'
       - 'gameplay/jump_contract.py'
+      - 'RUN_CLIENT.bat'
+      - 'RUN_SERVER.bat'
+      - 'main.py'
+      - 'railway_entry.py'
       - 'docs/V100_LEGACY_MAP_CUTOVER.md'
       - '.github/workflows/v100-cutover-audit.yml'
   workflow_dispatch:
@@ -33,24 +45,50 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile grid cutover entry points
-        run: python -m py_compile grid_client_entry.py grid_runtime.py grid_world.py tools/grid_local_server.py tools/quick_local_test.py gameplay/jump_contract.py
-      - name: Audit exclusive grid Ground rendering and jump contract
+        run: python -m py_compile grid_client_entry.py v100_client.py v100_server.py grid_runtime.py grid_world.py tools/grid_local_server.py tools/quick_local_test.py gameplay/jump_contract.py main.py railway_entry.py
+      - name: Audit single GridWorld authority and preserved entry features
         run: |
           python - <<'PY'
           from pathlib import Path
           from gameplay.jump_contract import directional_jump_velocity
 
           client = Path('grid_client_entry.py').read_text(encoding='utf-8')
-          server = Path('tools/grid_local_server.py').read_text(encoding='utf-8')
+          vclient = Path('v100_client.py').read_text(encoding='utf-8')
+          vserver = Path('v100_server.py').read_text(encoding='utf-8')
+          quick = Path('tools/quick_local_test.py').read_text(encoding='utf-8')
+          run_client = Path('RUN_CLIENT.bat').read_text(encoding='utf-8')
+          run_server = Path('RUN_SERVER.bat').read_text(encoding='utf-8')
+          web = Path('main.py').read_text(encoding='utf-8')
+          railway = Path('railway_entry.py').read_text(encoding='utf-8')
           doc = Path('docs/V100_LEGACY_MAP_CUTOVER.md').read_text(encoding='utf-8')
 
+          # Exterior framebuffer, minimap and large M-map share GridWorld authority.
           assert 'grid_renderer.draw_view' in client
           assert 'draw_elevated_overlay = _suppress_legacy_elevated_overlay' in client
-          assert 'server.validate_map = _validate_active_authority' in server
+          assert 'draw_local_minimap = _draw_grid_local_minimap' in client
+          assert '_build_world_map_cache = _build_grid_world_map_cache' in client
+          assert '_draw_world_map_impl = _draw_grid_world_map_impl' in client
+          assert 'game.grid_renderer.draw_overview(surface, "ground")' in client
+
+          # Mature non-map character feature remains composed on top of the grid entry.
+          assert 'import grid_client_entry' in vclient
+          assert 'portrait_head_client._install()' in vclient
+
+          # Every normal v1.0 launch surface routes to the canonical entries.
+          assert 'server.validate_map = validate_active_authority' in vserver
+          assert 'server.request_player_jump = request_player_jump_v100' in vserver
+          assert 'v100_client.py' in quick and 'v100_server.py' in quick
+          assert 'v100_client.py' in run_client
+          assert 'v100_server.py' in run_server
+          assert 'from v100_client import main' in web
+          assert 'from v100_server import main as run_v100_server' in railway
+
+          # Space alone is vertical; movement+Space is directional.
           assert directional_jump_velocity(0, 0, 570) == (0.0, 0.0)
           vx, vy = directional_jump_velocity(1, 0, 570)
           assert vx == 570 and vy == 0
+
           assert 'single playable map authority' in doc.lower()
           assert 'legacy road/building geometry in the minimap and M world map' in doc
-          print('v1.0 cutover contract audit passed')
+          print('v1.0 canonical grid cutover audit passed')
           PY
