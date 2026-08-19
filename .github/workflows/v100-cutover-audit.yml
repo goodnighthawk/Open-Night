@@ -14,6 +14,7 @@ on:
       - 'gameplay/jump_contract.py'
       - 'RUN_CLIENT.bat'
       - 'RUN_SERVER.bat'
+      - 'START_HERE.bat'
       - 'main.py'
       - 'railway_entry.py'
       - 'docs/V100_LEGACY_MAP_CUTOVER.md'
@@ -30,6 +31,7 @@ on:
       - 'gameplay/jump_contract.py'
       - 'RUN_CLIENT.bat'
       - 'RUN_SERVER.bat'
+      - 'START_HERE.bat'
       - 'main.py'
       - 'railway_entry.py'
       - 'docs/V100_LEGACY_MAP_CUTOVER.md'
@@ -58,6 +60,7 @@ jobs:
           quick = Path('tools/quick_local_test.py').read_text(encoding='utf-8')
           run_client = Path('RUN_CLIENT.bat').read_text(encoding='utf-8')
           run_server = Path('RUN_SERVER.bat').read_text(encoding='utf-8')
+          start_here = Path('START_HERE.bat').read_text(encoding='utf-8')
           web = Path('main.py').read_text(encoding='utf-8')
           railway = Path('railway_entry.py').read_text(encoding='utf-8')
           doc = Path('docs/V100_LEGACY_MAP_CUTOVER.md').read_text(encoding='utf-8')
@@ -69,6 +72,15 @@ jobs:
           assert '_build_world_map_cache = _build_grid_world_map_cache' in client
           assert '_draw_world_map_impl = _draw_grid_world_map_impl' in client
           assert 'game.grid_renderer.draw_overview(surface, "ground")' in client
+          # The v1.0 map UIs may never fall back to retired map renderers—not
+          # before player spawn, on Roof, or during another non-Ground state.
+          assert '_ORIGINAL_DRAW_MINIMAP' not in client
+          assert '_ORIGINAL_BUILD_WORLD_MAP_CACHE' not in client
+          assert '_ORIGINAL_DRAW_WORLD_MAP_IMPL' not in client
+          assert '_nearest_named_map_feature' not in client
+          assert 'map_config.get("landmarks"' not in client
+          assert 'map_config.get("districts"' not in client
+          assert 'GridWorld map authority unavailable' in client
 
           # Mature non-map character feature remains composed on top of the grid entry.
           assert 'import grid_client_entry' in vclient
@@ -80,6 +92,8 @@ jobs:
           assert 'v100_client.py' in quick and 'v100_server.py' in quick
           assert 'v100_client.py' in run_client
           assert 'v100_server.py' in run_server
+          assert 'v100_client.py' in start_here
+          assert 'python.exe" client.py' not in start_here
           assert 'from v100_client import main' in web
           assert 'from v100_server import main as run_v100_server' in railway
 

@@ -20,13 +20,15 @@ import client as game_client
 _ORIGINAL_DRAW_WORLD = game_client.Game.draw_world
 _ORIGINAL_DRAW_PLAYER = game_client.Game.draw_player
 _ORIGINAL_DRAW_NAMEPLATES = game_client.Game.draw_player_nameplates
-_ORIGINAL_DRAW_MINIMAP = game_client.Game.draw_local_minimap
-_ORIGINAL_BUILD_WORLD_MAP_CACHE = game_client.Game._build_world_map_cache
-_ORIGINAL_DRAW_WORLD_MAP_IMPL = game_client.Game._draw_world_map_impl
+
+
+def _grid_map_authority_available(game: game_client.Game) -> bool:
+    """Return whether v1.0's one permitted map authority is ready."""
+    return getattr(game, "grid_renderer", None) is not None and getattr(game, "grid_world", None) is not None
 
 
 def _grid_ground_active(game: game_client.Game) -> bool:
-    if getattr(game, "grid_renderer", None) is None or getattr(game, "grid_world", None) is None:
+    if not _grid_map_authority_available(game):
         return False
     local = game.players.get(game.local_id or "")
     level = int(getattr(local, "level", 0)) if local is not None else 0
@@ -63,26 +65,10 @@ def _draw_nameplates_grid_scale(game: game_client.Game) -> None:
     return _with_grid_player_scale(game, _ORIGINAL_DRAW_NAMEPLATES)
 
 
-def _legacy_place_name_rows(game: game_client.Game):
-    """Yield only reusable textual place metadata from the retired map."""
-    for feature in game.map_config.get("landmarks", []) or []:
-        pos = feature.get("pos", [0, 0])
-        try:
-            yield float(pos[0]), float(pos[1]), str(feature.get("name", "")).strip()
-        except (TypeError, ValueError, IndexError):
-            continue
-    for feature in game.map_config.get("districts", []) or []:
-        pos = feature.get("pos", [0, 0])
-        try:
-            yield float(pos[0]), float(pos[1]), str(feature.get("name", "")).strip()
-        except (TypeError, ValueError, IndexError):
-            continue
-
-
 def _build_grid_world_map_cache(game: game_client.Game, width: int, height: int):
     """Build the M-map background from the actual GridRenderer, never legacy geometry."""
-    if not _grid_ground_active(game):
-        return _ORIGINAL_BUILD_WORLD_MAP_CACHE(game, width, height)
+    if not _grid_map_authority_available(game):
+        raise RuntimeError("GridWorld map authority unavailable")
 
     world = game.grid_world
     width = max(64, int(width))
@@ -92,25 +78,6 @@ def _build_grid_world_map_cache(game: game_client.Game, width: int, height: int)
     draw_h = world.height * tile_px
     surface = pygame.Surface((draw_w, draw_h)).convert()
     game.grid_renderer.draw_overview(surface, "ground")
-
-    # Reuse established location names only. Their old road/water/building
-    # geometry is intentionally not consulted by either grid map UI.
-    sx = draw_w / float(world.world_w)
-    sy = draw_h / float(world.world_h)
-    occupied: list[pygame.Rect] = []
-    for x, y, raw_name in _legacy_place_name_rows(game):
-        if not raw_name or not (0.0 <= x < world.world_w and 0.0 <= y < world.world_h):
-            continue
-        text = " ".join(raw_name.split())[:28]
-        label = game.tiny_font.render(text, True, game_client.TEXT_COLOR)
-        px = int(round(x * sx))
-        py = int(round(y * sy))
-        rect = label.get_rect(center=(px, py)).inflate(6, 3)
-        if not surface.get_rect().contains(rect) or any(rect.inflate(4, 2).colliderect(old) for old in occupied):
-            continue
-        pygame.draw.rect(surface, (18, 21, 22), rect, border_radius=2)
-        surface.blit(label, label.get_rect(center=rect.center))
-        occupied.append(rect)
 
     pygame.draw.rect(surface, (108, 111, 104), surface.get_rect(), width=1)
     return surface, float(world.world_w), float(world.world_h)
@@ -134,8 +101,10 @@ def _grid_map_point(map_rect: pygame.Rect, world, x: float, y: float) -> tuple[i
 
 def _draw_grid_world_map_impl(game: game_client.Game) -> None:
     """Full M map using GridWorld art plus dynamic gameplay markers only."""
-    if not _grid_ground_active(game):
-        _ORIGINAL_DRAW_WORLD_MAP_IMPL(game)
+    if not _grid_map_authority_available(game):
+        game.screen.fill((12, 12, 14))
+        message = game.big_font.render("GRID MAP UNAVAILABLE", True, game_client.TEXT_COLOR)
+        game.screen.blit(message, message.get_rect(center=game.screen.get_rect().center))
         return
 
     sw, sh = game.screen.get_size()
@@ -247,8 +216,7 @@ def _minimap_tile_color(game: game_client.Game, tile) -> tuple[int, int, int]:
 
 def _draw_grid_local_minimap(game: game_client.Game) -> None:
     """Circular minimap whose geometry comes only from GridWorld cells."""
-    if not _grid_ground_active(game):
-        _ORIGINAL_DRAW_MINIMAP(game)
+    if not _grid_map_authority_available(game):
         return
     local = game.players.get(game.local_id or "")
     if local is None:
@@ -328,8 +296,10 @@ def _draw_grid_local_minimap(game: game_client.Game) -> None:
     north = game.small_font.render("N", True, game_client.TEXT_COLOR)
     game.screen.blit(north, (18 + radius - north.get_width() // 2, game.screen.get_height() - diameter - 53))
 
-    # The only legacy map data retained here is the nearest human-readable name.
-    name, _kind = game._nearest_named_map_feature(local)
+    # Until names have explicit GridWorld-owned anchors, identify the current
+    # authoritative cell. No legacy landmark/district coordinates are read.
+    cell_x, cell_y = world.world_to_cell(local.render_x, local.render_y)
+    name = f"OPEN NIGHT — GRID {cell_x:02d},{cell_y:02d}"
     label_s = game.small_font.render(str(name).upper()[:28], True, game_client.TEXT_COLOR)
     box = pygame.Rect(18, game.screen.get_height() - 52, max(194, label_s.get_width() + 28), 38)
     pygame.draw.rect(game.screen, tuple(ui.get("panel", (28, 31, 31))), box, border_radius=3)
