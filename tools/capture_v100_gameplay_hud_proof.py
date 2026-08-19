@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import sys
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import pygame
+import v100_runtime_refinement
+v100_runtime_refinement.install()
+import v100_client
+
+OUT = ROOT / "assets" / "grid_v100" / "GAMEPLAY_HUD_RUNTIME_PROOF_1280x720.png"
+OVERVIEW = ROOT / "assets" / "grid_v100" / "GROUND_REFINED_RUNTIME_OVERVIEW_2560x1440.png"
+AUDIT = ROOT / "assets" / "grid_v100" / "GAMEPLAY_HUD_RUNTIME_AUDIT.json"
+
+
+def main() -> None:
+    game_client = v100_client.game_client
+    game_client.NetworkClient.start = lambda self: None
+    v100_client.install_v100_client()
+    game = game_client.Game("ws://runtime-proof.invalid:8765", "5550000100", "RuntimeProof")
+    if game.grid_world is None or game.grid_renderer is None:
+        raise RuntimeError("canonical v1.0 client did not initialize GridWorld")
+
+    fires = [item for item in game.grid_world.objects if str(item.get("asset")) == "placeholder_fire_escape"]
+    lamps = [item for item in game.grid_world.objects if item.get("lighting_kind") == "sidewalk_lamp"]
+    if not fires or not lamps:
+        raise RuntimeError("HUD proof requires exterior fire escapes and synchronized streetlamps")
+
+    def cell_distance(a: dict, b: dict) -> int:
+        return abs(int(a["gx"]) - int(b["gx"])) + abs(int(a["gy"]) - int(b["gy"]))
+
+    target_fire = min(fires, key=lambda fire: min(cell_distance(fire, lamp) for lamp in lamps))
+    target_lamp = min(lamps, key=lambda lamp: cell_distance(target_fire, lamp))
+    target_x, target_y = game.grid_world.cell_center(int(target_fire["gx"]), int(target_fire["gy"]))
+    x, y = game.grid_world.nearest_walkable("ground", target_x, target_y, game_client.PLAYER_RADIUS)
+    local = game_client.RemotePlayer({
+        "id": "runtime-proof-local", "name": "RuntimeProof",
+        "x": x, "y": y, "aim": -1.5707963267948966,
+        "cash": 420, "packages": 2, "level": 0, "pose": "idle", "appearance": None,
+    })
+    game.local_id = local.id
+    game.players = {local.id: local}
+    game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
+    game.notice = "v1.0 runtime proof — HUD, minimap, player and GridWorld"
+    game.notice_until = 10**12
+
+    game.draw_world()
+    game.draw_player(local, True)
+    game.draw_player_nameplates()
+    game.draw_job_location_labels()
+    game.draw_hud()
+    game.draw_local_minimap()
+    zoom = game.tiny_font.render(f"ZOOM {game.camera_zoom:.2f}x", True, game_client.MUTED_TEXT)
+    game.screen.blit(zoom, (game.screen.get_width() - zoom.get_width() - 18, 48))
+    rotation = game.tiny_font.render(
+        f"ROT {game.camera_rotation_degrees % 360:05.1f}°", True, game_client.MUTED_TEXT
+    )
+    game.screen.blit(rotation, (game.screen.get_width() - rotation.get_width() - 18, 64))
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(game.screen, OUT)
+
+    overview = pygame.Surface((2560, 1440)).convert()
+    game.grid_renderer.draw_overview(overview, "ground")
+    pygame.image.save(overview, OVERVIEW)
+
+    refinement = dict(game.grid_world.data.get("runtime_refinement") or {})
+    audit = {
+        "proof": "canonical_v100_gameplay_hud",
+        "screen_px": list(game.screen.get_size()),
+        "grid_cell": list(game.grid_world.world_to_cell(x, y)),
+        "proof_target": {
+            "building_id": str(target_fire.get("building_id", "")),
+            "fire_escape_cell": [int(target_fire["gx"]), int(target_fire["gy"])],
+            "lamp_id": str(target_lamp.get("lighting_id", "")),
+            "lamp_cell": [int(target_lamp["gx"]), int(target_lamp["gy"])],
+            "fire_to_lamp_cell_distance": cell_distance(target_fire, target_lamp),
+        },
+        "hud_calls": ["Game.draw_hud", "Game.draw_local_minimap", "Game.draw_player", "Game.draw_player_nameplates"],
+        "grid_authority": True,
+        "runtime_refinement": refinement,
+    }
+    if refinement.get("centered_building_count") != 8:
+        raise RuntimeError(f"building-centering runtime audit failed: {refinement}")
+    if refinement.get("fire_escape_outside_collision_count") != 25:
+        raise RuntimeError(f"fire-escape runtime audit failed: {refinement}")
+    if refinement.get("street_lamp_asset_sync_count", 0) < 40:
+        raise RuntimeError(f"streetlamp runtime audit failed: {refinement}")
+    AUDIT.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(audit, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

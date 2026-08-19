@@ -10,12 +10,16 @@ existing character customization feature is preserved.
 
 import asyncio
 
+import v100_runtime_refinement
+v100_runtime_refinement.install()
+
 import grid_client_entry  # noqa: F401 - installs the v1.0 GridWorld cutover
 import client as game_client
 import portrait_head_client
 
 
 def install_v100_client() -> None:
+    v100_runtime_refinement.install()
     portrait_head_client._install()
 
 
