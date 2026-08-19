@@ -57,6 +57,12 @@ ROAD_WEAR_SPECS = (
 AWNING_ASSETS = (
     "roof_awning_blue", "roof_awning_green", "roof_awning_red", "roof_awning_yellow",
 )
+ROOF_EDGE_MASS_SPECS = (
+    ("rooflayer_duct_02", 76, 200),
+    ("rooflayer_pipe_work_01", 44, 200),
+    ("rooflayer_pipe_work_03", 148, 160),
+    ("rooflayer_window", 117, 160),
+)
 
 
 def _write_ppm(path: Path, width: int, height: int, pixel_fn) -> None:
@@ -437,6 +443,105 @@ def _street_lighting_objects(rows: list[list[str]], reserved_objects: list[dict]
     return objects
 
 
+def _stable_silhouette_rank(kind: str, building_id: str, edge: str, gx: int, gy: int) -> bytes:
+    key = f"open-night-building-silhouette-v1|{kind}|{building_id}|{edge}|{gx}|{gy}"
+    return hashlib.sha256(key.encode("ascii")).digest()
+
+
+def _building_silhouette_objects(
+    rows: list[list[str]], buildings: list[dict], ground_objects: list[dict], roof_objects: list[dict]
+) -> tuple[list[dict], list[dict]]:
+    """Add collision-neutral facade rhythm and Roof edge relief."""
+    h, w = len(rows), len(rows[0])
+    existing_awnings = {
+        str(obj.get("building_id")) for obj in ground_objects
+        if obj.get("density_kind") == "street_edge_awning"
+    }
+    reserved_ground = {
+        (str(obj.get("building_id")), int(obj["gx"]), int(obj["gy"]))
+        for obj in ground_objects if obj.get("building_id")
+    }
+    reserved_roof = {
+        (str(obj.get("building_id")), int(obj["gx"]), int(obj["gy"]))
+        for obj in roof_objects if obj.get("building_id")
+    }
+    edge_vectors = {
+        "north": (0, -1), "east": (1, 0), "south": (0, 1), "west": (-1, 0),
+    }
+    ground_added: list[dict] = []
+    roof_added: list[dict] = []
+
+    for index, building in enumerate(buildings):
+        building_id = str(building["building_id"])
+        x0, y0, x1, y1 = map(int, building["rect"])
+        perimeter: list[tuple[str, int, int]] = []
+        perimeter.extend(("north", x, y0) for x in range(x0 + 1, x1))
+        perimeter.extend(("south", x, y1) for x in range(x0 + 1, x1))
+        perimeter.extend(("west", x0, y) for y in range(y0 + 1, y1))
+        perimeter.extend(("east", x1, y) for y in range(y0 + 1, y1))
+
+        roof_candidates = [
+            item for item in perimeter
+            if (building_id, item[1], item[2]) not in reserved_roof
+        ]
+        roof_candidates.sort(key=lambda item: _stable_silhouette_rank("roof-edge", building_id, *item))
+        if not roof_candidates:
+            raise RuntimeError(f"building silhouette has no Roof edge candidate for {building_id}")
+        edge, gx, gy = roof_candidates[0]
+        asset, natural_w, natural_h = ROOF_EDGE_MASS_SPECS[index % len(ROOF_EDGE_MASS_SPECS)]
+        rotation = {"north": 90, "east": 0, "south": 270, "west": 180}[edge]
+        final_w, final_h = (natural_h, natural_w) if rotation in {90, 270} else (natural_w, natural_h)
+        roof_added.append({
+            "asset": asset, "gx": gx, "gy": gy,
+            "offset_x_px": (256 - final_w) // 2, "offset_y_px": (256 - final_h) // 2,
+            "width_px": natural_w, "height_px": natural_h, "rotation": rotation,
+            "building_id": building_id, "edge": edge,
+            "composition_pass": "building_silhouette_v1", "silhouette_kind": "roof_edge_mass",
+            "decorative_only": True,
+        })
+
+        if building_id in existing_awnings:
+            continue
+        facade_candidates: list[tuple[str, int, int]] = []
+        for candidate_edge, candidate_x, candidate_y in perimeter:
+            dx, dy = edge_vectors[candidate_edge]
+            outside_x, outside_y = candidate_x + dx, candidate_y + dy
+            if not (0 <= outside_x < w and 0 <= outside_y < h):
+                continue
+            outside = rows[outside_y][outside_x]
+            if not (outside.startswith("pavement") or outside.startswith("curb_")):
+                continue
+            if (building_id, candidate_x, candidate_y) in reserved_ground:
+                continue
+            facade_candidates.append((candidate_edge, candidate_x, candidate_y))
+        facade_candidates.sort(key=lambda item: _stable_silhouette_rank("facade", building_id, *item))
+        if not facade_candidates:
+            raise RuntimeError(f"building silhouette has no walkable facade candidate for {building_id}")
+        edge, gx, gy = facade_candidates[0]
+        rotation = {"north": 180, "east": 270, "south": 0, "west": 90}[edge]
+        offset_x, offset_y = {
+            "north": (16, 8), "east": (159, 16), "south": (16, 159), "west": (8, 16),
+        }[edge]
+        ground_added.append({
+            "asset": AWNING_ASSETS[len(ground_added) % len(AWNING_ASSETS)],
+            "gx": gx, "gy": gy, "offset_x_px": offset_x, "offset_y_px": offset_y,
+            "width_px": 224, "height_px": 89, "rotation": rotation,
+            "building_id": building_id, "edge": edge,
+            "composition_pass": "building_silhouette_v1", "silhouette_kind": "facade_break",
+            "decorative_only": True,
+        })
+
+    if len(roof_added) != len(buildings):
+        raise RuntimeError("building silhouette audit expected one Roof edge mass per building")
+    if len(ground_added) != len(buildings) - len(existing_awnings):
+        raise RuntimeError("building silhouette audit expected one facade break on every untreated building")
+    if len({obj["building_id"] for obj in roof_added}) != len(buildings):
+        raise RuntimeError("building silhouette audit duplicated a Roof building")
+    if any(max(int(obj["width_px"]), int(obj["height_px"])) > 200 for obj in roof_added):
+        raise RuntimeError("building silhouette Roof mass escaped its one-cell containment contract")
+    return ground_added, roof_added
+
+
 def _ground_density_objects(
     rows: list[list[str]], buildings: list[dict], street_objects: list[dict]
 ) -> list[dict]:
@@ -695,6 +800,15 @@ def generate_layers() -> tuple[int, int]:
                 "deterministic_roof_detail": True,
             })
 
+    silhouette_ground, silhouette_roof = _building_silhouette_objects(
+        ground, buildings, ground_objects, roof_objects
+    )
+    silhouette_repeat = _building_silhouette_objects(ground, buildings, ground_objects, roof_objects)
+    if json.dumps((silhouette_ground, silhouette_roof), sort_keys=True) != json.dumps(silhouette_repeat, sort_keys=True):
+        raise RuntimeError("building silhouette audit is not deterministic across repeated generation")
+    ground_objects.extend(silhouette_ground)
+    roof_objects.extend(silhouette_roof)
+
     roads = _road_cells(ground)
     if roads:
         for index in range(4):
@@ -706,7 +820,7 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v6",
+        "format": "open-night-ground-generated-v7",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
         "street_markings": "zebra_crossings_and_dashed_center_lines",
@@ -725,6 +839,13 @@ def generate_layers() -> tuple[int, int]:
             "eligible_curb_segment_min_cells": STREET_LAMP_MIN_SEGMENT,
             "geometry_sha256_before": geometry_before_density,
             "geometry_sha256_after": geometry_after_density,
+        },
+        "building_silhouette": {
+            "composition_pass": "building_silhouette_v1",
+            "geometry_policy": "collision_neutral_overlay",
+            "facade_break_count": len(silhouette_ground),
+            "roof_edge_mass_count": len(silhouette_roof),
+            "ground_geometry_sha256": geometry_after_density,
         },
         "roof_registration": "exact_ground_footprint",
         "orientation_reference": "assets/source_packs/city_block/example.png",
@@ -748,6 +869,11 @@ def generate_layers() -> tuple[int, int]:
             "minimum_side_cells": MIN_BUILDING_SIDE,
             "minimum_area_cells": MIN_BUILDING_AREA,
         },
+        "building_silhouette": {
+            "composition_pass": "building_silhouette_v1",
+            "geometry_policy": "collision_neutral_overlay",
+            "roof_edge_mass_count": len(silhouette_roof),
+        },
         "layers": {"roof": roof_rows},
         "objects": roof_objects,
         "login_spawns": [],
@@ -766,6 +892,7 @@ def main() -> None:
         "street_markings=zebra+dashed", "orientation=filename_semantics_no_rotation",
         f"density_v2={ROAD_WEAR_TARGET}road+{CURB_DETAIL_TARGET}curb+{STREET_EDGE_AWNING_TARGET}awnings",
         "lighting=one-lamp-per-usable-curb-segment,same-record-emitter",
+        f"silhouette_v1={buildings - STREET_EDGE_AWNING_TARGET}facade+{buildings}roof-edge",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 

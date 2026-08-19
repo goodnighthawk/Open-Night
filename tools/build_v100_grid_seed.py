@@ -140,6 +140,41 @@ def main() -> None:
     if {obj.get("road_direction") for obj in lamps} != {"north", "east", "south", "west"}:
         raise SystemExit("street lighting v1 does not cover all four road orientations")
 
+    silhouette = [obj for obj in world.objects if obj.get("composition_pass") == "building_silhouette_v1"]
+    facade_breaks = [obj for obj in silhouette if obj.get("silhouette_kind") == "facade_break"]
+    roof_masses = [obj for obj in silhouette if obj.get("silhouette_kind") == "roof_edge_mass"]
+    if (len(facade_breaks), len(roof_masses)) != (7, 25):
+        raise SystemExit(
+            f"building silhouette v1 count mismatch: facade={len(facade_breaks)} roof={len(roof_masses)}"
+        )
+    rect_by_id = {str(building["building_id"]): list(map(int, building["rect"])) for building in buildings}
+    if {str(obj.get("building_id")) for obj in roof_masses} != set(rect_by_id):
+        raise SystemExit("building silhouette v1 does not cover every Roof footprint exactly once")
+    roof_assets = {str(obj.get("asset")) for obj in roof_masses}
+    if len(roof_assets) != 4:
+        raise SystemExit(f"building silhouette v1 did not exercise four Roof masses: {sorted(roof_assets)}")
+    for obj in silhouette:
+        building_id = str(obj.get("building_id"))
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        x0, y0, x1, y1 = rect_by_id[building_id]
+        if not (x0 <= gx <= x1 and y0 <= gy <= y1):
+            raise SystemExit(f"building silhouette escaped footprint {building_id} at {(gx, gy)}")
+        if not world.tile_id("ground", gx, gy).startswith("bld_"):
+            raise SystemExit(f"building silhouette lost building-cell authority at {(gx, gy)}")
+        if not obj.get("decorative_only"):
+            raise SystemExit(f"building silhouette is not explicitly collision-neutral: {building_id}")
+        if any(key in obj for key in ("collision", "future_transition", "emits_light")):
+            raise SystemExit(f"building silhouette improperly carries gameplay authority: {building_id}")
+    edge_vectors = {"north": (0, -1), "east": (1, 0), "south": (0, 1), "west": (-1, 0)}
+    for obj in facade_breaks:
+        gx, gy = int(obj["gx"]), int(obj["gy"])
+        dx, dy = edge_vectors[str(obj["edge"])]
+        outside = world.tile_id("ground", gx + dx, gy + dy)
+        if not world.catalog[outside].walkable:
+            raise SystemExit(f"facade break has no walkable frontage at {(gx, gy)}")
+    if any(max(int(obj["width_px"]), int(obj["height_px"])) > 200 for obj in roof_masses):
+        raise SystemExit("Roof edge mass exceeds one-cell containment budget")
+
     spawn = world.choose_spawn("ground", 18.0)
     print(
         "V100_GRID_MAP_OK",
@@ -149,6 +184,7 @@ def main() -> None:
         f"objects={len(world.objects)}",
         f"density_v2={len(road_wear)}road+{len(curb_details)}curb+{len(awnings)}awnings",
         f"street_lighting_v1={len(lamps)}same-record-lamps",
+        f"silhouette_v1={len(facade_breaks)}facade+{len(roof_masses)}roof-edge",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

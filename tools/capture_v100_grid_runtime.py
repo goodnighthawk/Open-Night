@@ -28,6 +28,7 @@ ROOF_FULL_OUT = ROOT / "assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.p
 NIGHT_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json"
 LIGHTING_PROOF_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png"
 LIGHTING_AUDIT_OUT = ROOT / "assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json"
+SILHOUETTE_AUDIT_OUT = ROOT / "assets/grid_v100/BUILDING_SILHOUETTE_RUNTIME_AUDIT.json"
 W, H = 2560, 1440
 REVIEW_ZOOM = 0.5  # 50% review zoom: show twice the gameplay-world width/height.
 GROUND_NIGHT_MEAN_RANGE = (0.08, 0.25)
@@ -208,6 +209,16 @@ def main() -> None:
         sx, sy = ground.choose_spawn("ground", 18.0)
         ground_luminance = save_detail(ground_renderer, ground, "ground", sx, sy, GROUND_DETAIL_OUT)
         lighting_audit = save_lighting_proof(ground_renderer, ground, (sx, sy))
+        silhouette = [obj for obj in ground.objects if obj.get("composition_pass") == "building_silhouette_v1"]
+        facade_breaks = [obj for obj in silhouette if obj.get("silhouette_kind") == "facade_break"]
+        roof_masses = [obj for obj in silhouette if obj.get("silhouette_kind") == "roof_edge_mass"]
+        if (len(facade_breaks), len(roof_masses)) != (7, 25):
+            raise SystemExit(
+                f"runtime silhouette proof expected 7 facade + 25 Roof objects, got "
+                f"{len(facade_breaks)} + {len(roof_masses)}"
+            )
+        if len({obj["asset"] for obj in roof_masses}) != 4:
+            raise SystemExit("runtime silhouette proof did not exercise all four Roof edge profiles")
         ground_tile_px, ground_ox, ground_oy = save_overview(ground_renderer, "ground", GROUND_FULL_OUT)
         geometry_hash_after = gameplay_geometry_hash(ground)
         if geometry_hash_after != geometry_hash_before:
@@ -264,6 +275,18 @@ def main() -> None:
             "gameplay_geometry_sha256_after": geometry_hash_after,
             "gameplay_geometry_unchanged": True,
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        SILHOUETTE_AUDIT_OUT.write_text(json.dumps({
+            "authority": "GridWorld collision-neutral building object overlays",
+            "composition_pass": "building_silhouette_v1",
+            "facade_break_count": len(facade_breaks),
+            "roof_edge_mass_count": len(roof_masses),
+            "roof_edge_asset_families": sorted({str(obj["asset"]) for obj in roof_masses}),
+            "roof_buildings_covered": len({str(obj["building_id"]) for obj in roof_masses}),
+            "gameplay_geometry_sha256_before": geometry_hash_before,
+            "gameplay_geometry_sha256_after": geometry_hash_after,
+            "gameplay_geometry_unchanged": True,
+            "roof_registration": "exact_ground_building_footprint",
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
         print(
             "V100_GROUND_ROOF_RUNTIME_PROOF_OK "
@@ -275,6 +298,7 @@ def main() -> None:
             f"ground_night_spread={ground_luminance['p95_minus_p05']:.4f} "
             f"geometry_sha256={geometry_hash_after[:12]} "
             f"street_lamps={lighting_audit['lamp_count']} aligned_delta_px=0 "
+            f"silhouette={len(facade_breaks)}facade+{len(roof_masses)}roof-edge "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:
