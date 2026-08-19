@@ -14,23 +14,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from grid_runtime import GRID_MAP_PATH, load_ground_grid
+from building_morphology import footprint_for, role_for_cell
 
 
-def expected_rect_tile(theme: str, x: int, y: int, rect: list[int]) -> str:
-    x0, y0, x1, y1 = map(int, rect)
-    if x0 == x1 or y0 == y1:
-        role = "fill"
-    elif y == y0:
-        role = "top_left_outer" if x == x0 else "top_right_outer" if x == x1 else "top_center"
-    elif y == y1:
-        role = "bottom_left_outer" if x == x0 else "bottom_right_outer" if x == x1 else "bottom_center"
-    elif x == x0:
-        role = "left"
-    elif x == x1:
-        role = "right"
-    else:
-        role = "fill"
-    return f"bld_{theme}_{role}"
+def expected_footprint_tile(theme: str, x: int, y: int, cells: set[tuple[int, int]]) -> str:
+    return f"bld_{theme}_{role_for_cell(x, y, cells)}"
 
 
 def main() -> None:
@@ -44,8 +32,8 @@ def main() -> None:
         1 for row in world.layers.get("ground", []) for tile_id in row
         if tile_id.startswith("bld_")
     )
-    if building_cells < 250:
-        raise SystemExit(f"playable map has too few authored building cells: {building_cells}")
+    if building_cells != 1029:
+        raise SystemExit(f"building morphology v1 expected 1029 blocked building cells, got {building_cells}")
 
     synth = world.data.get("building_synthesis") or {}
     if synth.get("orientation_authority") != "filename_semantics":
@@ -56,19 +44,66 @@ def main() -> None:
     if len(buildings) < 20:
         raise SystemExit(f"too few deterministic modular buildings: {len(buildings)}")
 
+    notched = [building for building in buildings if building.get("footprint_type") == "corner_notched"]
+    if len(notched) != 10:
+        raise SystemExit(f"building morphology v1 expected 10 notched buildings, got {len(notched)}")
+    corner_counts = {
+        corner: sum((building.get("notch") or {}).get("corner") == corner for building in notched)
+        for corner in ("top_left", "top_right", "bottom_right", "bottom_left")
+    }
+    if corner_counts != {"top_left": 3, "top_right": 3, "bottom_right": 2, "bottom_left": 2}:
+        raise SystemExit(f"building morphology v1 corner distribution mismatch: {corner_counts}")
+
+    footprint_by_id: dict[str, set[tuple[int, int]]] = {}
     for building in buildings:
         theme = str(building["theme"])
         rect = list(building["rect"])
         x0, y0, x1, y1 = map(int, rect)
+        cells = footprint_for((x0, y0, x1, y1), building.get("notch"))
+        footprint_by_id[str(building["building_id"])] = cells
+        if len(cells) != int(building["generated_cells"]):
+            raise SystemExit(f"building morphology metadata count mismatch: {building['building_id']}")
+        pending = {next(iter(cells))}
+        reached = set()
+        while pending:
+            cell = pending.pop()
+            if cell in reached:
+                continue
+            reached.add(cell)
+            x, y = cell
+            pending.update(n for n in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)) if n in cells and n not in reached)
+        if reached != cells:
+            raise SystemExit(f"building morphology disconnected footprint: {building['building_id']}")
+        envelope = {(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)}
+        carved = envelope - cells
+        expected_carved = 4 if building.get("notch") else 0
+        if len(carved) != expected_carved:
+            raise SystemExit(f"building morphology carve size mismatch: {building['building_id']}")
+        if carved and not any(
+            0 <= x + dx < world.width and 0 <= y + dy < world.height
+            and (x + dx, y + dy) not in envelope
+            and world.catalog[world.tile_id("ground", x + dx, y + dy)].walkable
+            for x, y in carved for dx, dy in ((0,-1),(1,0),(0,1),(-1,0))
+        ):
+            raise SystemExit(f"building morphology notch is not exterior-connected: {building['building_id']}")
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
-                expected = expected_rect_tile(theme, x, y, rect)
                 actual = world.tile_id("ground", x, y)
-                if actual != expected:
+                if (x, y) not in cells:
+                    if actual != "pavement_small" or world.tile_id("roof", x, y) != "void":
+                        raise SystemExit(f"notch cell is not open pavement/void at {(x, y)}")
+                    continue
+                expected = expected_footprint_tile(theme, x, y, cells)
+                if actual != expected or world.tile_id("roof", x, y) != expected:
                     raise SystemExit(
                         f"modular seam/orientation mismatch building={building.get('building_id')} "
-                        f"cell={(x, y)} expected={expected} actual={actual}"
+                        f"cell={(x, y)} expected={expected} ground={actual} roof={world.tile_id('roof', x, y)}"
                     )
+    inner_tiles = [
+        tile_id for row in world.layers["ground"] for tile_id in row if tile_id.endswith("_inner")
+    ]
+    if len(inner_tiles) != len(notched):
+        raise SystemExit(f"building morphology expected one inner corner per notch, got {len(inner_tiles)}")
 
     premade_overlays = [
         obj for obj in world.objects
@@ -76,6 +111,10 @@ def main() -> None:
     ]
     if premade_overlays:
         raise SystemExit(f"premade building overlays must be disabled: {len(premade_overlays)} found")
+    for obj in world.objects:
+        building_id = str(obj.get("building_id", ""))
+        if building_id and (int(obj["gx"]), int(obj["gy"])) not in footprint_by_id[building_id]:
+            raise SystemExit(f"building-owned object escaped morphology footprint: {building_id} {obj.get('asset')}")
 
     # The old >=150-object count was tied to the rejected premade overlay pass.
     # Keep only a modest density sanity gate for street/roof/transition detail.
@@ -226,12 +265,12 @@ def main() -> None:
         final_w, final_h = (442, 308) if rotation == 90 else (308, 442)
         left = gx * world.cell_px + int(obj["offset_x_px"])
         top = gy * world.cell_px + int(obj["offset_y_px"])
-        if not (
-            x0 * world.cell_px <= left
-            and top >= y0 * world.cell_px
-            and left + final_w <= (x1 + 1) * world.cell_px
-            and top + final_h <= (y1 + 1) * world.cell_px
-        ):
+        covered = {
+            (x, y)
+            for y in range(top // world.cell_px, (top + final_h - 1) // world.cell_px + 1)
+            for x in range(left // world.cell_px, (left + final_w - 1) // world.cell_px + 1)
+        }
+        if not covered <= footprint_by_id[building_id]:
             raise SystemExit(f"roof surface v1 escaped its collision footprint: {building_id}")
         if not obj.get("decorative_only") or any(
             key in obj for key in ("collision", "future_transition", "emits_light")
@@ -250,6 +289,7 @@ def main() -> None:
         f"silhouette_v1={len(facade_breaks)}facade+{len(roof_masses)}roof-edge",
         f"roof_palette_v1={len(roof_palette)}details+15families+4archetypes",
         f"roof_surface_v1={len(surface_effects)}native-effects",
+        f"morphology_v1={len(notched)}notched/40open-cells",
         "orientation=filename_semantics_no_rotation",
         f"spawn={spawn}",
         f"map={GRID_MAP_PATH}",

@@ -5,7 +5,7 @@ Current production scope is Ground + Roof only.
 
 Building rules:
 - existing building components define buildable envelopes;
-- each component is reduced deterministically to its largest filled rectangle;
+- stable component envelopes receive deterministic single-corner notches;
 - city_block modular tiles are selected only from filename semantics;
 - modular building tiles are never rotated or stretched;
 - Roof copies the exact generated Ground building footprint cell-for-cell;
@@ -19,8 +19,18 @@ from collections import deque
 import hashlib
 import json
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from building_morphology import (
+    NOTCH_CORNERS, NOTCH_DEPTH_CELLS, assign_notches,
+    footprint_for as _footprint_for, role_for_cell as _role_for_footprint_cell,
+    transition_anchors,
+)
+
 MAP_DIR = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100"
 GROUND_PATH = MAP_DIR / "ground_grid.json"
 GROUND_GENERATED = MAP_DIR / "ground_generated_objects.json"
@@ -205,13 +215,11 @@ def _tile_for(theme: str, role: str) -> str:
     return f"bld_{theme}_{role}"
 
 
-def _audit_rect(rows: list[list[str]], rect: tuple[int, int, int, int], theme: str) -> None:
-    x0, y0, x1, y1 = rect
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            expected = _tile_for(theme, _role_for_rect_cell(x, y, rect))
-            if rows[y][x] != expected:
-                raise RuntimeError(f"building seam/orientation audit failed at {(x, y)}")
+def _audit_footprint(rows: list[list[str]], cells: set[tuple[int, int]], theme: str) -> None:
+    for x, y in cells:
+        expected = _tile_for(theme, _role_for_footprint_cell(x, y, cells))
+        if rows[y][x] != expected:
+            raise RuntimeError(f"building seam/orientation audit failed at {(x, y)}")
 
 
 def _road_cells(rows: list[list[str]]) -> list[tuple[int, int]]:
@@ -330,7 +338,10 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
     return objects
 
 
-def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> list[tuple[int, int]]:
+def _detail_cells(
+    rect: tuple[int, int, int, int], center: tuple[int, int],
+    valid_cells: set[tuple[int, int]] | None = None,
+) -> list[tuple[int, int]]:
     x0, y0, x1, y1 = rect
     cx, cy = center
     candidates = [
@@ -341,8 +352,15 @@ def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> l
     ]
     out = []
     for x, y in candidates:
-        if x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out:
+        if (x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out
+                and (valid_cells is None or (x, y) in valid_cells)):
             out.append((x, y))
+    if valid_cells is not None:
+        extras = sorted(
+            (x, y) for x, y in valid_cells
+            if x0 < x < x1 and y0 < y < y1 and (x, y) != center and (x, y) not in out
+        )
+        out.extend(extras)
     return out
 
 
@@ -400,10 +418,26 @@ def _roof_surface_effect_objects(
         for building in themed[:quota]:
             building_id = str(building["building_id"])
             x0, y0, x1, y1 = map(int, building["rect"])
+            footprint = _footprint_for((x0, y0, x1, y1), building.get("notch"))
+            digest = hashlib.sha256(
+                f"open-night-roof-surface-v1|rotation|{building_id}".encode("ascii")
+            ).digest()
+            rotation = 90 if digest[0] & 1 else 0
+            final_w, final_h = (442, 308) if rotation == 90 else (308, 442)
+            offset_x, offset_y = (256 - final_w) // 2, (256 - final_h) // 2
+            def contained(gx: int, gy: int) -> bool:
+                left, top = gx * 256 + offset_x, gy * 256 + offset_y
+                covered = {
+                    (x, y)
+                    for y in range(top // 256, (top + final_h - 1) // 256 + 1)
+                    for x in range(left // 256, (left + final_w - 1) // 256 + 1)
+                }
+                return covered <= footprint
             candidates = [
                 (gx, gy) for gy in range(y0 + 1, y1) for gx in range(x0 + 1, x1)
                 if rows[gy][gx] == f"bld_{theme}_fill"
                 and (building_id, gx, gy) not in reserved
+                and contained(gx, gy)
             ]
             candidates.sort(key=lambda cell: hashlib.sha256(
                 f"open-night-roof-surface-v1|cell|{building_id}|{cell[0]}|{cell[1]}".encode("ascii")
@@ -411,14 +445,9 @@ def _roof_surface_effect_objects(
             if not candidates:
                 raise RuntimeError(f"roof surface effect has no unreserved interior cell for {building_id}")
             gx, gy = candidates[0]
-            digest = hashlib.sha256(
-                f"open-night-roof-surface-v1|rotation|{building_id}".encode("ascii")
-            ).digest()
-            rotation = 90 if digest[0] & 1 else 0
-            final_w, final_h = (442, 308) if rotation == 90 else (308, 442)
             chosen.append({
                 "asset": f"rooflayer_effect_{theme}", "gx": gx, "gy": gy,
-                "offset_x_px": (256 - final_w) // 2, "offset_y_px": (256 - final_h) // 2,
+                "offset_x_px": offset_x, "offset_y_px": offset_y,
                 "width_px": 308, "height_px": 442, "rotation": rotation,
                 "building_id": building_id, "roof_theme": theme,
                 "composition_pass": "roof_surface_v1", "surface_kind": "theme_seam_overlay",
@@ -565,15 +594,18 @@ def _building_silhouette_objects(
     for index, building in enumerate(buildings):
         building_id = str(building["building_id"])
         x0, y0, x1, y1 = map(int, building["rect"])
-        perimeter: list[tuple[str, int, int]] = []
-        perimeter.extend(("north", x, y0) for x in range(x0 + 1, x1))
-        perimeter.extend(("south", x, y1) for x in range(x0 + 1, x1))
-        perimeter.extend(("west", x0, y) for y in range(y0 + 1, y1))
-        perimeter.extend(("east", x1, y) for y in range(y0 + 1, y1))
+        footprint = _footprint_for((x0, y0, x1, y1), building.get("notch"))
+        perimeter: list[tuple[str, int, int]] = [
+            (edge, gx, gy)
+            for gx, gy in sorted(footprint, key=lambda cell: (cell[1], cell[0]))
+            for edge, (dx, dy) in edge_vectors.items()
+            if (gx + dx, gy + dy) not in footprint
+        ]
 
         roof_candidates = [
             item for item in perimeter
             if (building_id, item[1], item[2]) not in reserved_roof
+            and rows[item[2]][item[1]].startswith("bld_")
         ]
         roof_candidates.sort(key=lambda item: _stable_silhouette_rank("roof-edge", building_id, *item))
         if not roof_candidates:
@@ -595,6 +627,8 @@ def _building_silhouette_objects(
             continue
         facade_candidates: list[tuple[str, int, int]] = []
         for candidate_edge, candidate_x, candidate_y in perimeter:
+            if not rows[candidate_y][candidate_x].startswith("bld_"):
+                continue
             dx, dy = edge_vectors[candidate_edge]
             outside_x, outside_y = candidate_x + dx, candidate_y + dy
             if not (0 <= outside_x < w and 0 <= outside_y < h):
@@ -721,13 +755,17 @@ def _ground_density_objects(
     frontage_candidates: list[tuple[bytes, dict, int]] = []
     for building in buildings:
         x0, y0, x1, y1 = map(int, building["rect"])
+        rect = (x0, y0, x1, y1)
         cx = (x0 + x1) // 2
         if y1 + 1 >= h:
             continue
         frontage = rows[y1 + 1][cx]
         if not (frontage.startswith("pavement") or frontage.startswith("curb_")):
             continue
-        edge_cells = [x for x in range(x0 + 1, x1) if x != cx]
+        edge_cells = [
+            x for x in range(x0 + 1, x1)
+            if x != cx and rows[y1][x].startswith("bld_")
+        ]
         if not edge_cells:
             continue
         edge_cells.sort(key=lambda x: _stable_density_rank("awning-cell", x, y1))
@@ -766,7 +804,11 @@ def _ground_density_objects(
 
 
 def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[str]], list[dict]]:
-    groups = _building_components(original)
+    prior_buildings = list((data.get("building_synthesis") or {}).get("buildings") or [])
+    if prior_buildings:
+        envelopes = [tuple(map(int, building["rect"])) for building in prior_buildings]
+    else:
+        envelopes = [_largest_axis_aligned_rect(group) for group in _building_components(original)]
     rows = [list(row) for row in original]
     for y, row in enumerate(rows):
         for x, tile_id in enumerate(row):
@@ -775,8 +817,8 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
 
     buildings = []
     rejected = []
-    for legacy_index, group in enumerate(groups, 1):
-        rect = _largest_axis_aligned_rect(group)
+    accepted: list[tuple[int, tuple[int, int, int, int], int]] = []
+    for legacy_index, rect in enumerate(envelopes, 1):
         x0, y0, x1, y1 = rect
         bw, bh = x1 - x0 + 1, y1 - y0 + 1
         area = bw * bh
@@ -784,29 +826,42 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
             rejected.append({"legacy_index": legacy_index, "rect": [x0, y0, x1, y1], "area": area})
             continue
 
+        accepted.append((legacy_index, rect, area))
+
+    for _legacy_index, rect, area in accepted:
+        x0, y0, x1, y1 = rect
         index = len(buildings) + 1
         theme = _theme_for_rect(index, rect)
-        for y in range(y0, y1 + 1):
-            for x in range(x0, x1 + 1):
-                rows[y][x] = _tile_for(theme, _role_for_rect_cell(x, y, rect))
-        _audit_rect(rows, rect, theme)
         buildings.append({
-            "building_id": f"grid_building_{index:02d}",
-            "footprint_type": "rectangle",
-            "theme": theme,
-            "rect": [x0, y0, x1, y1],
-            "generated_cells": area,
-            "legacy_component_cells": len(group),
+            "building_id": f"grid_building_{index:02d}", "footprint_type": "rectangle",
+            "theme": theme, "rect": [x0, y0, x1, y1], "notch": None,
+            "generated_cells": area, "envelope_cells": area,
             "orientation_policy": "filename_semantics_no_rotation",
         })
+    assign_notches(buildings, THEMES)
+
+    for building in buildings:
+        x0, y0, x1, y1 = map(int, building["rect"])
+        rect = (x0, y0, x1, y1)
+        theme = str(building["theme"])
+        notch = building.get("notch")
+        footprint = _footprint_for(rect, notch)
+        for x, y in footprint:
+            rows[y][x] = _tile_for(theme, _role_for_footprint_cell(x, y, footprint))
+        _audit_footprint(rows, footprint, theme)
+        building["generated_cells"] = len(footprint)
 
     # Retire the old plus-sign/crossing pass before adding the new street grammar.
     data["objects"] = [obj for obj in data.get("objects", []) if not str(obj.get("asset", "")).startswith("mark_")]
     data["layers"] = {"ground": rows}
     data.pop("layers_ascii", None)
     data["building_synthesis"] = {
-        "version": 3,
-        "shape_family": "axis_aligned_rectangles",
+        "version": 4,
+        "shape_family": "rectangles_and_single_corner_notches",
+        "morphology_pass": "building_morphology_v1",
+        "notched_building_count": sum(b.get("notch") is not None for b in buildings),
+        "removed_building_cell_count": sum(int(b["envelope_cells"]) - int(b["generated_cells"]) for b in buildings),
+        "notch_depth_cells": NOTCH_DEPTH_CELLS,
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "orientation_authority": "filename_semantics",
         "random_rotation": False,
@@ -854,32 +909,36 @@ def generate_layers() -> tuple[int, int]:
         x0, y0, x1, y1 = map(int, building["rect"])
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
         building_id = str(building["building_id"])
+        footprint = _footprint_for((x0, y0, x1, y1), building.get("notch"))
         area = (x1 - x0 + 1) * (y1 - y0 + 1)
+        anchors = transition_anchors(building, footprint)
+        door_x, door_y = anchors["door"]
+        fire_x, fire_y = anchors["fire_escape"]
+        hatch_x, hatch_y = anchors["hatch"]
 
-        for y in range(y0, y1 + 1):
-            for x in range(x0, x1 + 1):
-                roof_rows[y][x] = ground[y][x]
+        for x, y in footprint:
+            roof_rows[y][x] = ground[y][x]
 
         ground_objects.append({
-            "asset": "placeholder_street_door", "gx": cx, "gy": y1,
+            "asset": "placeholder_street_door", "gx": door_x, "gy": door_y,
             "width_px": 96, "height_px": 144, "building_id": building_id,
             "edge": "south", "rotation": 0, "placeholder": True,
             "future_transition": "ground_to_first_floor_door",
         })
         ground_objects.append({
-            "asset": "placeholder_fire_escape", "gx": x1, "gy": cy,
+            "asset": "placeholder_fire_escape", "gx": fire_x, "gy": fire_y,
             "width_px": 128, "height_px": 256, "building_id": building_id,
             "edge": "east", "rotation": 0, "placeholder": True,
             "future_transition": "stationary_jump_ground_to_roof",
         })
         roof_objects.append({
-            "asset": "placeholder_roof_hatch", "gx": cx, "gy": cy,
+            "asset": "placeholder_roof_hatch", "gx": hatch_x, "gy": hatch_y,
             "width_px": 128, "height_px": 128, "building_id": building_id,
             "rotation": 0, "placeholder": True,
             "future_transition": "second_floor_to_roof",
         })
 
-        detail_cells = _detail_cells((x0, y0, x1, y1), (cx, cy))
+        detail_cells = _detail_cells((x0, y0, x1, y1), (hatch_x, hatch_y), footprint)
         detail_count = min(len(detail_cells), max(2, min(6, 2 + area // 12)))
         roof_archetype, roof_palette = _roof_palette(building)
         for j, (gx, gy) in enumerate(detail_cells[:detail_count]):
@@ -922,9 +981,18 @@ def generate_layers() -> tuple[int, int]:
             })
 
     GROUND_GENERATED.write_text(json.dumps({
-        "format": "open-night-ground-generated-v8",
+        "format": "open-night-ground-generated-v9",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
+        "building_morphology": {
+            "composition_pass": "building_morphology_v1",
+            "notched_building_count": sum(b.get("footprint_type") == "corner_notched" for b in buildings),
+            "notch_depth_cells": NOTCH_DEPTH_CELLS,
+            "corner_distribution": {
+                corner: sum((b.get("notch") or {}).get("corner") == corner for b in buildings)
+                for corner in NOTCH_CORNERS
+            },
+        },
         "street_markings": "zebra_crossings_and_dashed_center_lines",
         "composition_pass": "ground_density_v2",
         "density_summary": {
@@ -973,9 +1041,11 @@ def generate_layers() -> tuple[int, int]:
         "source_pack": "city_block",
         "generation_scope": ["ground", "roof"],
         "building_synthesis": {
-            "version": 3,
+            "version": 4,
             "matching_ground": True,
             "registration": "exact_ground_footprint",
+            "shape_family": "rectangles_with_corner_notches",
+            "notched_building_count": sum(b.get("footprint_type") == "corner_notched" for b in buildings),
             "orientation_reference": "assets/source_packs/city_block/example.png",
             "orientation_authority": "filename_semantics",
             "random_rotation": False,
@@ -1018,6 +1088,7 @@ def main() -> None:
         f"silhouette_v1={buildings - STREET_EDGE_AWNING_TARGET}facade+{buildings}roof-edge",
         f"roof_palette_v1={len(ROOF_PROP_DRAW_SIZES)}families+{len(ROOF_ARCHETYPE_NAMES)}archetypes",
         f"roof_surface_v1={sum(ROOF_SURFACE_EFFECT_QUOTAS.values())}native-effects",
+        f"morphology_v1={sum(b.get('footprint_type') == 'corner_notched' for b in json.loads(GROUND_PATH.read_text())['building_synthesis']['buildings'])}notched",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 

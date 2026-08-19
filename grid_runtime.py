@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from building_morphology import assign_notches, footprint_for, role_for_cell, transition_anchors
+
 from grid_world import GridWorld, TileCatalog
 
 ROOT = Path(__file__).resolve().parent
@@ -105,9 +107,11 @@ def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
 
 
 def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]:
-    """Same filename-driven rectangle synthesis used by the generator, in memory."""
+    """Rebuild the exact shared rectangle/notch grammar in memory."""
     original = _decode_ground(data)
-    groups = _building_components(original)
+    prior = list((data.get("building_synthesis") or {}).get("buildings") or [])
+    envelopes = ([tuple(map(int, building["rect"])) for building in prior]
+                 if prior else [_largest_axis_aligned_rect(group) for group in _building_components(original)])
     rows = [list(row) for row in original]
     for y, row in enumerate(rows):
         for x, tile_id in enumerate(row):
@@ -115,24 +119,30 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
                 rows[y][x] = "pavement_small"
 
     buildings = []
-    for index, group in enumerate(groups, 1):
-        rect = _largest_axis_aligned_rect(group)
+    for index, rect in enumerate(envelopes, 1):
         theme = _theme_for_rect(index, rect)
         x0, y0, x1, y1 = rect
-        for y in range(y0, y1 + 1):
-            for x in range(x0, x1 + 1):
-                role = _role_for_rect_cell(x, y, rect)
-                rows[y][x] = f"bld_{theme}_{role}"
         buildings.append({
             "building_id": f"grid_building_{index:02d}",
-            "theme": theme,
-            "rect": [x0, y0, x1, y1],
+            "theme": theme, "rect": [x0, y0, x1, y1], "notch": None,
+            "footprint_type": "rectangle",
             "orientation_policy": "filename_semantics_no_rotation",
         })
+    assign_notches(buildings, THEMES)
+    for building in buildings:
+        rect = tuple(map(int, building["rect"]))
+        footprint = footprint_for(rect, building.get("notch"))
+        for x, y in footprint:
+            rows[y][x] = f"bld_{building['theme']}_{role_for_cell(x, y, footprint)}"
+        building["generated_cells"] = len(footprint)
+        building["envelope_cells"] = (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1)
 
     data["building_synthesis"] = {
-        "version": 2,
-        "shape_family": "axis_aligned_rectangles",
+        "version": 4,
+        "shape_family": "rectangles_and_single_corner_notches",
+        "morphology_pass": "building_morphology_v1",
+        "notched_building_count": sum(b.get("notch") is not None for b in buildings),
+        "removed_building_cell_count": sum(b["envelope_cells"] - b["generated_cells"] for b in buildings),
         "orientation_reference": "assets/source_packs/city_block/example.png",
         "orientation_authority": "filename_semantics",
         "random_rotation": False,
@@ -144,7 +154,10 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
     return rows, buildings
 
 
-def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> list[tuple[int, int]]:
+def _detail_cells(
+    rect: tuple[int, int, int, int], center: tuple[int, int],
+    valid_cells: set[tuple[int, int]] | None = None,
+) -> list[tuple[int, int]]:
     x0, y0, x1, y1 = rect
     cx, cy = center
     candidates = [
@@ -154,8 +167,14 @@ def _detail_cells(rect: tuple[int, int, int, int], center: tuple[int, int]) -> l
     ]
     out = []
     for x, y in candidates:
-        if x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out:
+        if (x0 <= x <= x1 and y0 <= y <= y1 and (x, y) != center and (x, y) not in out
+                and (valid_cells is None or (x, y) in valid_cells)):
             out.append((x, y))
+    if valid_cells is not None:
+        out.extend(sorted(
+            (x, y) for x, y in valid_cells
+            if x0 < x < x1 and y0 < y < y1 and (x, y) != center and (x, y) not in out
+        ))
     return out
 
 
@@ -197,15 +216,19 @@ def _generated_ground_objects(rows: list[list[str]], buildings: list[dict]) -> l
         x0, y0, x1, y1 = map(int, building["rect"])
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
         building_id = str(building["building_id"])
+        footprint = footprint_for((x0, y0, x1, y1), building.get("notch"))
+        anchors = transition_anchors(building, footprint)
+        door_x, door_y = anchors["door"]
+        fire_x, fire_y = anchors["fire_escape"]
         objects.extend([
             {
-                "asset": "placeholder_street_door", "gx": cx, "gy": y1,
+                "asset": "placeholder_street_door", "gx": door_x, "gy": door_y,
                 "width_px": 96, "height_px": 144, "building_id": building_id,
                 "edge": "south", "rotation": 0, "placeholder": True,
                 "future_transition": "ground_to_first_floor_door",
             },
             {
-                "asset": "placeholder_fire_escape", "gx": x1, "gy": cy,
+                "asset": "placeholder_fire_escape", "gx": fire_x, "gy": fire_y,
                 "width_px": 128, "height_px": 256, "building_id": building_id,
                 "edge": "east", "rotation": 0, "placeholder": True,
                 "future_transition": "stationary_jump_ground_to_roof",
@@ -230,14 +253,17 @@ def _fallback_roof_data(ground_data: dict, rows: list[list[str]], buildings: lis
         x0, y0, x1, y1 = map(int, building["rect"])
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
         building_id = str(building["building_id"])
+        footprint = footprint_for((x0, y0, x1, y1), building.get("notch"))
         area = (x1 - x0 + 1) * (y1 - y0 + 1)
+        anchors = transition_anchors(building, footprint)
+        hatch_x, hatch_y = anchors["hatch"]
         roof_objects.append({
-            "asset": "placeholder_roof_hatch", "gx": cx, "gy": cy,
+            "asset": "placeholder_roof_hatch", "gx": hatch_x, "gy": hatch_y,
             "width_px": 128, "height_px": 128, "building_id": building_id,
             "rotation": 0, "placeholder": True,
             "future_transition": "second_floor_to_roof",
         })
-        candidates = _detail_cells((x0, y0, x1, y1), (cx, cy))
+        candidates = _detail_cells((x0, y0, x1, y1), (hatch_x, hatch_y), footprint)
         detail_count = min(len(candidates), max(2, min(6, 2 + area // 12)))
         roof_archetype, roof_palette = _roof_palette(building)
         for j, (gx, gy) in enumerate(candidates[:detail_count]):

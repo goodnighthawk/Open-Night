@@ -205,6 +205,15 @@ def main() -> None:
     try:
         ground = load_ground_grid()
         ground_renderer = GridRenderer(ground)
+        morphology_buildings = list((ground.data.get("building_synthesis") or {}).get("buildings") or [])
+        notched_buildings = [b for b in morphology_buildings if b.get("footprint_type") == "corner_notched"]
+        removed_building_cells = sum(int(b.get("envelope_cells", 0)) - int(b.get("generated_cells", 0))
+                                     for b in morphology_buildings)
+        if len(notched_buildings) != 10 or removed_building_cells != 40:
+            raise SystemExit(
+                f"runtime morphology proof expected 10 notches/40 open cells, got "
+                f"{len(notched_buildings)}/{removed_building_cells}"
+            )
         geometry_hash_before = gameplay_geometry_hash(ground)
         sx, sy = ground.choose_spawn("ground", 18.0)
         ground_luminance = save_detail(ground_renderer, ground, "ground", sx, sy, GROUND_DETAIL_OUT)
@@ -317,6 +326,17 @@ def main() -> None:
                 "themes": surface_themes,
                 "native_asset_size_px": [308, 442],
             },
+            "building_morphology": {
+                "composition_pass": "building_morphology_v1",
+                "notched_building_count": len(notched_buildings),
+                "rectangular_building_count": len(morphology_buildings) - len(notched_buildings),
+                "removed_blocked_cell_count": removed_building_cells,
+                "building_cell_count": sum(int(b["generated_cells"]) for b in morphology_buildings),
+                "corner_distribution": {
+                    corner: sum((b.get("notch") or {}).get("corner") == corner for b in notched_buildings)
+                    for corner in ("top_left", "top_right", "bottom_right", "bottom_left")
+                },
+            },
             "gameplay_geometry_sha256_before": geometry_hash_before,
             "gameplay_geometry_sha256_after": geometry_hash_after,
             "gameplay_geometry_unchanged": True,
@@ -336,6 +356,7 @@ def main() -> None:
             f"silhouette={len(facade_breaks)}facade+{len(roof_masses)}roof-edge "
             f"roof_palette={len(roof_palette)}details/{len(palette_assets)}families "
             f"roof_surface={len(roof_surface)}effects/{len(surface_themes)}themes "
+            f"morphology={len(notched_buildings)}notched/{removed_building_cells}open-cells "
             "roof_registration=exact_ground_building_footprint"
         )
     finally:
