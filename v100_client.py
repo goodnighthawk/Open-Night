@@ -19,6 +19,7 @@ v100_scale_normalization.install()
 
 import grid_client_entry  # noqa: F401 - installs the v1.0 GridWorld cutover
 import client as game_client
+import bug_chat_shortcut
 import portrait_head_client
 
 
@@ -27,6 +28,7 @@ def install_v100_client() -> None:
     v100_runtime_refinement.install()
     v100_scale_normalization.install()
     portrait_head_client._install()
+    bug_chat_shortcut.install()
 
 
 async def main() -> None:
