@@ -1,1 +1,1 @@
-Open Night v1.0.0-dev - collision-locked eight-layer city art overlay
+Open Night v1.0.0 - playable GridWorld baseline
