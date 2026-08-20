@@ -83,7 +83,7 @@ def main() -> int:
         python, str(ROOT / "v100_server.py"), "--memory-db", "--no-discovery",
         "--port", str(PORT), "--map", "map_001_gwb_corridor", "--traffic", "8",
     ]
-    print("[1/3] Starting canonical v1.0 grid-authoritative memory-DB server...")
+    print(f"[1/3] Starting canonical Open Night v{GAME_VERSION} GridWorld-authoritative memory-DB server...")
     server = launch_visible(server_cmd, label="SERVER")
 
     deadline = time.monotonic() + 15.0
@@ -100,17 +100,17 @@ def main() -> int:
         print("If the server crashed, its SERVER console has been kept open so you can read the traceback.")
         return 4
 
-    print("[2/3] Verifying real WebSocket hello/welcome...")
+    print("[2/3] Verifying real WebSocket hello/welcome and exact version parity...")
     ok, detail = asyncio.run(websocket_probe())
     if not ok:
         print(f"[ERROR] TCP port opened, but the game protocol probe failed: {detail}")
         return 5
     print(f"[OK] {detail}")
 
-    print("[3/3] Launching canonical v1.0 desktop client...")
+    print(f"[3/3] Launching canonical Open Night v{GAME_VERSION} desktop client...")
     client_cmd = [python, str(ROOT / "v100_client.py"), "--server", URI]
     launch_visible(client_cmd, label="CLIENT")
-    print("[OK] Client launched only after grid server readiness was proven.")
+    print("[OK] Client launched only after GridWorld server readiness/version parity was proven.")
     print("[OK] Ground, minimap and M map use GridWorld geometry only.")
     print("[OK] Existing portrait/head selector remains installed in the canonical client.")
     print("If the client crashes, its console will stay open and show the Python traceback.")
