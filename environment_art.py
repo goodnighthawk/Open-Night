@@ -278,7 +278,7 @@ class EnvironmentRenderer:
         self.chunked = False
         self.chunk_size = CHUNK_SIZE
         self.chunk_cache_limit = CHUNK_CACHE_LIMIT
-        self.chunk_cache: OrderedDict[tuple[int, int, int], pygame.Surface] = OrderedDict()
+        self.chunk_cache: OrderedDict[tuple[int, int, int, int], pygame.Surface] = OrderedDict()
         self._road_index = {}
         self._water_index = {}
         self._green_index = {}
@@ -286,7 +286,9 @@ class EnvironmentRenderer:
         self._junction_cores: list[tuple[float, float, float]] = []
         self._junction_exclusions: dict[str, list[tuple[float, float, float]]] = {}
         self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}
-        self._composition_tile_cache: OrderedDict[tuple[str, int, int], pygame.Surface] = OrderedDict()
+        self._hidden_street_props: set[str] = set()
+        self.active_level = 0
+        self._composition_tile_cache: OrderedDict[tuple[int, str, int, int], pygame.Surface] = OrderedDict()
         self._composition_zip: zipfile.ZipFile | None = None
         self._composition_zip_path = ""
         self.set_map(map_config)
@@ -518,6 +520,18 @@ class EnvironmentRenderer:
         if not self.chunked and self.map_config:
             cfg=dict(self.map_config); self._signature=None; self.set_map(cfg)
 
+    def set_hidden_street_props(self, prop_ids) -> None:
+        """Hide dynamic/broken props and invalidate only cached static chunks."""
+        hidden = {str(item) for item in prop_ids}
+        if hidden == self._hidden_street_props:
+            return
+        self._hidden_street_props = hidden
+        self.chunk_cache.clear()
+        if not self.chunked and self.map_config:
+            cfg = dict(self.map_config)
+            self._signature = None
+            self.set_map(cfg)
+
     def _style(self) -> tuple[list[str], list[str]]:
         # v1.2 ships one exterior art family. Keeping this selector centralized
         # still makes a future licensed/original atlas swap straightforward.
@@ -535,11 +549,12 @@ class EnvironmentRenderer:
         area = inner.width * inner.height
         if area <= 0:
             return
-        # Deterministically seed a subset of larger roofs with the converted
-        # user-authored voxel building. It behaves as a 2.5D rooftop tower and
-        # remains baked into the same rotated chunk surface as other geometry.
-        if elevated_25d and index % 13 == 0 and inner.width >= 72 and inner.height >= 62:
-            imported = _open_asset_building("isometric", min(92, max(48, inner.height - 8)))
+        # v0.9: the approved 2.5D city import is a visible runtime art layer,
+        # not a rare easter egg. Use it on a deterministic quarter of qualifying
+        # larger roofs so normal traversal actually exposes the imported pack
+        # while keeping enough procedural variety to avoid obvious repetition.
+        if elevated_25d and index % 4 == 0 and inner.width >= 72 and inner.height >= 62:
+            imported = _open_asset_building("isometric", min(104, max(52, inner.height - 6)))
             if imported is not None:
                 anchor = imported.get_rect(midbottom=(inner.centerx, inner.bottom - 3))
                 pygame.draw.ellipse(surface, BUILDING_SHADOW_COLOR, anchor.inflate(8, -max(1, anchor.height // 2)).move(5, max(3, anchor.height // 3)))
@@ -670,8 +685,37 @@ class EnvironmentRenderer:
         path=str((self.map_config.get("portable_materials",{}) or {}).get(key,""))
         return self._portable_image(path) if path else fallback
 
+    def _uses_underground_composition(self) -> bool:
+        try:
+            underground_level = int(float(self.map_config.get("underground_level_id", -1)))
+        except (TypeError, ValueError):
+            underground_level = -1
+        wired = self.map_config.get("underground_runtime_wired", False)
+        if isinstance(wired, str):
+            wired = wired.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(wired) and int(self.active_level) == underground_level
+
+    def set_active_level(self, level: int) -> None:
+        """Select the visual composition for the local player's authoritative level."""
+        try:
+            level = int(float(level))
+        except (TypeError, ValueError):
+            level = 0
+        if level == int(self.active_level):
+            return
+        self.active_level = level
+        # Composition tiles from different levels share x/y names, so both the
+        # rendered-chunk and decoded-tile caches must be level-aware/invalidated.
+        self.chunk_cache.clear()
+        self._composition_tile_cache.clear()
+        if self._composition_zip is not None:
+            self._composition_zip.close()
+        self._composition_zip = None
+        self._composition_zip_path = ""
+
     def _composition_archive_path(self) -> Path | None:
-        raw = str(self.map_config.get("baked_composition_archive", "")).strip()
+        archive_key = "underground_composition_archive" if self._uses_underground_composition() else "baked_composition_archive"
+        raw = str(self.map_config.get(archive_key, "")).strip()
         if not raw:
             return None
         requested = Path(raw)
@@ -681,8 +725,17 @@ class EnvironmentRenderer:
             candidates.append(shared_assets_root().joinpath(*parts))
         return next((path for path in candidates if path.is_file()), None)
 
+    def _composition_source_settings(self) -> tuple[float, float]:
+        if self._uses_underground_composition():
+            scale = max(0.01, float(self.map_config.get("underground_composition_source_scale", 1.0)))
+            world_y0 = float(self.map_config.get("underground_composition_world_y", 0.0))
+            return scale, world_y0
+        scale = max(0.01, float(self.map_config.get("baked_composition_source_scale", 0.5)))
+        world_y0 = float(self.map_config.get("baked_composition_world_y", 2048.0))
+        return scale, world_y0
+
     def _composition_tile(self, mode: str, tile_x: int, tile_y: int) -> pygame.Surface | None:
-        key = (mode, int(tile_x), int(tile_y))
+        key = (int(self.active_level), mode, int(tile_x), int(tile_y))
         cached = self._composition_tile_cache.get(key)
         if cached is not None:
             self._composition_tile_cache.move_to_end(key)
@@ -711,8 +764,7 @@ class EnvironmentRenderer:
         """Draw the reviewed master art without reinterpreting its geometry."""
         if not bool(self.map_config.get("baked_composition", False)):
             return False
-        scale = max(0.01, float(self.map_config.get("baked_composition_source_scale", 0.5)))
-        world_y0 = float(self.map_config.get("baked_composition_world_y", 2048.0))
+        scale, world_y0 = self._composition_source_settings()
         source_x = cx * self.chunk_size * scale
         source_y = (cy * self.chunk_size - world_y0) * scale
         source_span = int(round(self.chunk_size * scale))
@@ -1195,6 +1247,8 @@ class EnvironmentRenderer:
             "traffic_signal": 72,
         }
         for prop in self._street_prop_index.get((cx, cy), ()):
+            if str(prop.get("id", "")) in self._hidden_street_props:
+                continue
             try:
                 wx, wy = map(float, prop.get("pos", [0, 0]))
             except (TypeError, ValueError):
@@ -1342,7 +1396,14 @@ class EnvironmentRenderer:
             if str(light.get("source_type")) not in {"streetlamp","bridge_lamp"}: continue
             if not self.map_config.get("street_lamps_enabled",True) and str(light.get("source_type"))=="streetlamp": continue
             try:
-                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy); r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))
+                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy)
+                # Portable streetlamp coordinates are ground/base anchors (the
+                # sprite is drawn with midbottom anchoring), while the light pool
+                # belongs on the lamp head.  Lift only streetlamp emitters; bridge
+                # lamps retain their explicitly authored emitter coordinates.
+                if str(light.get("source_type")) == "streetlamp":
+                    y -= int(round(float(light.get("head_offset_px", 42))))
+                r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))
             except (TypeError,ValueError): continue
             col=colors.get(str(light.get("color_tag","warm")),(238,176,90))
             for frac,alpha in ((1.0,18),(.62,26),(.32,38)):
@@ -1350,7 +1411,7 @@ class EnvironmentRenderer:
         surface.blit(glow,(0,0),special_flags=pygame.BLEND_RGBA_ADD)
 
     def _render_chunk(self, cx: int, cy: int) -> pygame.Surface:
-        key = (cx, cy, int(round(self.view_rotation_degrees)) % 360)
+        key = (cx, cy, int(round(self.view_rotation_degrees)) % 360, int(self.active_level))
         cached = self.chunk_cache.get(key)
         if cached is not None:
             self.chunk_cache.move_to_end(key)

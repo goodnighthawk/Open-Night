@@ -61,6 +61,8 @@ from character_art import draw_character, reload_character_style
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts, display_label as character_display_label, catalog as character_catalog
 from vehicle_art import draw_car, reload_vehicle_style
 from environment_art import EnvironmentRenderer
+from grid_renderer import GridRenderer
+from grid_runtime import ground_grid_enabled, load_ground_grid
 from interior_art import IsometricInterior
 from bicycle_art import draw_bicycle
 from gameplay.settings import load_settings, set_setting_value, CONFIG_PATH as GAME_SETTINGS_PATH
@@ -1154,6 +1156,7 @@ class RemoteNPC:
         self.target_y = self.render_y
         self.aim = float(data.get("aim", 0.0))
         self.appearance = normalize_character(data.get("appearance"))
+        self.kind = str(data.get("kind", "pedestrian"))
         self.moving_until = time.monotonic() + 0.3
         self.anim_epoch = time.monotonic() + random.random() * 4.0
 
@@ -1164,6 +1167,7 @@ class RemoteNPC:
             self.moving_until = time.monotonic() + 0.22
         self.target_x, self.target_y = nx, ny
         self.aim = float(data.get("aim", self.aim))
+        self.kind = str(data.get("kind", self.kind))
         if "appearance" in data:
             self.appearance = normalize_character(data.get("appearance"))
 
@@ -1204,6 +1208,7 @@ class Game:
         self.bicycles: dict[str, RemoteBicycle] = {}
         self.npcs: dict[str, RemoteNPC] = {}
         self.blood_stains: dict[str, dict] = {}
+        self.hydrants: dict[str, dict] = {}
         self.traffic_lights: dict[str, bool] = {}
         self.notice = "Connecting to Open Night Internet Server..." if ".railway.app" in uri.lower() else "Connecting..."
         self.notice_until = time.monotonic() + 4.0
@@ -1214,6 +1219,8 @@ class Game:
         self._map_transfer_expected_chunks = 0
         self.map_config = get_map(DEFAULT_MAP_ID)
         self.environment = EnvironmentRenderer(self.map_config)
+        self.grid_world = load_ground_grid() if ground_grid_enabled(self.map_config) else None
+        self.grid_renderer = GridRenderer(self.grid_world) if self.grid_world is not None else None
         self.inventory = empty_inventory()
         self.inventory_open = False
         self.map_open = False
@@ -1960,6 +1967,16 @@ class Game:
                         str(row.get("id")): row for row in blood_rows
                         if isinstance(row, dict) and row.get("id")
                     }
+                hydrant_rows = message.get("hydrants", [])
+                if isinstance(hydrant_rows, list):
+                    self.hydrants = {
+                        str(row.get("id")): row for row in hydrant_rows
+                        if isinstance(row, dict) and row.get("id")
+                    }
+                    hidden = {hid for hid, row in self.hydrants.items() if bool(row.get("broken", False))}
+                    setter = getattr(self.environment, "set_hidden_street_props", None)
+                    if callable(setter):
+                        setter(hidden)
                 lights = message.get("traffic_lights")
                 if isinstance(lights, dict):
                     self.traffic_lights = {str(k): bool(v) for k, v in lights.items()}
@@ -2109,13 +2126,34 @@ class Game:
             pygame.draw.line(surface, color, a, b, width)
             pos += dash + gap
 
+    def draw_hydrant_effects(self) -> None:
+        """Render the short server-authoritative water burst after a hydrant impact."""
+        now = time.monotonic()
+        for hydrant in self.hydrants.values():
+            try:
+                remaining = float(hydrant.get("water_remaining", 0.0))
+                x, y = float(hydrant.get("x", 0.0)), float(hydrant.get("y", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if remaining <= 0.0 or not bool(hydrant.get("broken", False)):
+                continue
+            sx, sy = self.world_to_screen(x, y)
+            pulse = 0.5 + 0.5 * math.sin(now * 9.0)
+            height = int(28 + 32 * min(1.0, remaining / 1.5))
+            pygame.draw.line(self.screen, (136, 196, 220), (sx, sy), (sx + int(5*pulse), sy - height), 5)
+            pygame.draw.circle(self.screen, (174, 218, 232), (sx + int(5*pulse), sy - height), 6)
+            pygame.draw.ellipse(self.screen, (72, 119, 137), pygame.Rect(sx - 23, sy - 8, 46, 16), width=3)
+
     def draw_traffic_signal(self, signal: dict) -> None:
         sx, sy = self.world_to_screen(float(signal["pos"][0]), float(signal["pos"][1]))
         green = bool(self.traffic_lights.get(str(signal.get("id")), False))
         # Crosswalk geometry is rendered once by EnvironmentRenderer from
         # crosswalks.csv. Traffic signals now render only their live light state.
-        pygame.draw.circle(self.screen, (18, 20, 20), (sx + 22, sy - 22), 8)
-        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx + 22, sy - 22), 5)
+        # `signal["pos"]` is the authored fixture anchor.  Keep the live
+        # synchronized lamp on that exact anchor; the old (+22, -22) offset
+        # visually detached the red/green state from its traffic-signal fixture.
+        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 8)
+        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 5)
 
     def nearest_interior(self, max_distance: float = 105.0) -> dict | None:
         local = self.players.get(self.local_id or "")
@@ -2213,7 +2251,18 @@ class Game:
         # Static city geometry is pre-rendered from the approved environment texture
         # atlas once per map. Collision/traffic data remains server-authoritative
         # and independent of this visual layer.
-        self.environment.draw_view(self.screen, self.camera())
+        local_world_player = self.players.get(self.local_id or "")
+        active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
+        if active_world_level == 0 and self.grid_renderer is not None:
+            self.grid_renderer.draw_view(self.screen, self.camera(), "ground")
+        else:
+            self.environment.set_active_level(active_world_level)
+            self.environment.draw_view(self.screen, self.camera())
+        # Ground street furniture/state must not bleed through the subterranean
+        # composition. Underground static detail is already baked into its tiles.
+        if active_world_level < 0:
+            return
+        self.draw_hydrant_effects()
         self.draw_bike_lanes()
 
         # Traffic signals remain dynamic because their state is synchronized
@@ -2222,7 +2271,8 @@ class Game:
             self.draw_traffic_signal(signal)
 
         self.draw_interior_entries()
-        self.draw_location(tuple(self.map_config["supplier_pos"]), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}")
+        self.draw_location(tuple(self.map_config.get("supplier_pos", SUPPLIER_POS)), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}")
+        self.draw_location(tuple(self.map_config.get("customer_pos", CUSTOMER_POS)), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}")
         self.draw_landmarks()
 
     def draw_landmarks(self) -> None:
@@ -2476,7 +2526,7 @@ class Game:
         title_text = str(self.map_config.get("name", "WORLD MAP")).upper()
         title = self.big_font.render(title_text, True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 18, panel.y + 12))
-        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: other online players", True, MUTED_TEXT)
+        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: players | supplier/buyer: job markers", True, MUTED_TEXT)
         self.screen.blit(subtitle, (panel.x + 20, panel.y + 46))
 
         available = pygame.Rect(panel.x + 20, panel.y + 72, max(64, panel.width - 40), max(64, panel.height - 102))
@@ -2535,6 +2585,25 @@ class Game:
             ).clip(map_rect)
             if interest_rect.width > 0 and interest_rect.height > 0:
                 pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
+
+        # Job-economy locations are client-side map UI, not baked map text. This
+        # keeps labels horizontal/readable and makes supplier/buyer destinations
+        # visible regardless of camera rotation or nearby-player interest culling.
+        for raw_pos, marker_color, marker_label in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER"),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER"),
+        ):
+            try:
+                p = mp_dynamic(float(raw_pos[0]), float(raw_pos[1]))
+            except (TypeError, ValueError, IndexError, KeyError):
+                p = None
+            if p is not None and map_rect.collidepoint(p):
+                pygame.draw.circle(self.screen, (12, 13, 13), p, 8)
+                pygame.draw.circle(self.screen, marker_color, p, 6)
+                label = self.tiny_font.render(marker_label, True, marker_color)
+                label_rect = label.get_rect(midleft=(p[0] + 8, p[1]))
+                pygame.draw.rect(self.screen, (18, 21, 22), label_rect.inflate(4, 2), border_radius=2)
+                self.screen.blit(label, label_rect)
 
         for pid, marker in self.map_players.items():
             if pid == self.local_id:
@@ -2635,6 +2704,21 @@ class Game:
 
     def draw_npc(self, npc: RemoteNPC) -> None:
         sx, sy = self.world_to_screen(npc.render_x, npc.render_y)
+        if getattr(npc, "kind", "pedestrian") == "dog":
+            # Compact original top-down dog silhouette; heading follows the same
+            # authoritative route aim as pedestrians. No external art dependency.
+            sprite = pygame.Surface((34, 22), pygame.SRCALPHA)
+            pygame.draw.ellipse(sprite, (91, 68, 48), pygame.Rect(7, 6, 21, 11))
+            pygame.draw.circle(sprite, (104, 78, 54), (28, 10), 6)
+            pygame.draw.polygon(sprite, (70, 49, 34), [(27,5),(29,1),(31,6)])
+            pygame.draw.line(sprite, (70, 49, 34), (7,10), (2,5), 3)
+            moving = time.monotonic() < npc.moving_until
+            gait = 2 if moving and int((time.monotonic()-npc.anim_epoch)*8) % 2 else 0
+            for lx in (10, 22):
+                pygame.draw.line(sprite, (65, 47, 34), (lx,15), (lx-gait,20), 2)
+            rotated = pygame.transform.rotozoom(sprite, -math.degrees(npc.aim), 1.0)
+            self.screen.blit(rotated, rotated.get_rect(center=(sx, sy)))
+            return
         npc_scale = max(1, int(self.settings.get("render", {}).get("npc_scale", 2)))
         draw_character(
             self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,
@@ -2719,12 +2803,35 @@ class Game:
         self.screen.blit(text, text.get_rect(center=box.center))
 
     def draw_location(self, pos, color, label: str, sublabel: str) -> None:
+        # Physical destination rings belong to the world.  Role text is drawn
+        # later in draw_job_location_labels() after camera rotation/zoom.
         sx, sy = self.world_to_screen(*pos)
         pygame.draw.circle(self.screen, color, (sx, sy), 34, width=4)
         pygame.draw.circle(self.screen, color, (sx, sy), 8)
-        self.screen.blit(self.small_font.render(label, True, TEXT_COLOR), self.small_font.render(label, True, TEXT_COLOR).get_rect(center=(sx, sy - 52)))
-        sub = self.small_font.render(sublabel, True, TEXT_COLOR)
-        self.screen.blit(sub, sub.get_rect(center=(sx, sy + 52)))
+
+    def draw_job_location_labels(self) -> None:
+        """Draw supplier/buyer labels in final screen space so they stay horizontal."""
+        local_world_player = self.players.get(self.local_id or "")
+        if local_world_player is not None and int(getattr(local_world_player, "level", 0)) < 0:
+            return
+        w, h = self.screen.get_size()
+        for raw_pos, color, label, sublabel in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}"),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}"),
+        ):
+            try:
+                sx, sy = self._world_point_to_display(float(raw_pos[0]), float(raw_pos[1]))
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if sx < -90 or sy < -90 or sx > w + 90 or sy > h + 90:
+                continue
+            title = self.small_font.render(label, True, color)
+            sub = self.tiny_font.render(sublabel, True, TEXT_COLOR)
+            title_rect = title.get_rect(center=(sx, sy - 52))
+            sub_rect = sub.get_rect(center=(sx, sy + 52))
+            for surf, rect in ((title, title_rect), (sub, sub_rect)):
+                pygame.draw.rect(self.screen, (18, 21, 22), rect.inflate(8, 4), border_radius=3)
+                self.screen.blit(surf, rect)
 
     def draw_player(self, player: RemotePlayer, local: bool) -> None:
         sx, sy = self.world_to_screen(player.render_x, player.render_y)
@@ -2801,7 +2908,14 @@ class Game:
 
     def draw_player_nameplates(self) -> None:
         """Draw names in final screen space so camera rotation never tilts text."""
+        local_world_player = self.players.get(self.local_id or "")
+        active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
         for player in self.players.values():
+            player_level = int(getattr(player, "level", 0))
+            if active_world_level < 0 and player_level != active_world_level:
+                continue
+            if active_world_level >= 0 and player_level < 0:
+                continue
             if getattr(player, "interior_id", ""):
                 continue
             in_vehicle = bool(getattr(player, "in_vehicle", False))
@@ -3357,6 +3471,22 @@ class Game:
         pygame.draw.circle(circle_mask, (255,255,255,255), (radius,radius), radius-3)
         mini.blit(circle_mask, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
         pygame.draw.circle(mini, border, (radius,radius), radius-2, width=7)
+        # Supplier and buyer are gameplay destinations, so they remain visible
+        # on the private/friend-focused minimap whenever they are in local range.
+        for raw_pos, marker_color in (
+            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR),
+            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR),
+        ):
+            try:
+                dx = float(raw_pos[0]) - local.render_x
+                dy = float(raw_pos[1]) - local.render_y
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if dx * dx + dy * dy <= (world_radius * 0.94) ** 2:
+                marker_pos = (int(radius + dx * scale), int(radius + dy * scale))
+                pygame.draw.circle(mini, (18, 24, 28), marker_pos, 7)
+                pygame.draw.circle(mini, marker_color, marker_pos, 5)
+
         # The compact minimap is deliberately private/friend-focused. The full
         # M map retains the complete online roster for general orientation.
         for pid, marker in self.map_players.items():
@@ -3718,40 +3848,54 @@ class Game:
                     world_surface = self._zoom_world_surface
                     self.screen = world_surface
                     self.draw_world()
-                    for stain in self.blood_stains.values():
-                        self.draw_blood_stain(stain)
+                    local_world_player = self.players.get(self.local_id or "")
+                    active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
+                    if active_world_level >= 0:
+                        for stain in self.blood_stains.values():
+                            self.draw_blood_stain(stain)
                     # Grade-separated dynamic draw order.  Vehicles/NPC traffic is
                     # still a Level-0 system; pedestrian players carry authoritative
                     # map levels.  Each elevated deck is redrawn after lower-level
                     # entities and before players standing on that deck.
                     drawables = []
-                    drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
-                    drawables.extend((self.camera_depth(bike.render_x, bike.render_y), "bike", bike) for bike in self.bicycles.values())
-                    drawables.extend((self.camera_depth(npc.render_x, npc.render_y), "npc", npc) for npc in self.npcs.values())
-                    drawables.extend(
-                        (self.camera_depth(player.render_x, player.render_y), "player", player)
-                        for player in self.players.values() if int(getattr(player, "level", 0)) <= 0
-                    )
+                    if active_world_level >= 0:
+                        # Vehicles/NPC traffic and blood are currently a Ground-only
+                        # system. Negative-level players are hidden from the surface.
+                        drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
+                        drawables.extend((self.camera_depth(bike.render_x, bike.render_y), "bike", bike) for bike in self.bicycles.values())
+                        drawables.extend((self.camera_depth(npc.render_x, npc.render_y), "npc", npc) for npc in self.npcs.values())
+                        drawables.extend(
+                            (self.camera_depth(player.render_x, player.render_y), "player", player)
+                            for player in self.players.values() if int(getattr(player, "level", 0)) == 0
+                        )
+                    else:
+                        # Underground players see only players sharing their exact
+                        # authoritative negative level. No Ground traffic leaks in.
+                        drawables.extend(
+                            (self.camera_depth(player.render_x, player.render_y), "player", player)
+                            for player in self.players.values() if int(getattr(player, "level", 0)) == active_world_level
+                        )
                     for _, kind, obj in sorted(drawables, key=lambda row: row[0]):
                         if kind == "car": self.draw_vehicle(obj)
                         elif kind == "bike": self.draw_bicycle_entity(obj)
                         elif kind == "npc": self.draw_npc(obj)
                         else: self.draw_player(obj, local=(obj.id == self.local_id))
 
-                    positive_levels = sorted({
-                        int(float(road.get("level", 0) or 0))
-                        for road in self.map_config.get("roads", []) or []
-                        if int(float(road.get("level", 0) or 0)) > 0
-                    })
-                    for map_level in positive_levels:
-                        self.environment.draw_elevated_overlay(self.screen, self.camera(), map_level)
-                        level_players = [
-                            (self.camera_depth(player.render_x, player.render_y), player)
-                            for player in self.players.values()
-                            if int(getattr(player, "level", 0)) == map_level
-                        ]
-                        for _, player in sorted(level_players, key=lambda row: row[0]):
-                            self.draw_player(player, local=(player.id == self.local_id))
+                    if active_world_level >= 0:
+                        positive_levels = sorted({
+                            int(float(road.get("level", 0) or 0))
+                            for road in self.map_config.get("roads", []) or []
+                            if int(float(road.get("level", 0) or 0)) > 0
+                        })
+                        for map_level in positive_levels:
+                            self.environment.draw_elevated_overlay(self.screen, self.camera(), map_level)
+                            level_players = [
+                                (self.camera_depth(player.render_x, player.render_y), player)
+                                for player in self.players.values()
+                                if int(getattr(player, "level", 0)) == map_level
+                            ]
+                            for _, player in sorted(level_players, key=lambda row: row[0]):
+                                self.draw_player(player, local=(player.id == self.local_id))
                     self.screen = display_surface
                     self._render_camera_override = None
                     if rotation_active:
@@ -3775,9 +3919,10 @@ class Game:
                         pygame.transform.smoothscale(final_world, display_surface.get_size(), display_surface)
                     else:
                         pygame.transform.scale(final_world, display_surface.get_size(), display_surface)
-                    # Nameplates are screen-space UI and therefore stay horizontal
-                    # at every camera angle.
+                    # Nameplates and job-location labels are screen-space UI and
+                    # therefore stay horizontal at every camera angle.
                     self.draw_player_nameplates()
+                    self.draw_job_location_labels()
                     self.draw_hud()
                     zoom_text = self.tiny_font.render(f"ZOOM {self.camera_zoom:.2f}x", True, MUTED_TEXT)
                     self.screen.blit(zoom_text, (self.screen.get_width()-zoom_text.get_width()-18, 48))

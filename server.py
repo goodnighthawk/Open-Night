@@ -77,10 +77,11 @@ from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
 from versioning import GAME_VERSION
+from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v0.8 / Pass 19"
+SERVER_NAME = "Open Night v0.9.0 / consolidation"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 SERVER_VERSION = GAME_VERSION
@@ -93,6 +94,8 @@ BUG_REPORT_SALT = os.getenv("PYMMO_BUG_REPORT_SALT", BUG_ADMIN_TOKEN or "open-ni
 
 ACTIVE_MAP_ID = DEFAULT_MAP_ID
 ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
+GRID_RUNTIME_ACTIVE = ground_grid_enabled(ACTIVE_MAP)
+GRID_WORLD = load_ground_grid() if GRID_RUNTIME_ACTIVE else None
 ACTIVE_MAP_TRANSFER = None
 DB: InventoryDatabase | None = None
 USE_MYSQL = True
@@ -106,7 +109,7 @@ MOVEMENT_SETTINGS = SETTINGS.get("movement", {})
 VEHICLE_SETTINGS = SETTINGS.get("vehicle", {})
 ENGINE_SETTINGS = SETTINGS.get("engine", {})
 MAP_ROSTER_RATE = max(0.25, float(ENGINE_SETTINGS.get("world_map_player_roster_hz", 2.0)))
-LAYER_TRANSITION_JUMP_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.65)))
+LAYER_TRANSITION_JUMP_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.0)))
 JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("jump_duration_seconds", 0.75)))
 DOUBLE_JUMP_WINDOW_SECONDS = max(0.05, float(MOVEMENT_SETTINGS.get("double_jump_window_seconds", 0.55)))
 DOUBLE_JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("double_jump_duration_seconds", 0.95)))
@@ -117,6 +120,10 @@ WATER_WALK_SPEED_MULTIPLIER = max(0.05, min(1.0, float(MOVEMENT_SETTINGS.get("wa
 PASSENGER_CAPACITY = max(1, int(VEHICLE_SETTINGS.get("passenger_capacity", 3)))
 PASSENGER_BOARD_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_board_max_speed_px_s", 35.0)))
 PASSENGER_EXIT_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_exit_max_speed_px_s", 70.0)))
+HYDRANT_BREAK_MPH = 30.0
+HYDRANT_RESPAWN_SECONDS = 300.0
+HYDRANT_WATER_SECONDS = 5.0
+HYDRANT_HIT_RADIUS = 34.0
 
 
 def _indexed_character_appearance(index: int, *, preset_only: bool = False) -> dict:
@@ -181,6 +188,7 @@ def network_map_payload(map_config: dict) -> dict:
         )
         out = {key: map_config.get(key) for key in keys if key in map_config}
         out["map_payload_mode"] = "local_chunked_v1"
+        out.update(grid_network_metadata(map_config))
         return out
 
     def clean(value):
@@ -417,6 +425,7 @@ class NPCPedestrian:
     appearance: dict
     pause_timer: float = 0.0
     step_counter: int = 0
+    kind: str = "pedestrian"
 
     def public_dict(self) -> dict:
         return {
@@ -425,6 +434,7 @@ class NPCPedestrian:
             "y": round(self.y, 2),
             "aim": round(self.aim, 4),
             "appearance": normalize_character(self.appearance),
+            "kind": self.kind,
         }
 
 
@@ -448,6 +458,26 @@ class BloodStain:
 
 
 @dataclass
+class HydrantState:
+    hydrant_id: str
+    x: float
+    y: float
+    broken_until: float = 0.0
+    water_until: float = 0.0
+
+    def public_dict(self, now: float) -> dict:
+        broken = self.broken_until > now
+        return {
+            "id": self.hydrant_id,
+            "x": round(self.x, 2),
+            "y": round(self.y, 2),
+            "broken": broken,
+            "water_remaining": round(max(0.0, self.water_until - now), 2) if broken else 0.0,
+            "respawn_remaining": round(max(0.0, self.broken_until - now), 2) if broken else 0.0,
+        }
+
+
+@dataclass
 class NPCRespawn:
     due_at: float
     route_index: int
@@ -458,6 +488,7 @@ class NPCRespawn:
 
 blood_stains: list[BloodStain] = []
 npc_respawns: list[NPCRespawn] = []
+hydrants: dict[str, HydrantState] = {}
 
 
 @dataclass
@@ -1368,6 +1399,20 @@ def inventory_payload(session: ClientSession) -> dict:
     }
 
 
+def initialize_hydrants() -> None:
+    """Load authored fire-hydrant props into lightweight authoritative state."""
+    hydrants.clear()
+    for index, prop in enumerate(ACTIVE_MAP.get("street_props", []) or []):
+        if str(prop.get("kind", "")) != "fire_hydrant":
+            continue
+        try:
+            x, y = map(float, prop.get("pos", [0, 0]))
+        except (TypeError, ValueError):
+            continue
+        hid = str(prop.get("id", f"hydrant_{index:04d}"))
+        hydrants[hid] = HydrantState(hydrant_id=hid, x=x, y=y)
+
+
 def initialize_npcs() -> None:
     npc_pedestrians.clear()
     blood_stains.clear()
@@ -1383,6 +1428,24 @@ def initialize_npcs() -> None:
             npc_id=str(start.get("id", f"npc{i+1:03d}")), route_index=route_index, next_waypoint=next_wp,
             x=x, y=y, speed=float(route.get("speed", 54.0)) * float(start.get("speed_scale", 1.0)),
             aim=heading, appearance=appearance, pause_timer=0.0,
+        ))
+
+    # v0.9: dogs are lightweight server-authoritative ambient NPCs. They reuse
+    # sidewalk pedestrian routes so they inherit existing culling/path behavior
+    # without adding a second AI system or allowing animals onto water/roads.
+    dog_count = min(8, max(3, len(routes) // 3))
+    for dog_i in range(dog_count):
+        route_index = (dog_i * 7 + 1) % len(routes)
+        route = routes[route_index]
+        points = _route_points(route)
+        if len(points) < 2:
+            continue
+        fraction = ((dog_i + 1) / (dog_count + 1)) * 0.92
+        x, y, next_wp, heading = _sample_route(route, fraction)
+        npc_pedestrians.append(NPCPedestrian(
+            npc_id=f"dog{dog_i+1:02d}", route_index=route_index, next_waypoint=next_wp,
+            x=x, y=y, speed=max(36.0, float(route.get("speed", 54.0)) * 0.82),
+            aim=heading, appearance={}, pause_timer=0.0, kind="dog",
         ))
 
 
@@ -1458,6 +1521,31 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
 
 def vehicle_speed_mph(speed_px_s: float) -> float:
     return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
+
+
+def update_hydrants(now: float) -> None:
+    """Break authored hydrants on >30 mph car impacts and respawn after five minutes."""
+    if not hydrants:
+        return
+    for hydrant in hydrants.values():
+        if hydrant.broken_until > 0.0 and now >= hydrant.broken_until:
+            hydrant.broken_until = 0.0
+            hydrant.water_until = 0.0
+        if hydrant.broken_until > now:
+            continue
+        for car in traffic_vehicles:
+            if vehicle_speed_mph(car.speed) <= HYDRANT_BREAK_MPH:
+                continue
+            direction = 1.0 if car.speed >= 0.0 else -1.0
+            nose_x = car.x + math.cos(car.angle) * car.collision_length * 0.46 * direction
+            nose_y = car.y + math.sin(car.angle) * car.collision_length * 0.46 * direction
+            hit_radius = HYDRANT_HIT_RADIUS + car.collision_width * 0.38
+            if (nose_x - hydrant.x) ** 2 + (nose_y - hydrant.y) ** 2 > hit_radius ** 2:
+                continue
+            hydrant.broken_until = now + HYDRANT_RESPAWN_SECONDS
+            hydrant.water_until = now + HYDRANT_WATER_SECONDS
+            car.speed *= 0.86
+            break
 
 
 def update_npc_runovers(now: float) -> None:
@@ -2514,6 +2602,8 @@ async def handle_message(session: ClientSession, raw: str) -> None:
 
 
 def choose_safe_player_spawn(map_config: dict) -> tuple[float, float]:
+    if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None:
+        return GRID_WORLD.choose_spawn("ground", PLAYER_RADIUS)
     """Return a guaranteed walkable login position.
 
     CSV/reference-map edits may move roads/buildings independently. A configured spawn
@@ -2879,7 +2969,30 @@ async def simulation_loop() -> None:
                     if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):
                         car.x, car.y, car.angle = nx, ny, proposed_angle
                     else:
-                        car.speed = 0.0
+                        # v0.9 arcade collision recovery: try a short glancing slide
+                        # before killing momentum. This prevents player cars being
+                        # pinned squarely into building corners after one impact.
+                        impact_speed = car.speed
+                        deflected = False
+                        direction = 1.0 if impact_speed >= 0.0 else -1.0
+                        for deflect_angle in (0.16, -0.16, 0.30, -0.30):
+                            candidate_angle = old_angle + deflect_angle * direction
+                            slide = impact_speed * dt * 0.45
+                            sx = car.x + math.cos(candidate_angle) * slide
+                            sy = car.y + math.sin(candidate_angle) * slide
+                            if (_vehicle_map_blocked(car, sx, sy, candidate_angle)
+                                    or _vehicle_hits_vehicle(car, sx, sy, candidate_angle)
+                                    or _vehicle_hits_bicycle(car, sx, sy, candidate_angle)):
+                                continue
+                            car.x, car.y, car.angle = sx, sy, candidate_angle
+                            car.speed = impact_speed * 0.42
+                            deflected = True
+                            break
+                        if not deflected:
+                            # A small rebound leaves the next input tick able to steer
+                            # away instead of trapping the car at exactly zero speed.
+                            car.angle = old_angle
+                            car.speed = -impact_speed * 0.10
                     car.parked = False
                     p.x, p.y = car.x, car.y
                     p.aim = car.angle
@@ -2921,7 +3034,7 @@ async def simulation_loop() -> None:
                 dy = session.input_y * walk_speed * sprint_mult * dt
             current_level = int(getattr(p, "level", 0))
             water_probe_x, water_probe_y = p.x + dx, p.y + dy
-            wading = current_level == 0 and (
+            wading = (not GRID_RUNTIME_ACTIVE) and current_level == 0 and (
                 point_in_water(p.x, p.y, ACTIVE_MAP)
                 or point_in_water(water_probe_x, water_probe_y, ACTIVE_MAP)
             ) and not (
@@ -2933,9 +3046,14 @@ async def simulation_loop() -> None:
                 dy *= WATER_WALK_SPEED_MULTIPLIER
                 session.boost = False
             movement_start_x, movement_start_y = p.x, p.y
-            p.x, p.y = move_with_collisions(
-                p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
-            )
+            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and current_level == 0:
+                p.x, p.y = GRID_WORLD.move_circle(
+                    "ground", p.x, p.y, dx, dy, PLAYER_RADIUS
+                )
+            else:
+                p.x, p.y = move_with_collisions(
+                    p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
+                )
             previous_level = int(getattr(p, "level", 0))
             next_level = resolve_level_transition(
                 p.x,
@@ -2945,10 +3063,14 @@ async def simulation_loop() -> None:
                 previous_x=movement_start_x,
                 previous_y=movement_start_y,
             )
+            if GRID_RUNTIME_ACTIVE and previous_level == 0:
+                # Grid Ground owns its own future transition cells. Do not let the
+                # retired vector connector table switch levels underneath it.
+                next_level = 0
             p.level = next_level
-            if next_level != previous_level:
-                # Connector transitions should read as a deliberate hop rather
-                # than the player silently snapping between vertical layers.
+            if next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0:
+                # Optional authored transition pose. v0.9 defaults this to zero so
+                # automatic ramps/bridges never masquerade as a player jump.
                 session.jump_until = max(
                     session.jump_until,
                     time.monotonic() + LAYER_TRANSITION_JUMP_SECONDS,
@@ -2958,7 +3080,9 @@ async def simulation_loop() -> None:
         update_traffic(dt, sessions, time.time())
         update_bicycles(dt, sessions)
         update_npcs(dt, sessions, tick_index)
-        update_npc_runovers(time.monotonic())
+        current_mono = time.monotonic()
+        update_npc_runovers(current_mono)
+        update_hydrants(current_mono)
         tick_index += 1
 
 
@@ -2988,6 +3112,7 @@ async def snapshot_loop() -> None:
         npc_buckets: dict[tuple[int,int], list[NPCPedestrian]] = {}
         bicycle_buckets: dict[tuple[int,int], list[BicycleState]] = {}
         blood_buckets: dict[tuple[int,int], list[BloodStain]] = {}
+        hydrant_buckets: dict[tuple[int,int], list[HydrantState]] = {}
         light_buckets: dict[tuple[int,int], list[dict]] = {}
 
         for other in sessions:
@@ -3000,6 +3125,8 @@ async def snapshot_loop() -> None:
             bicycle_buckets.setdefault(world_to_chunk(bike.x, bike.y, ACTIVE_MAP), []).append(bike)
         for stain in blood_stains:
             blood_buckets.setdefault(world_to_chunk(stain.x, stain.y, ACTIVE_MAP), []).append(stain)
+        for hydrant in hydrants.values():
+            hydrant_buckets.setdefault(world_to_chunk(hydrant.x, hydrant.y, ACTIVE_MAP), []).append(hydrant)
         for signal in ACTIVE_MAP.get("traffic_signals", []):
             pos = signal.get("pos", [0, 0])
             light_buckets.setdefault(world_to_chunk(float(pos[0]), float(pos[1]), ACTIVE_MAP), []).append(signal)
@@ -3013,6 +3140,7 @@ async def snapshot_loop() -> None:
             visible_npcs = []
             visible_bicycles = []
             visible_blood = []
+            visible_hydrants = []
             visible_lights = {}
 
             for cy in range(max(0, pcy-radius), pcy+radius+1):
@@ -3036,7 +3164,9 @@ async def snapshot_loop() -> None:
                     visible_vehicles.extend(car.public_dict() for car in vehicle_buckets.get(key, ()))
                     visible_npcs.extend(npc.public_dict() for npc in npc_buckets.get(key, ()))
                     visible_bicycles.extend(bike.public_dict() for bike in bicycle_buckets.get(key, ()))
-                    visible_blood.extend(stain.public_dict(time.monotonic()) for stain in blood_buckets.get(key, ()))
+                    snapshot_mono = time.monotonic()
+                    visible_blood.extend(stain.public_dict(snapshot_mono) for stain in blood_buckets.get(key, ()))
+                    visible_hydrants.extend(hydrant.public_dict(snapshot_mono) for hydrant in hydrant_buckets.get(key, ()))
                     for signal in light_buckets.get(key, ()):
                         sid = str(signal.get("id"))
                         visible_lights[sid] = bool(all_lights.get(sid, False))
@@ -3048,6 +3178,7 @@ async def snapshot_loop() -> None:
                 "npcs": visible_npcs,
                 "bicycles": visible_bicycles,
                 "blood_stains": visible_blood,
+                "hydrants": visible_hydrants,
                 "traffic_lights": visible_lights,
                 "server_time": server_time,
                 "chunk": [pcx, pcy],
@@ -3299,10 +3430,17 @@ def cli_main() -> None:
         else:
             print("WARNING: bug reports can be stored, but PYMMO_BUG_ADMIN_TOKEN is not configured for review.")
 
-    initialize_traffic(TRAFFIC_COUNT)
-    initialize_parked_vehicles()
-    initialize_bicycles()
-    initialize_npcs()
+    if GRID_RUNTIME_ACTIVE:
+        # Old entity routes were authored against the retired vector map and may
+        # cross new buildings. Keep the first playable grid milestone honest by
+        # suppressing them until grid-native routes/spawns are authored.
+        print("Grid Ground runtime active: legacy traffic/NPC surface entities disabled.")
+    else:
+        initialize_traffic(TRAFFIC_COUNT)
+        initialize_parked_vehicles()
+        initialize_bicycles()
+        initialize_npcs()
+        initialize_hydrants()
 
     try:
         asyncio.run(main(args.host, args.port, args.name, discovery=not args.no_discovery))

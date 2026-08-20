@@ -1,0 +1,24 @@
+{
+  "source": "city_block.zip",
+  "cell_px": 256,
+  "zip_sha256": "9b48e2b2d8eb806720a927df8180b829bc8e65fa7248b70db13d805a09de1cbe",
+  "proof_subset": [
+    {"path":"road_and_pavement_tileset/road_fill.png","size":964,"sha256":"c608cc4ac4cc5d5931f345969ec2a96629912c940ac086a2611565f2d73da060"},
+    {"path":"road_and_pavement_tileset/pavement_horizontal_repeating.png","size":998,"sha256":"4a37d5b88290d8ca2b3422bc422cbc9b141a911db9c3ee03d1a7bf054e09e51e"},
+    {"path":"road_and_pavement_tileset/pavement_vertical_repeating.png","size":1001,"sha256":"477dd3dbbe9ce7c4fc92415b2c68e6644bcb10f90d3b2b2aae2cec8f488c3f4a"},
+    {"path":"road_and_pavement_tileset/curb_left_edge.png","size":6601,"sha256":"4a21127fb1b205c63692f0e6f0f8b61dd425b25fb2e48065e58af5c3dbb571a9"},
+    {"path":"road_and_pavement_tileset/curb_right_edge.png","size":6511,"sha256":"16833ea3864c3a6fe0d94de13e3b02ec38c16464ec1b0a36a93be3c5ebfab9a3"},
+    {"path":"road_and_pavement_tileset/curb_top_center.png","size":5502,"sha256":"21cca7129c17f5d18ec3540e222f9ae076849ad2255a7139980734fa68d1631c"},
+    {"path":"road_and_pavement_tileset/curb_bottom_center.png","size":5528,"sha256":"ce6b330049d1c4c6caca15c72024c33b671fbd736eb8192c9510167faee31c2c"},
+    {"path":"road_markings/white_crossing_piece.png","size":8469,"sha256":"fc2bdbfb598a7aa6b88c7459b679baf156a000896372fa843a3aec725e6372fc"},
+    {"path":"road_markings/white_stop.png","size":10595,"sha256":"12e1c65f2a49fe19986e7e7d625119dc8ac6aa2e45985ea1afe6b8c0cb0ba810"},
+    {"path":"road_markings/white_short_arrow.png","size":3211,"sha256":"88810a18066a9e9dd7c75179ff15c0df21b8594d8e33d42718ab5b4c2f311b01"},
+    {"path":"road_overlays/man_hole.png","size":20818,"sha256":"034a8d1f9f6cde606adf448fd01e357402a6f78f5d57af96bae272bf6e39f232"},
+    {"path":"road_overlays/road_cracks.png","size":21651,"sha256":"8e062a0e8af137dc8b3c3bb2ac86e60522a8bd1a55864cde7138edeba4685d66"},
+    {"path":"premade_buildings/red_building_01.png","size":151468,"sha256":"50bc6c1a5ac51eb0577274de1e6e879380445983909f9c913a1b1003b878765b"},
+    {"path":"premade_buildings/blue_building_04.png","size":208298,"sha256":"203bc4d0a6c5cd5890ccb17ddebb1c4b5049c15403b5ecb9ba5dbab050857976"},
+    {"path":"roof_top_decorations/aircon_unit_large.png","size":43295,"sha256":"2e8aee7f799ff5484d9bdabd92dcf26a75dc4743c9954eef48ba46030f0c9ed8"},
+    {"path":"roof_top_decorations/duct.png","size":50331,"sha256":"98133f2631874bdf52ec2a8a674ce3a922dcc22c39209cd315f2de8f83e41a15"},
+    {"path":"roof_top_decorations/red_water_but.png","size":51396,"sha256":"14b0ea5be2a0d1de69464c623d1706b3a5f07afb2fadd0b127455f6b782f7111"}
+  ]
+}

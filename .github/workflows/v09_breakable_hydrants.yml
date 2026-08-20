@@ -1,0 +1,200 @@
+name: Open Night v0.9.0 Breakable Hydrants
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0.9.0-consolidation
+    paths:
+      - .github/workflows/v09_breakable_hydrants.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+
+      - name: Patch authoritative hydrant gameplay
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('server.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''PASSENGER_EXIT_MAX_SPEED = max(0.0, float(VEHICLE_SETTINGS.get("passenger_exit_max_speed_px_s", 70.0)))\n'''
+          new = old + '''HYDRANT_BREAK_MPH = 30.0\nHYDRANT_RESPAWN_SECONDS = 300.0\nHYDRANT_WATER_SECONDS = 5.0\nHYDRANT_HIT_RADIUS = 34.0\n'''
+          if old not in text:
+              raise SystemExit('server constants anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''@dataclass\nclass NPCRespawn:\n'''
+          new = '''@dataclass\nclass HydrantState:\n    hydrant_id: str\n    x: float\n    y: float\n    broken_until: float = 0.0\n    water_until: float = 0.0\n\n    def public_dict(self, now: float) -> dict:\n        broken = self.broken_until > now\n        return {\n            "id": self.hydrant_id,\n            "x": round(self.x, 2),\n            "y": round(self.y, 2),\n            "broken": broken,\n            "water_remaining": round(max(0.0, self.water_until - now), 2) if broken else 0.0,\n            "respawn_remaining": round(max(0.0, self.broken_until - now), 2) if broken else 0.0,\n        }\n\n\n@dataclass\nclass NPCRespawn:\n'''
+          if old not in text:
+              raise SystemExit('HydrantState insertion anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''blood_stains: list[BloodStain] = []\nnpc_respawns: list[NPCRespawn] = []\n'''
+          new = '''blood_stains: list[BloodStain] = []\nnpc_respawns: list[NPCRespawn] = []\nhydrants: dict[str, HydrantState] = {}\n'''
+          if old not in text:
+              raise SystemExit('hydrant globals anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''def initialize_npcs() -> None:\n'''
+          new = '''def initialize_hydrants() -> None:\n    """Load authored fire-hydrant props into lightweight authoritative state."""\n    hydrants.clear()\n    for index, prop in enumerate(ACTIVE_MAP.get("street_props", []) or []):\n        if str(prop.get("kind", "")) != "fire_hydrant":\n            continue\n        try:\n            x, y = map(float, prop.get("pos", [0, 0]))\n        except (TypeError, ValueError):\n            continue\n        hid = str(prop.get("id", f"hydrant_{index:04d}"))\n        hydrants[hid] = HydrantState(hydrant_id=hid, x=x, y=y)\n\n\ndef initialize_npcs() -> None:\n'''
+          if old not in text:
+              raise SystemExit('initialize_hydrants anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''def update_npc_runovers(now: float) -> None:\n'''
+          insert = '''def update_hydrants(now: float) -> None:\n    """Break authored hydrants on >30 mph car impacts and respawn after five minutes."""\n    if not hydrants:\n        return\n    for hydrant in hydrants.values():\n        if hydrant.broken_until > 0.0 and now >= hydrant.broken_until:\n            hydrant.broken_until = 0.0\n            hydrant.water_until = 0.0\n        if hydrant.broken_until > now:\n            continue\n        for car in traffic_vehicles:\n            if vehicle_speed_mph(car.speed) <= HYDRANT_BREAK_MPH:\n                continue\n            direction = 1.0 if car.speed >= 0.0 else -1.0\n            nose_x = car.x + math.cos(car.angle) * car.collision_length * 0.46 * direction\n            nose_y = car.y + math.sin(car.angle) * car.collision_length * 0.46 * direction\n            hit_radius = HYDRANT_HIT_RADIUS + car.collision_width * 0.38\n            if (nose_x - hydrant.x) ** 2 + (nose_y - hydrant.y) ** 2 > hit_radius ** 2:\n                continue\n            hydrant.broken_until = now + HYDRANT_RESPAWN_SECONDS\n            hydrant.water_until = now + HYDRANT_WATER_SECONDS\n            car.speed *= 0.86\n            break\n\n\n'''
+          if old not in text:
+              raise SystemExit('update_hydrants anchor missing')
+          text = text.replace(old, insert + old, 1)
+
+          old = '''        update_npc_runovers(time.monotonic())\n        tick_index += 1\n'''
+          new = '''        current_mono = time.monotonic()\n        update_npc_runovers(current_mono)\n        update_hydrants(current_mono)\n        tick_index += 1\n'''
+          if old not in text:
+              raise SystemExit('simulation hydrant update anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        blood_buckets: dict[tuple[int,int], list[BloodStain]] = {}\n        light_buckets: dict[tuple[int,int], list[dict]] = {}\n'''
+          new = '''        blood_buckets: dict[tuple[int,int], list[BloodStain]] = {}\n        hydrant_buckets: dict[tuple[int,int], list[HydrantState]] = {}\n        light_buckets: dict[tuple[int,int], list[dict]] = {}\n'''
+          if old not in text:
+              raise SystemExit('snapshot bucket declaration anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        for stain in blood_stains:\n            blood_buckets.setdefault(world_to_chunk(stain.x, stain.y, ACTIVE_MAP), []).append(stain)\n        for signal in ACTIVE_MAP.get("traffic_signals", []):\n'''
+          new = '''        for stain in blood_stains:\n            blood_buckets.setdefault(world_to_chunk(stain.x, stain.y, ACTIVE_MAP), []).append(stain)\n        for hydrant in hydrants.values():\n            hydrant_buckets.setdefault(world_to_chunk(hydrant.x, hydrant.y, ACTIVE_MAP), []).append(hydrant)\n        for signal in ACTIVE_MAP.get("traffic_signals", []):\n'''
+          if old not in text:
+              raise SystemExit('snapshot hydrant indexing anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''            visible_blood = []\n            visible_lights = {}\n'''
+          new = '''            visible_blood = []\n            visible_hydrants = []\n            visible_lights = {}\n'''
+          if old not in text:
+              raise SystemExit('visible hydrants declaration anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''                    visible_blood.extend(stain.public_dict(time.monotonic()) for stain in blood_buckets.get(key, ()))\n                    for signal in light_buckets.get(key, ()):\n'''
+          new = '''                    snapshot_mono = time.monotonic()\n                    visible_blood.extend(stain.public_dict(snapshot_mono) for stain in blood_buckets.get(key, ()))\n                    visible_hydrants.extend(hydrant.public_dict(snapshot_mono) for hydrant in hydrant_buckets.get(key, ()))\n                    for signal in light_buckets.get(key, ()):\n'''
+          if old not in text:
+              raise SystemExit('visible hydrants population anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''                "blood_stains": visible_blood,\n                "traffic_lights": visible_lights,\n'''
+          new = '''                "blood_stains": visible_blood,\n                "hydrants": visible_hydrants,\n                "traffic_lights": visible_lights,\n'''
+          if old not in text:
+              raise SystemExit('snapshot hydrants payload anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''    initialize_bicycles()\n    initialize_npcs()\n'''
+          new = '''    initialize_bicycles()\n    initialize_npcs()\n    initialize_hydrants()\n'''
+          if old not in text:
+              raise SystemExit('hydrant initialization call anchor missing')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Patch client hydrant state and water effect
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('client.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''        self.blood_stains: dict[str, dict] = {}\n        self.traffic_lights: dict[str, bool] = {}\n'''
+          new = '''        self.blood_stains: dict[str, dict] = {}\n        self.hydrants: dict[str, dict] = {}\n        self.traffic_lights: dict[str, bool] = {}\n'''
+          if old not in text:
+              raise SystemExit('client hydrant state anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''                lights = message.get("traffic_lights")\n'''
+          new = '''                hydrant_rows = message.get("hydrants", [])\n                if isinstance(hydrant_rows, list):\n                    self.hydrants = {\n                        str(row.get("id")): row for row in hydrant_rows\n                        if isinstance(row, dict) and row.get("id")\n                    }\n                    hidden = {hid for hid, row in self.hydrants.items() if bool(row.get("broken", False))}\n                    setter = getattr(self.environment, "set_hidden_street_props", None)\n                    if callable(setter):\n                        setter(hidden)\n                lights = message.get("traffic_lights")\n'''
+          if old not in text:
+              raise SystemExit('client hydrant snapshot anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''    def draw_traffic_signal(self, signal: dict) -> None:\n'''
+          new = '''    def draw_hydrant_effects(self) -> None:\n        """Render the short server-authoritative water burst after a hydrant impact."""\n        now = time.monotonic()\n        for hydrant in self.hydrants.values():\n            try:\n                remaining = float(hydrant.get("water_remaining", 0.0))\n                x, y = float(hydrant.get("x", 0.0)), float(hydrant.get("y", 0.0))\n            except (TypeError, ValueError):\n                continue\n            if remaining <= 0.0 or not bool(hydrant.get("broken", False)):\n                continue\n            sx, sy = self.world_to_screen(x, y)\n            pulse = 0.5 + 0.5 * math.sin(now * 9.0)\n            height = int(28 + 32 * min(1.0, remaining / 1.5))\n            pygame.draw.line(self.screen, (136, 196, 220), (sx, sy), (sx + int(5*pulse), sy - height), 5)\n            pygame.draw.circle(self.screen, (174, 218, 232), (sx + int(5*pulse), sy - height), 6)\n            pygame.draw.ellipse(self.screen, (72, 119, 137), pygame.Rect(sx - 23, sy - 8, 46, 16), width=3)\n\n    def draw_traffic_signal(self, signal: dict) -> None:\n'''
+          if old not in text:
+              raise SystemExit('draw_hydrant_effects anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        self.environment.draw_view(self.screen, self.camera())\n        self.draw_bike_lanes()\n'''
+          new = '''        self.environment.draw_view(self.screen, self.camera())\n        self.draw_hydrant_effects()\n        self.draw_bike_lanes()\n'''
+          if old not in text:
+              raise SystemExit('draw hydrant effect call anchor missing')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Patch static prop suppression
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('environment_art.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''        self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}\n'''
+          new = '''        self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}\n        self._hidden_street_props: set[str] = set()\n'''
+          if old not in text:
+              raise SystemExit('hidden street prop state anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''    def _style(self) -> tuple[list[str], list[str]]:\n'''
+          new = '''    def set_hidden_street_props(self, prop_ids) -> None:\n        """Hide dynamic/broken props and invalidate only cached static chunks."""\n        hidden = {str(item) for item in prop_ids}\n        if hidden == self._hidden_street_props:\n            return\n        self._hidden_street_props = hidden\n        self.chunk_cache.clear()\n        if not self.chunked and self.map_config:\n            cfg = dict(self.map_config)\n            self._signature = None\n            self.set_map(cfg)\n\n    def _style(self) -> tuple[list[str], list[str]]:\n'''
+          if old not in text:
+              raise SystemExit('set_hidden_street_props insertion anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''        for prop in self._street_prop_index.get((cx, cy), ()):\n            try:\n'''
+          new = '''        for prop in self._street_prop_index.get((cx, cy), ()):\n            if str(prop.get("id", "")) in self._hidden_street_props:\n                continue\n            try:\n'''
+          if old not in text:
+              raise SystemExit('street prop suppression anchor missing')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Runtime syntax and hydrant contract
+        shell: bash
+        run: |
+          python -m py_compile client.py server.py environment_art.py common.py
+          python - <<'PY'
+          from pathlib import Path
+          server = Path('server.py').read_text(encoding='utf-8')
+          client = Path('client.py').read_text(encoding='utf-8')
+          art = Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'HYDRANT_BREAK_MPH = 30.0' in server
+          assert 'HYDRANT_RESPAWN_SECONDS = 300.0' in server
+          assert 'def update_hydrants(now: float)' in server
+          assert 'vehicle_speed_mph(car.speed) <= HYDRANT_BREAK_MPH' in server
+          assert '"hydrants": visible_hydrants' in server
+          assert 'def draw_hydrant_effects(self)' in client
+          assert 'set_hidden_street_props' in client
+          assert 'def set_hidden_street_props(self, prop_ids)' in art
+          assert 'in self._hidden_street_props' in art
+          print('breakable-hydrant runtime contract: PASS')
+          PY
+
+      - name: Commit runtime implementation
+        shell: bash
+        run: |
+          if git diff --quiet -- server.py client.py environment_art.py; then
+            echo "No runtime change required."
+            exit 0
+          fi
+          git config user.name "Open Night Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add server.py client.py environment_art.py
+          git commit -m "v0.9: add breakable fire hydrants [skip ci]"
+          git push origin HEAD:v0.9.0-consolidation

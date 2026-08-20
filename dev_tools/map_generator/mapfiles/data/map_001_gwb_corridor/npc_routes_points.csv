@@ -9,3 +9,13 @@ walk_heights,1,11920,2940
 walk_heights,2,12000,3520
 walk_heights,3,10880,3460
 walk_heights,4,10880,2870
+supplier_patrol,0,3860,6380
+supplier_patrol,1,3940,6380
+supplier_patrol,2,3940,6460
+supplier_patrol,3,3860,6460
+supplier_patrol,4,3860,6380
+buyer_patrol,0,11360,6380
+buyer_patrol,1,11440,6380
+buyer_patrol,2,11440,6460
+buyer_patrol,3,11360,6460
+buyer_patrol,4,11360,6380

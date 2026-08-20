@@ -1,0 +1,10 @@
+name: Hold v1.0 Underground runtime
+
+on:
+  workflow_dispatch:
+
+jobs:
+  held:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Underground runtime wiring is intentionally held. Current v1.0 generation scope is Ground + Roof only.'

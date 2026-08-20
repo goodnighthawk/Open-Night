@@ -1,0 +1,35 @@
+name: Capture v1.0 Ground Runtime (legacy/manual)
+
+# Legacy baked-composition capture. Grid Map Lab is now the visual iteration loop;
+# use this workflow only when explicitly checking the old composition renderer.
+on:
+  workflow_dispatch:
+
+jobs:
+  capture-ground-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install renderer dependencies
+        run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'Pillow>=10,<13'
+
+      - name: Capture real Ground framebuffer
+        run: python tools/capture_v100_ground_runtime.py
+
+      - name: Verify capture
+        run: test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1920x720.png
+
+      - name: Upload Ground runtime capture
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v100-ground-runtime-capture-wide
+          path: assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_RUNTIME_1920x720.png
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,9 @@
+layer_id,z_index,game_level,space,source_semantics,overlay_mode,day_night,dynamic
+hell,-2,-2,world,hell_collision|hell_interactions,world_tiles,true,false
+underground,-1,-1,world,underground_collision|tunnels|basements|entrances,world_tiles,true,false
+ground,0,0,world,roads|sidewalks|buildings|water|vegetation|street_props,world_tiles,true,false
+first_floor,1,1,world,building_layers:upper|rooms|stairs|entrances,world_tiles,true,false
+second_floor,2,2,world,building_layers:upper2|rooms|stairs|entrances,world_tiles,true,false
+roof,3,3,world,building_layers:roof|roof_access|roof_props,world_tiles,true,false
+clouds,4,4,world,atmosphere|visibility_reserved,world_translucent_tiles,true,true
+hud_space,5,5,screen_or_world,hud|space_void,screen_and_world_overlay,false,true

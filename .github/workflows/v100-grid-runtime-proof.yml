@@ -1,0 +1,150 @@
+name: Build v1.0 Grid Runtime Proof
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'grid_world.py'
+      - 'grid_renderer.py'
+      - 'grid_runtime.py'
+      - 'building_morphology.py'
+      - 'road_morphology.py'
+      - 'client.py'
+      - 'grid_client_entry.py'
+      - 'v100_client.py'
+      - 'v100_runtime_refinement.py'
+      - 'v100_safe_layout.py'
+      - 'v100_scale_normalization.py'
+      - 'sitecustomize.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
+      - 'tools/build_v100_grid_seed.py'
+      - 'tools/generate_v100_ground_roof_layers.py'
+      - 'tools/capture_v100_grid_runtime.py'
+      - 'tools/capture_v100_grid_ui_runtime.py'
+      - 'tools/capture_v100_gameplay_hud_proof.py'
+      - 'tools/v100_building_setback_runtime_audit.py'
+      - 'tools/map_lab.py'
+      - 'tools/map_lab_render.py'
+      - 'MAP_LAB.bat'
+      - 'assets/grid_v100/**'
+      - 'assets/source_packs/city_block/**'
+      - '.github/workflows/v100-grid-runtime-proof.yml'
+  pull_request:
+    branches: [v0.9.0-consolidation]
+    paths:
+      - 'grid_world.py'
+      - 'grid_renderer.py'
+      - 'grid_runtime.py'
+      - 'building_morphology.py'
+      - 'road_morphology.py'
+      - 'client.py'
+      - 'grid_client_entry.py'
+      - 'v100_client.py'
+      - 'v100_runtime_refinement.py'
+      - 'v100_safe_layout.py'
+      - 'v100_scale_normalization.py'
+      - 'sitecustomize.py'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
+      - 'tools/build_v100_grid_seed.py'
+      - 'tools/generate_v100_ground_roof_layers.py'
+      - 'tools/capture_v100_grid_runtime.py'
+      - 'tools/capture_v100_grid_ui_runtime.py'
+      - 'tools/capture_v100_gameplay_hud_proof.py'
+      - 'tools/v100_building_setback_runtime_audit.py'
+      - 'tools/map_lab.py'
+      - 'tools/map_lab_render.py'
+      - 'MAP_LAB.bat'
+      - 'assets/grid_v100/**'
+      - 'assets/source_packs/city_block/**'
+      - '.github/workflows/v100-grid-runtime-proof.yml'
+  workflow_dispatch:
+
+jobs:
+  grid-runtime-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install renderer
+        run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'websockets>=16,<18'
+      - name: Compile Ground + Roof grid pipeline and Map Lab
+        run: python -m py_compile client.py grid_client_entry.py v100_client.py v100_runtime_refinement.py v100_safe_layout.py v100_scale_normalization.py sitecustomize.py grid_world.py grid_renderer.py grid_runtime.py building_morphology.py road_morphology.py tools/build_v100_grid_seed.py tools/generate_v100_ground_roof_layers.py tools/capture_v100_grid_runtime.py tools/capture_v100_grid_ui_runtime.py tools/capture_v100_gameplay_hud_proof.py tools/v100_building_setback_runtime_audit.py tools/map_lab.py tools/map_lab_render.py
+      - name: Generate Ground + Roof support files
+        run: python tools/generate_v100_ground_roof_layers.py
+      - name: Validate committed playable Ground map
+        run: python tools/build_v100_grid_seed.py
+      - name: Verify repo-resident city_block source pack
+        run: test -f assets/source_packs/city_block/road_and_pavement_tileset/road_fill.png
+      - name: Render actual Ground + Roof runtime frames
+        run: python tools/capture_v100_grid_runtime.py
+      - name: Capture authoritative minimap + M-map runtime frames
+        run: python tools/capture_v100_grid_ui_runtime.py
+      - name: Capture canonical player + HUD runtime frame
+        run: python tools/capture_v100_gameplay_hud_proof.py
+      - name: Audit joint building setbacks and preserved edge alpha
+        run: python tools/v100_building_setback_runtime_audit.py
+      - name: Verify GridWorld UI proof bundle
+        run: |
+          test -f assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json
+          test -f assets/grid_v100/BUILDING_SILHOUETTE_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/GRID_MINIMAP_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GRID_WORLD_MAP_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GRID_UI_LEGACY_INDEPENDENCE.json
+          test -f assets/grid_v100/GAMEPLAY_HUD_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/GROUND_REFINED_RUNTIME_OVERVIEW_2560x1440.png
+          test -f assets/grid_v100/GAMEPLAY_HUD_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
+      - name: Smoke-test local Map Lab renderer
+        run: python tools/map_lab_render.py
+      - name: Verify Map Lab proof bundle
+        run: |
+          test -f artifacts/map_lab/current/GROUND_FULL.png
+          test -f artifacts/map_lab/current/GROUND_INTERSECTION.png
+          test -f artifacts/map_lab/current/GROUND_BUILDING.png
+          test -f artifacts/map_lab/current/ROOF_FULL.png
+          test -f artifacts/map_lab/current/ROOF_BUILDING.png
+          test -f artifacts/map_lab/current/TILE_ORIENTATION_TEST.png
+          test -f artifacts/map_lab/current/index.html
+      - name: Upload Ground + Roof proofs
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v100-ground-roof-runtime-proof
+          path: |
+            assets/grid_v100/GROUND_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/ROOF_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/GROUND_FULL_MAP_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/ROOF_FULL_MAP_RUNTIME_PROOF_2560x1440.png
+            assets/grid_v100/GROUND_NIGHT_RUNTIME_AUDIT.json
+            assets/grid_v100/GROUND_STREET_LIGHTING_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GROUND_STREET_LIGHTING_ALIGNMENT_AUDIT.json
+            assets/grid_v100/BUILDING_SILHOUETTE_RUNTIME_AUDIT.json
+            assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GROUND_ROAD_MORPHOLOGY_RUNTIME_AUDIT.json
+            assets/grid_v100/GRID_MINIMAP_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GRID_WORLD_MAP_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GRID_UI_LEGACY_INDEPENDENCE.json
+            assets/grid_v100/GAMEPLAY_HUD_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/GROUND_REFINED_RUNTIME_OVERVIEW_2560x1440.png
+            assets/grid_v100/GAMEPLAY_HUD_RUNTIME_AUDIT.json
+            assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
+            artifacts/map_lab/current/GROUND_FULL.png
+            artifacts/map_lab/current/GROUND_INTERSECTION.png
+            artifacts/map_lab/current/GROUND_BUILDING.png
+            artifacts/map_lab/current/ROOF_FULL.png
+            artifacts/map_lab/current/ROOF_BUILDING.png
+            artifacts/map_lab/current/TILE_ORIENTATION_TEST.png
+            artifacts/map_lab/current/summary.json
+            artifacts/map_lab/current/index.html
+            mapfiles/data/map_001_gwb_corridor/grid_v100/ground_grid.json
+            mapfiles/data/map_001_gwb_corridor/grid_v100/ground_generated_objects.json
+            mapfiles/data/map_001_gwb_corridor/grid_v100/roof_grid.generated.json
+          if-no-files-found: error
+          retention-days: 30

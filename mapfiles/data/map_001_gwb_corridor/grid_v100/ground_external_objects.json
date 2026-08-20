@@ -1,0 +1,1 @@
+{"format":"open-night-ground-external-composite-v2","deprecated_premade_building_overlay":true,"reason":"Ground buildings are now synthesized deterministically from modular city_block filenames; premade building overlays are intentionally disabled to prevent edge/orientation conflicts.","objects":[]}

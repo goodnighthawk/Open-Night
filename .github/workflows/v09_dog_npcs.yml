@@ -1,0 +1,80 @@
+name: Open Night v0.9.0 Dog NPCs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0.9.0-consolidation
+    paths:
+      - .github/workflows/v09_dog_npcs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+
+      - name: Add server-authoritative dog NPC role and deterministic spawns
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('server.py'); t=p.read_text(encoding='utf-8')
+          old='''    appearance: dict\n    pause_timer: float = 0.0\n    step_counter: int = 0\n\n    def public_dict(self) -> dict:\n        return {\n            "id": self.npc_id,\n            "x": round(self.x, 2),\n            "y": round(self.y, 2),\n            "aim": round(self.aim, 4),\n            "appearance": normalize_character(self.appearance),\n        }'''
+          new='''    appearance: dict\n    pause_timer: float = 0.0\n    step_counter: int = 0\n    kind: str = "pedestrian"\n\n    def public_dict(self) -> dict:\n        return {\n            "id": self.npc_id,\n            "x": round(self.x, 2),\n            "y": round(self.y, 2),\n            "aim": round(self.aim, 4),\n            "appearance": normalize_character(self.appearance),\n            "kind": self.kind,\n        }'''
+          if old not in t: raise SystemExit('NPC dataclass anchor not found')
+          t=t.replace(old,new,1)
+          anchor='''        npc_pedestrians.append(NPCPedestrian(\n            npc_id=str(start.get("id", f"npc{i+1:03d}")), route_index=route_index, next_waypoint=next_wp,\n            x=x, y=y, speed=float(route.get("speed", 54.0)) * float(start.get("speed_scale", 1.0)),\n            aim=heading, appearance=appearance, pause_timer=0.0,\n        ))\n'''
+          addition=anchor+'''\n    # v0.9: dogs are lightweight server-authoritative ambient NPCs. They reuse\n    # sidewalk pedestrian routes so they inherit existing culling/path behavior\n    # without adding a second AI system or allowing animals onto water/roads.\n    dog_count = min(8, max(3, len(routes) // 3))\n    for dog_i in range(dog_count):\n        route_index = (dog_i * 7 + 1) % len(routes)\n        route = routes[route_index]\n        points = _route_points(route)\n        if len(points) < 2:\n            continue\n        fraction = ((dog_i + 1) / (dog_count + 1)) * 0.92\n        x, y, next_wp, heading = _sample_route(route, fraction)\n        npc_pedestrians.append(NPCPedestrian(\n            npc_id=f"dog{dog_i+1:02d}", route_index=route_index, next_waypoint=next_wp,\n            x=x, y=y, speed=max(36.0, float(route.get("speed", 54.0)) * 0.82),\n            aim=heading, appearance={}, pause_timer=0.0, kind="dog",\n        ))\n'''
+          if anchor not in t: raise SystemExit('initialize_npcs anchor not found')
+          t=t.replace(anchor,addition,1)
+          p.write_text(t,encoding='utf-8')
+
+      - name: Add dog synchronization and rendering to client
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('client.py'); t=p.read_text(encoding='utf-8')
+          old='''        self.aim = float(data.get("aim", 0.0))\n        self.appearance = normalize_character(data.get("appearance"))\n        self.moving_until = time.monotonic() + 0.3'''
+          new='''        self.aim = float(data.get("aim", 0.0))\n        self.appearance = normalize_character(data.get("appearance"))\n        self.kind = str(data.get("kind", "pedestrian"))\n        self.moving_until = time.monotonic() + 0.3'''
+          if old not in t: raise SystemExit('RemoteNPC init anchor not found')
+          t=t.replace(old,new,1)
+          old2='''        self.aim = float(data.get("aim", self.aim))\n        if "appearance" in data:\n            self.appearance = normalize_character(data.get("appearance"))'''
+          new2='''        self.aim = float(data.get("aim", self.aim))\n        self.kind = str(data.get("kind", self.kind))\n        if "appearance" in data:\n            self.appearance = normalize_character(data.get("appearance"))'''
+          if old2 not in t: raise SystemExit('RemoteNPC update anchor not found')
+          t=t.replace(old2,new2,1)
+          old3='''    def draw_npc(self, npc: RemoteNPC) -> None:\n        sx, sy = self.world_to_screen(npc.render_x, npc.render_y)\n        npc_scale = max(1, int(self.settings.get("render", {}).get("npc_scale", 2)))\n        draw_character(\n            self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,\n            moving=time.monotonic() < npc.moving_until,\n            anim_time=time.monotonic() - npc.anim_epoch,\n        )'''
+          new3='''    def draw_npc(self, npc: RemoteNPC) -> None:\n        sx, sy = self.world_to_screen(npc.render_x, npc.render_y)\n        if getattr(npc, "kind", "pedestrian") == "dog":\n            # Compact original top-down dog silhouette; heading follows the same\n            # authoritative route aim as pedestrians. No external art dependency.\n            sprite = pygame.Surface((34, 22), pygame.SRCALPHA)\n            pygame.draw.ellipse(sprite, (91, 68, 48), pygame.Rect(7, 6, 21, 11))\n            pygame.draw.circle(sprite, (104, 78, 54), (28, 10), 6)\n            pygame.draw.polygon(sprite, (70, 49, 34), [(27,5),(29,1),(31,6)])\n            pygame.draw.line(sprite, (70, 49, 34), (7,10), (2,5), 3)\n            moving = time.monotonic() < npc.moving_until\n            gait = 2 if moving and int((time.monotonic()-npc.anim_epoch)*8) % 2 else 0\n            for lx in (10, 22):\n                pygame.draw.line(sprite, (65, 47, 34), (lx,15), (lx-gait,20), 2)\n            rotated = pygame.transform.rotozoom(sprite, -math.degrees(npc.aim), 1.0)\n            self.screen.blit(rotated, rotated.get_rect(center=(sx, sy)))\n            return\n        npc_scale = max(1, int(self.settings.get("render", {}).get("npc_scale", 2)))\n        draw_character(\n            self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,\n            moving=time.monotonic() < npc.moving_until,\n            anim_time=time.monotonic() - npc.anim_epoch,\n        )'''
+          if old3 not in t: raise SystemExit('draw_npc anchor not found')
+          t=t.replace(old3,new3,1)
+          p.write_text(t,encoding='utf-8')
+
+      - name: Runtime contract checks
+        shell: bash
+        run: |
+          python -m py_compile server.py client.py common.py environment_art.py
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('server.py').read_text(encoding='utf-8')
+          c=Path('client.py').read_text(encoding='utf-8')
+          assert 'kind: str = "pedestrian"' in s
+          assert 'kind="dog"' in s and 'dog_count = min(8, max(3, len(routes) // 3))' in s
+          assert 'self.kind = str(data.get("kind", "pedestrian"))' in c
+          assert 'getattr(npc, "kind", "pedestrian") == "dog"' in c
+          print('dog NPC server/client contract: PASS')
+          PY
+
+      - name: Commit dog NPC runtime
+        shell: bash
+        run: |
+          if git diff --quiet -- server.py client.py; then exit 0; fi
+          git config user.name "Open Night Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add server.py client.py
+          git commit -m "v0.9: add server-authoritative dog NPCs [skip ci]"
+          git push origin HEAD:v0.9.0-consolidation

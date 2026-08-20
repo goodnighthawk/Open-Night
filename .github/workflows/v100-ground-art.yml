@@ -1,0 +1,129 @@
+name: Build v1.0 Ground Art (legacy/manual)
+
+# Legacy baked-composition pipeline. The grid-authoritative Map Lab is now the
+# visual iteration loop; run this only when explicitly checking old baked art.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ground-art:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install renderer dependency
+        run: python -m pip install --upgrade pillow
+
+      - name: Generate collision-accurate Ground/Night art
+        run: python tools/build_v100_ground_approval.py
+
+      - name: Package deterministic Ground/Night runtime composition
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          source = Path('assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night')
+          archive = Path('assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip')
+          tiles = sorted(source.glob('tile_*.png'))
+          if len(tiles) != 192:
+              raise SystemExit(f'Expected 192 Ground/Night tiles, found {len(tiles)}')
+
+          archive.parent.mkdir(parents=True, exist_ok=True)
+          fixed_date = (1980, 1, 1, 0, 0, 0)
+          with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for tile in tiles:
+                  info = zipfile.ZipInfo(f'night/{tile.name}', date_time=fixed_date)
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = 0o100644 << 16
+                  z.writestr(info, tile.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
+
+          with zipfile.ZipFile(archive, 'r') as z:
+              names = [name for name in z.namelist() if name.startswith('night/tile_') and name.endswith('.png')]
+              if len(names) != 192:
+                  raise SystemExit(f'Runtime archive contains {len(names)} Ground/Night tiles')
+          print(f'Packaged deterministic runtime archive: {archive}')
+          PY
+
+      - name: Verify generated Ground/Night output
+        run: |
+          test -f assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+          test "$(find assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night -name 'tile_*.png' | wc -l)" -eq 192
+          test -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
+
+      - name: Verify runtime binding
+        run: |
+          python - <<'PY'
+          import csv
+          import zipfile
+          from pathlib import Path
+
+          map_csv = Path('mapfiles/data/map_001_gwb_corridor/map.csv')
+          with map_csv.open(encoding='utf-8-sig', newline='') as f:
+              cfg = {row['key']: row['value'] for row in csv.DictReader(f)}
+
+          expected_archive = 'assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip'
+          assert cfg.get('baked_composition', '').lower() == 'true', cfg.get('baked_composition')
+          assert cfg.get('baked_composition_archive') == expected_archive, cfg.get('baked_composition_archive')
+          assert float(cfg.get('baked_composition_source_scale', '0')) == 1.0
+          assert float(cfg.get('baked_composition_world_y', '-1')) == 0.0
+          assert int(cfg.get('chunk_cols', '0')) == 16
+          assert int(cfg.get('chunk_rows', '0')) == 12
+          assert int(cfg.get('chunk_size', '0')) == 1024
+
+          archive = Path(expected_archive)
+          with zipfile.ZipFile(archive, 'r') as z:
+              actual = set(z.namelist())
+              expected = {f'night/tile_{x:02d}_{y:02d}.png' for x in range(16) for y in range(12)}
+              missing = sorted(expected - actual)
+              extra_tiles = sorted(name for name in actual if name.startswith('night/tile_') and name not in expected)
+              if missing or extra_tiles:
+                  raise SystemExit(f'Runtime tile mismatch: missing={missing[:5]} extra={extra_tiles[:5]}')
+          print('V100_GROUND_RUNTIME_BINDING_OK archive=192 tiles scale=1.0 world_y=0')
+          PY
+
+      - name: Upload approval and runtime artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-v100-ground-night
+          path: |
+            assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+            assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night/*.png
+            assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit generated Ground/Night runtime art
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/environment/approved/map_001_gwb_corridor/v100_layers/GROUND_NIGHT_APPROVAL_PREVIEW.png
+          git add assets/environment/approved/map_001_gwb_corridor/v100_layers/ground/night
+          git add -f assets/environment/approved/map_001_gwb_corridor/composition_tiles_v100_ground.zip
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+          else
+            git commit -m 'v1.0: package deterministic Ground/Night runtime art'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:v1.0-art-overlay; then
+                exit 0
+              fi
+              echo "Push race on attempt ${attempt}; rebasing onto latest branch head..."
+              git fetch origin v1.0-art-overlay
+              git rebase origin/v1.0-art-overlay
+            done
+            echo 'Unable to publish generated Ground/Night runtime art after 3 attempts.' >&2
+            exit 1
+          fi

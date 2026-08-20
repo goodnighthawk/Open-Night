@@ -1,0 +1,136 @@
+name: v0.9.0 runtime consolidation
+
+on:
+  push:
+    branches: [v0.9.0-consolidation]
+    paths:
+      - '.github/workflows/v090-runtime-consolidation.yml'
+      - 'tools/v090_apply_map_markers.py'
+      - 'tools/v090_enable_25d_assets.py'
+      - 'tools/v090_sidewalk_driveability_audit.py'
+      - 'client.py'
+      - 'server.py'
+      - 'environment_art.py'
+      - 'versioning.py'
+      - 'VERSION.txt'
+      - 'config/game_settings.csv'
+      - 'mapfiles/data/map_001_gwb_corridor/**'
+      - 'dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  runtime-and-map-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply deterministic v0.9 client map-marker patch
+        run: python tools/v090_apply_map_markers.py
+
+      - name: Apply approved 2.5D city asset promotion
+        run: python tools/v090_enable_25d_assets.py
+
+      - name: Commit generated runtime patches when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- client.py environment_art.py; then
+            echo 'v0.9 generated runtime patches already present.'
+          else
+            git config user.name 'Open Night Release Bot'
+            git config user.email 'actions@users.noreply.github.com'
+            git add client.py environment_art.py
+            git commit -m 'v0.9: apply map markers and visible 2.5D city art [skip ci]'
+            git push origin HEAD:v0.9.0-consolidation
+          fi
+
+      - name: Install map QA dependencies
+        run: python -m pip install 'Pillow>=10,<13'
+
+      - name: Runtime syntax and v0.9 contract checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile client.py server.py environment_art.py versioning.py gameplay/settings.py common.py tools/v090_apply_map_markers.py tools/v090_enable_25d_assets.py tools/v090_sidewalk_driveability_audit.py
+          python tools/v090_sidewalk_driveability_audit.py
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          from versioning import GAME_VERSION
+
+          assert GAME_VERSION == '0.9.0'
+          assert 'Open Night v0.9.0' in Path('VERSION.txt').read_text(encoding='utf-8')
+
+          with Path('config/game_settings.csv').open(encoding='utf-8-sig', newline='') as f:
+              rows = list(csv.DictReader(f))
+          cfg = {(r['section'], r['key']): r['value'] for r in rows}
+          assert cfg[('movement','layer_transition_jump_seconds')] == '0.0'
+          assert cfg[('engine','client_profile_version')] == '290'
+          assert float(cfg[('vehicle','player_turn_rate')]) >= 3.6
+          assert int(cfg[('npc','pedestrians_per_route')]) >= 5
+
+          server = Path('server.py').read_text(encoding='utf-8')
+          assert 'LAYER_TRANSITION_JUMP_SECONDS = max(0.0' in server
+          assert 'next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0' in server
+          assert 'deflected = False' in server
+          assert 'SERVER_NAME = "Open Night v0.9.0 / consolidation"' in server
+
+          client = Path('client.py').read_text(encoding='utf-8')
+          assert 'marker_label in (' in client
+          assert '(self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER")' in client
+          assert '(self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER")' in client
+          assert 'Supplier and buyer are gameplay destinations' in client
+
+          environment = Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'index % 4 == 0' in environment
+          assert 'the approved 2.5D city import is a visible runtime art layer' in environment
+          assert '_open_asset_building("isometric", min(104, max(52, inner.height - 6)))' in environment
+          print('V090_RUNTIME_CONTRACT_OK')
+          PY
+
+      - name: Pass 25 map identity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          paths = [
+              Path('mapfiles/data/map_001_gwb_corridor/map.csv'),
+              Path('dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/map.csv'),
+          ]
+          configs = []
+          for path in paths:
+              with path.open(encoding='utf-8-sig', newline='') as f:
+                  cfg = {r['key']: r['value'] for r in csv.DictReader(f)}
+              assert cfg['id'] == 'map_001_gwb_corridor'
+              assert cfg['release_version'] == '0.9.0'
+              assert cfg['render_pass'] == '25'
+              assert cfg['map_build_id'] == 'open_night_v0_9_0_pass25_default_only'
+              assert cfg['baked_composition_archive'].endswith('composition_tiles_v25.zip')
+              configs.append(cfg)
+          assert configs[0] == configs[1], 'runtime and generator map identities diverged'
+          print('V090_PASS25_MAP_IDENTITY_OK')
+          PY
+
+      - name: Existing release audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/building_road_audit.py
+          python tools/map_scale_bicycle_audit.py
+          python tools/multilevel_map_audit.py
+          python tools/deterministic_traffic_audit.py
+          python tools/building_art_convergence_audit.py

@@ -1,0 +1,7 @@
+priority,pack_id,source_origin,role,status,notes
+1,city_block,user_upload,top_down_2d_city_tiles_and_props,approved_for_ground,"Primary Open Night visual vocabulary for buildings, roads, curbs, crossings, roof props and road overlays. Overrides prior procedural/default styling where compatible with collision geometry."
+2,retro_urban_free,user_upload,high_resolution_surface_materials,approved_for_ground,"Primary texture source for asphalt, concrete, pavement and urban surface variation. Basecolor maps are the first-choice source for rendered road/sidewalk/wall material treatment."
+3,free1_nature,user_upload,vegetation_and_rock_materials,approved_for_ground,"Primary source for grass and rocky/shoreline base materials. Use only within authoritative vegetation/green-space masks."
+4,free_wood,user_upload,interior_and_secondary_surface_materials,deferred,"Candidate source for first_floor and second_floor interior floors and wood surfaces. Deferred until after Ground approval."
+5,free2_wood_duplicate,user_upload,interior_and_secondary_surface_materials,deferred,"Duplicate/near-duplicate companion to Free wood pack. Keep only if it contains higher-resolution or alternate variants needed later."
+6,gta_maker,user_upload,reference_project_only,hold,"Do not treat as a direct asset source for production art until its project contents are unpacked and licensing/utility are confirmed."

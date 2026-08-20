@@ -1,0 +1,100 @@
+name: Main Playable Release Gate
+
+on:
+  push:
+    branches: [main, v1.1-bug-review]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  main-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'websockets>=16,<18' 'mysql-connector-python>=9,<10' 'Pillow>=10,<13'
+      - name: Compile canonical main runtime and audits
+        run: >-
+          python -m py_compile
+          main.py railway_entry.py v100_client.py v100_server.py
+          vehicle_art.py vehicle_catalog.py
+          v110_grid_population.py v110_pedestrian_flow.py v110_pedestrian_connectivity.py
+          v110_vehicle_proportions.py v110_traffic_recovery.py
+          v110_bug_delivery_client.py v110_bug_delivery_server.py
+          v110_bug_railway_relay_client.py v110_bug_railway_relay_server.py
+          v110_version_client.py versioning.py
+          tools/import_player_vehicle_sheets.py tools/audit_player_vehicle_fleet.py
+          tools/audit_main_release.py tools/audit_v110_version_authority.py
+          tools/audit_v110_bug_delivery.py tools/capture_v110_grid_population.py
+          tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
+      - name: Verify player-approved pixel vehicle fleet
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_player_vehicle_fleet.py
+      - name: Verify main-only player/update authority
+        run: python tools/audit_main_release.py
+      - name: Verify client/server version authority
+        run: python tools/audit_v110_version_authority.py
+      - name: Verify durable bug delivery
+        run: python tools/audit_v110_bug_delivery.py
+      - name: Exercise GridWorld population and render full-stack proof
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/capture_v110_grid_population.py
+      - name: Run sustained traffic recovery audit
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_v110_traffic_recovery.py
+      - name: Verify building setbacks / non-overlap
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/v100_building_setback_runtime_audit.py
+      - name: Verify release audit bundle
+        run: |
+          test -f assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png
+          test -f assets/grid_v100/V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png
+          test -f assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json
+          test -f assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json
+          test -f assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pop = json.loads(Path('assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json').read_text())
+          traffic = json.loads(Path('assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json').read_text())
+          buildings = json.loads(Path('assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json').read_text())
+          assert pop['pedestrians_spawned'] >= 12, pop
+          assert pop['pedestrian_route_network_components'] == 1, pop
+          assert pop['pedestrian_crosswalk_count'] >= 48, pop
+          assert pop['pedestrians_stalled_after_warmup_count'] <= max(2, pop['pedestrians_spawned'] // 20), pop
+          assert not pop['pedestrians_off_pavement'], pop
+          assert not pop['blocked_traffic_after_10s'], pop
+          assert not pop['overlapping_traffic_after_10s'], pop
+          assert pop['vehicle_client_target_length_min_px'] >= 145.0, pop
+          assert not traffic['stalled_car_ids'], traffic
+          assert not traffic['undertravel_car_ids'], traffic
+          assert not traffic['blocked_car_ids'], traffic
+          assert not traffic['overlap_pairs'], traffic
+          assert buildings['building_overlap_cell_count'] == 0, buildings
+          assert buildings['building_adjacent_pair_count'] == 0, buildings
+          print(json.dumps({'population': pop, 'traffic': traffic, 'buildings': buildings}, indent=2, sort_keys=True))
+          PY
+      - name: Upload main playable proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-main-playable-release
+          path: |
+            assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png
+            assets/grid_v100/V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png
+            assets/grid_v100/V110_GRID_POPULATION_RUNTIME_AUDIT.json
+            assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json
+            assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
+          if-no-files-found: error
+          retention-days: 30

@@ -1,3 +1,5 @@
 ﻿route_id,name,speed,loop,lane_offset,turn_radius,axis,direction
 walk_fort_lee,Fort Lee sidewalk loop,54,true,0,42,mixed,loop
 walk_heights,Washington Heights sidewalk loop,54,true,0,42,mixed,loop
+supplier_patrol,Fort Lee supplier patrol,34,true,0,24,mixed,loop
+buyer_patrol,Washington Heights buyer patrol,34,true,0,24,mixed,loop

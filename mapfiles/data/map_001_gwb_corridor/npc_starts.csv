@@ -3,3 +3,5 @@ npc_01_01,walk_fort_lee,0.0,0,0,1.0
 npc_01_02,walk_fort_lee,0.5,1,1,1.0
 npc_02_01,walk_heights,0.0,3,3,1.0
 npc_02_02,walk_heights,0.5,4,4,1.0
+supplier_npc_01,supplier_patrol,0.0,5,5,0.75
+buyer_npc_01,buyer_patrol,0.5,6,6,0.75

@@ -77,7 +77,7 @@ goto :menu
 start "PYMMO SERVER CONTROL" "%CD%\.venv\Scripts\python.exe" server_launcher.py
 goto :menu
 :client
-start "PYMMO CLIENT" "%CD%\.venv\Scripts\python.exe" client.py
+start "OPEN NIGHT v1.0 CLIENT" "%CD%\.venv\Scripts\python.exe" v100_client.py
 goto :menu
 :validate
 "%PYEXE%" tools\validate_mapfiles.py

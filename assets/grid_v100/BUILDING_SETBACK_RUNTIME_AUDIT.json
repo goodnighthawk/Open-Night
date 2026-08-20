@@ -1,0 +1,267 @@
+{
+  "building_adjacent_pair_count": 0,
+  "building_count": 25,
+  "building_overlap_cell_count": 0,
+  "edge_alpha_policy": "source_alpha_preserved_outline_ink_recoloured",
+  "edge_alpha_rows": [
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_bottom_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_bottom_left_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_bottom_left_outer",
+      "transparent_or_translucent_px": 32322
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_bottom_right_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_bottom_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_left",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_right",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_top_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_top_left_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_blue_top_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_bottom_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_bottom_left_outer",
+      "transparent_or_translucent_px": 32322
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_bottom_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_left",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_right",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_top_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_top_left_inner",
+      "transparent_or_translucent_px": 5483
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_top_left_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_top_right_inner",
+      "transparent_or_translucent_px": 5484
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_dark_green_top_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_bottom_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_bottom_left_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_bottom_left_outer",
+      "transparent_or_translucent_px": 32322
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_bottom_right_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_bottom_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_left",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_right",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_top_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_top_left_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_green_top_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_bottom_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_bottom_left_outer",
+      "transparent_or_translucent_px": 32322
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_bottom_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_left",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_right",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_top_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_top_left_inner",
+      "transparent_or_translucent_px": 5483
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_top_left_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_top_right_inner",
+      "transparent_or_translucent_px": 5484
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_red_top_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_bottom_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_bottom_left_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_bottom_left_outer",
+      "transparent_or_translucent_px": 32322
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_bottom_right_inner",
+      "transparent_or_translucent_px": 5475
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_bottom_right_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_left",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_right",
+      "transparent_or_translucent_px": 18946
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_top_center",
+      "transparent_or_translucent_px": 18944
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_top_left_outer",
+      "transparent_or_translucent_px": 32330
+    },
+    {
+      "area_px": 65536,
+      "tile_id": "bld_yellow_top_right_outer",
+      "transparent_or_translucent_px": 32330
+    }
+  ],
+  "edge_tile_count": 50,
+  "edge_tiles_with_preserved_alpha": 50,
+  "errors": [],
+  "ground_roof_registration_mismatch_count": 0,
+  "minimum_building_setback_cells": 1,
+  "minimum_edge_transparent_or_translucent_px": 5475,
+  "proof": "canonical_v100_joint_building_setback_and_alpha",
+  "shifted_building_count": 5,
+  "theme_ownership_mismatch_count": 0
+}

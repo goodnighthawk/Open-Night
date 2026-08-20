@@ -1,0 +1,65 @@
+name: Open Night v0.9.0 Streetlamp Head Alignment Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0.9.0-consolidation
+    paths:
+      - .github/workflows/v09_streetlamp_head_alignment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+
+      - name: Align streetlamp glow to lamp head
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("environment_art.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''            try:\n                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy); r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))\n            except (TypeError,ValueError): continue'''
+          new = '''            try:\n                x=int(float(light.get("x",0))-ox); y=int(float(light.get("y",0))-oy)\n                # Portable streetlamp coordinates are ground/base anchors (the\n                # sprite is drawn with midbottom anchoring), while the light pool\n                # belongs on the lamp head.  Lift only streetlamp emitters; bridge\n                # lamps retain their explicitly authored emitter coordinates.\n                if str(light.get("source_type")) == "streetlamp":\n                    y -= int(round(float(light.get("head_offset_px", 42))))\n                r=max(18,int(float(light.get("radius_px",120))*0.72)); strength=max(.1,min(1.3,float(light.get("intensity",.5))))\n            except (TypeError,ValueError): continue'''
+          if old not in text:
+              if 'head_offset_px' in text:
+                  print("streetlamp head alignment already present")
+              else:
+                  raise SystemExit("expected portable night-light coordinate block not found")
+          else:
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+      - name: Runtime syntax and lamp-head alignment contract
+        shell: bash
+        run: |
+          python -m py_compile environment_art.py client.py server.py common.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'if str(light.get("source_type")) == "streetlamp":' in text
+          assert 'head_offset_px", 42' in text
+          assert 'y -= int(round(float(light.get("head_offset_px", 42))))' in text
+          print('streetlamp lamp-head alignment contract: PASS')
+          PY
+
+      - name: Commit runtime fix
+        shell: bash
+        run: |
+          if git diff --quiet -- environment_art.py; then
+            echo "No runtime change required."
+            exit 0
+          fi
+          git config user.name "Open Night Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add environment_art.py
+          git commit -m "v0.9: align streetlamp glow to lamp heads [skip ci]"
+          git push origin HEAD:v0.9.0-consolidation

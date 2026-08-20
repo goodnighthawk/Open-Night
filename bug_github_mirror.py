@@ -127,7 +127,7 @@ def mirror_bug_report(report_id: int, fields: dict[str, Any]) -> dict[str, Any] 
 
 
 def install_database_bug_mirror() -> None:
-    """Patch InventoryDatabase.create_bug_report before server.py imports it."""
+    """Patch InventoryDatabase.create_bug_report before the v1.1 server installs dedupe."""
     import database
 
     original = database.InventoryDatabase.create_bug_report
@@ -136,10 +136,18 @@ def install_database_bug_mirror() -> None:
 
     def create_bug_report_with_mirror(self, **kwargs):
         report_id = original(self, **kwargs)
+        result = None
         try:
-            mirror_bug_report(report_id, kwargs)
+            result = mirror_bug_report(report_id, kwargs)
         except Exception as exc:
             print(f"Bug #{int(report_id)} stored but GitHub mirror raised unexpectedly: {exc}", flush=True)
+        # The Railway relay can now distinguish "stored" from "stored + visible
+        # in GitHub" and show the exact GitHub issue number to the player.
+        self._open_night_last_bug_github_mirror = {
+            "report_id": int(report_id),
+            "issue_number": int(result.get("number", 0) or 0) if isinstance(result, dict) else 0,
+            "issue_url": str(result.get("html_url", "")) if isinstance(result, dict) else "",
+        }
         return report_id
 
     create_bug_report_with_mirror._open_night_github_mirror = True

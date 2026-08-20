@@ -1,1 +1,1 @@
-Open Night v0.8.3 - login head selector + simplified player launcher; Pass 25 runtime map
+1.1

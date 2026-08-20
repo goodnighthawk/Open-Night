@@ -1,4 +1,5 @@
-﻿level_id,name,z_order,walkable
+level_id,name,z_order,walkable
+-1,Underground,-1,true
 0,Ground,0,true
 1,Bridge deck / upper,1,true
 2,Roof,2,true

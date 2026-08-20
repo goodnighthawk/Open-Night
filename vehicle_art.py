@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import io
 import math
 from functools import lru_cache
 from pathlib import Path
@@ -27,6 +29,7 @@ def reload_vehicle_style() -> None:
     VEHICLE_PIXELATED = bool(cfg.get("pixelated", True))
     try:
         _base_car.cache_clear()
+        _sheet_surface.cache_clear()
     except NameError:
         pass
 
@@ -38,18 +41,96 @@ def available_car_count() -> int:
     return len(load_vehicle_catalog())
 
 
-@lru_cache(maxsize=192)
+def _load_surface_file(path: Path) -> pygame.Surface | None:
+    if not path.exists():
+        return None
+    try:
+        if path.name.lower().endswith(".b64"):
+            raw = base64.b64decode(path.read_text(encoding="ascii"), validate=False)
+            # Pygame/SDL_image can determine PNG/JPEG type from the byte stream.
+            return pygame.image.load(io.BytesIO(raw), path.stem).convert_alpha()
+        return pygame.image.load(str(path)).convert_alpha()
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=16)
+def _sheet_surface(filename: str) -> pygame.Surface | None:
+    return _load_surface_file(vehicle_asset_path(filename))
+
+
+def _sprite_from_sheet(meta: dict) -> pygame.Surface | None:
+    sheet_name = str(meta.get("sheet_file", "")).strip()
+    if not sheet_name:
+        return None
+    sheet = _sheet_surface(sheet_name)
+    if sheet is None:
+        return None
+    try:
+        x = int(meta.get("crop_x", 0))
+        y = int(meta.get("crop_y", 0))
+        w = int(meta.get("crop_w", 0))
+        h = int(meta.get("crop_h", 0))
+    except Exception:
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    rect = pygame.Rect(x, y, w, h).clip(sheet.get_rect())
+    if rect.width <= 0 or rect.height <= 0:
+        return None
+    source = sheet.subsurface(rect).copy().convert_alpha()
+
+    # The submitted pixel-car sheets use white/near-white presentation
+    # backgrounds, including JPEG compression gradients. Remove only neutral
+    # background pixels connected to the crop border so enclosed pale vehicle
+    # highlights remain intact.
+    if source.get_width() and source.get_height():
+        corner = source.get_at((0, 0))
+        if corner.a > 240:
+            width, height = source.get_size()
+            pending = [(x, 0) for x in range(width)] + [(x, height - 1) for x in range(width)]
+            pending += [(0, y) for y in range(1, height - 1)] + [(width - 1, y) for y in range(1, height - 1)]
+            visited: set[tuple[int, int]] = set()
+            while pending:
+                x, y = pending.pop()
+                if (x, y) in visited:
+                    continue
+                visited.add((x, y))
+                pixel = source.get_at((x, y))
+                close_to_corner = max(
+                    abs(pixel.r - corner.r), abs(pixel.g - corner.g), abs(pixel.b - corner.b)
+                ) <= 28
+                if pixel.a < 24 or close_to_corner:
+                    source.set_at((x, y), (pixel.r, pixel.g, pixel.b, 0))
+                    if x:
+                        pending.append((x - 1, y))
+                    if x + 1 < width:
+                        pending.append((x + 1, y))
+                    if y:
+                        pending.append((x, y - 1))
+                    if y + 1 < height:
+                        pending.append((x, y + 1))
+    return source
+
+
+@lru_cache(maxsize=256)
 def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | None:
     catalog = load_vehicle_catalog()
     if not catalog:
         return None
     meta = vehicle_meta(index)
-    path = vehicle_asset_path(str(meta.get("file", "")))
-    if not path.exists():
+
+    source = _sprite_from_sheet(meta)
+    if source is None:
+        path = vehicle_asset_path(str(meta.get("file", "")))
+        source = _load_surface_file(path)
+    if source is None or source.get_width() <= 0 or source.get_height() <= 0:
         return None
-    source = pygame.image.load(str(path)).convert_alpha()
-    if source.get_width() <= 0 or source.get_height() <= 0:
-        return None
+
+    # Player-supplied sheets are allowed to contain a horizontal source sprite;
+    # canonical runtime vehicle art always points nose-up before heading rotation.
+    if source.get_width() > source.get_height():
+        source = pygame.transform.rotate(source, 90)
 
     length = max(24, int(target_length or meta.get("render_length", 48)))
     width = max(12, int(round(length * source.get_width() / source.get_height())))

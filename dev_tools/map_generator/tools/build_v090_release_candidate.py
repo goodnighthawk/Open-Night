@@ -6,6 +6,11 @@ Keeps Pass 19b geometry and art generation, but balances the visible frontage
 population to the approved release target: roughly 30-50% of facades receive a
 noticeable prop cluster and roughly 10-20% of all facades read as cluttered.
 Subtle pavement wear remains universal and cosmetic-only.
+
+The v0.9 release wrapper also tightens the approved tree sprites without moving
+their authored anchors.  This preserves sidewalk/park placement while preventing
+the broad source atlas cells from visually spilling across adjacent roads and
+walkable surfaces.
 """
 
 import sys
@@ -21,10 +26,35 @@ import build_pass19b_frontage_release_candidate as pass19b
 
 PASS_ID = "art_convergence_pass_19b_frontage_balanced"
 _original_generate_frontage = pass19b.generate_frontage_dressing
+_original_generate_vegetation = base.generate_iterated_vegetation
+TREE_VISUAL_SCALE = 0.72
+TREE_MAX_SIZE = 130.0
 
 
 def stable_seed(text: str) -> int:
     return sum((index + 17) * ord(ch) for index, ch in enumerate(str(text)))
+
+
+def compact_vegetation(roads, road_points, crossings, buildings, parcel_uses):
+    """Keep tree centres fixed but tighten their v0.9 cosmetic footprint."""
+    rows = _original_generate_vegetation(roads, road_points, crossings, buildings, parcel_uses)
+    for row in rows:
+        original_size = float(row.get("size", 0) or 0)
+        row["size"] = round(min(TREE_MAX_SIZE, original_size * TREE_VISUAL_SCALE), 2)
+        rule = str(row.get("placement_rule", "") or "")
+        if "v090_compact_tree_footprint_v1" not in rule:
+            row["placement_rule"] = f"{rule}:v090_compact_tree_footprint_v1" if rule else "v090_compact_tree_footprint_v1"
+
+    base.write_csv(
+        base.SEMANTIC / "iterated_vegetation.csv",
+        ("id", "x", "y", "size", "district", "cosmetic_atlas", "cosmetic_cell", "placement_rule"),
+        rows,
+    )
+    largest = max((float(row["size"]) for row in rows), default=0.0)
+    if largest > TREE_MAX_SIZE:
+        raise RuntimeError(f"v0.9 tree footprint audit failed: max tree size {largest} > {TREE_MAX_SIZE}")
+    print(f"V090_TREE_FOOTPRINT trees={len(rows)} max_size={largest:.1f} scale={TREE_VISUAL_SCALE:.2f}")
+    return rows
 
 
 def balanced_frontage(buildings, roads, road_points):
@@ -108,6 +138,7 @@ def balanced_frontage(buildings, roads, road_points):
 def main() -> None:
     pass19b.PASS_ID = PASS_ID
     pass19b.generate_frontage_dressing = balanced_frontage
+    base.generate_iterated_vegetation = compact_vegetation
     pass19b.main()
     total = sum(v for k, v in pass19b.frontage_stats.items()
                 if k not in {"dressed_buildings", "cluttered_buildings"})

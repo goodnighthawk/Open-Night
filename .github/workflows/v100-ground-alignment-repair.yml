@@ -1,0 +1,53 @@
+name: Repair v1.0 Ground Tile Alignment
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'tools/rebuild_v100_ground_alignment_pass.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-ground:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rebuild clean aligned Ground grid
+        run: python tools/rebuild_v100_ground_alignment_pass.py
+      - name: Validate runtime grid contract
+        run: |
+          python tools/build_v100_grid_seed.py
+          python - <<'PY'
+          from grid_runtime import load_ground_grid
+          w = load_ground_grid()
+          assert (w.width, w.height, w.cell_px) == (64, 48, 256)
+          assert w.data.get('authority') == 'grid'
+          assert w.data.get('ground_alignment_repair') == 1
+          assert w.data.get('sidewalk_target_cells') == 1
+          assert w.circle_walkable('ground', *w.choose_spawn('ground', 18.0), 18.0)
+          # Every designated arterial must be continuous road through the full map.
+          for gx in (10, 11, 12, 28, 29, 30, 43, 44, 45, 57, 58, 59):
+              assert all(w.layers['ground'][gy][gx] == 'road_fill' for gy in range(w.height))
+          for gy in (8, 9, 10, 23, 24, 25, 38, 39, 40):
+              assert all(w.layers['ground'][gy][gx] == 'road_fill' for gx in range(w.width))
+          PY
+      - name: Commit repaired authoritative map
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mapfiles/data/map_001_gwb_corridor/grid_v100/ground_grid.json
+          if git diff --cached --quiet; then
+            echo 'Ground map already matches alignment repair.'
+          else
+            git commit -m 'v1.0 grid: repair roads curbs and sidewalk scale'
+            git push origin HEAD:v1.0-art-overlay
+          fi

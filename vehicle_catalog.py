@@ -7,6 +7,7 @@ from pathlib import Path
 
 from portable_paths import APP_DIR, shared_assets_root
 
+PLAYER_CSV = APP_DIR / "assets" / "cars" / "player_vehicle_manifest.csv"
 LOCAL_CSV = APP_DIR / "assets" / "cars" / "vehicle_manifest.csv"
 
 
@@ -16,16 +17,25 @@ def _bool(v) -> bool:
 
 def _convert(row: dict) -> dict:
     out = dict(row)
-    for key in ("index","render_length","render_width"):
-        if key in out:
-            try: out[key]=int(float(out[key]))
-            except Exception: pass
+    for key in (
+        "index", "render_length", "render_width",
+        "crop_x", "crop_y", "crop_w", "crop_h",
+    ):
+        if key in out and str(out.get(key, "")).strip() != "":
+            try:
+                out[key] = int(float(out[key]))
+            except Exception:
+                pass
     for key in ("collision_length","collision_width","speed_factor","spawn_weight"):
         if key in out:
-            try: out[key]=float(out[key])
-            except Exception: pass
+            try:
+                out[key]=float(out[key])
+            except Exception:
+                pass
     if "traffic_eligible" in out:
         out["traffic_eligible"]=_bool(out["traffic_eligible"])
+    if "legacy_fallback" in out:
+        out["legacy_fallback"]=_bool(out["legacy_fallback"])
     return out
 
 
@@ -39,8 +49,17 @@ def _csv_catalog(path: Path) -> tuple[dict,...]:
 
 @lru_cache(maxsize=1)
 def load_vehicle_catalog() -> tuple[dict, ...]:
-    # Release-local art is authoritative. This prevents an older shared manifest
-    # from silently replacing the v1.2 81-sprite approved fleet.
+    # Player-approved car art is the highest-priority release authority.  Its
+    # manifest is intentionally allowed to retain explicitly-marked legacy
+    # fallback rows for categories the new sheets do not replace (for example
+    # emergency vehicles), but legacy civilian art must not silently re-enter
+    # once this manifest exists.
+    rows = _csv_catalog(PLAYER_CSV)
+    if rows:
+        return rows
+
+    # Historical release-local art remains a compatibility fallback only until
+    # a player_vehicle_manifest.csv has been committed for the current release.
     rows = _csv_catalog(LOCAL_CSV)
     if rows:
         return rows

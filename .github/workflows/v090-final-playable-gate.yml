@@ -1,0 +1,168 @@
+name: Open Night v0.9.0 Final Playable Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0.9.0-consolidation]
+    paths: [.github/workflows/v090-final-playable-gate.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  playable-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout consolidation branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0-consolidation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fix launcher version identity
+        shell: python
+        run: |
+          import csv
+          from pathlib import Path
+          launcher=Path('open_night_launcher.py'); text=launcher.read_text(encoding='utf-8')
+          if 'from versioning import version_label' not in text:
+              text=text.replace('import time\n\n','import time\n\nfrom versioning import version_label\n\n',1)
+          old='''APP_TITLE = (\n    "OPEN NIGHT // WORK IN PROGRESS MAP"\n    if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()\n    else "OPEN NIGHT // Launcher"\n)'''
+          new='''APP_TITLE = (\n    f"{version_label()} // WORK IN PROGRESS MAP"\n    if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()\n    else f"{version_label()} // Launcher"\n)'''
+          if old in text: text=text.replace(old,new,1)
+          if new not in text: raise SystemExit('launcher title identity patch failed')
+          launcher.write_text(text,encoding='utf-8')
+
+          sl=Path('server_launcher.py'); text=sl.read_text(encoding='utf-8')
+          if 'from versioning import version_label' not in text:
+              anchor='from portable_paths import ensure_shared_layout\n'
+              if anchor not in text: raise SystemExit('server launcher import anchor missing')
+              text=text.replace(anchor,anchor+'from versioning import version_label\n',1)
+          text=text.replace('"server_name": "Open Night v0.8 / Pass 18",','"server_name": version_label(),')
+          if '"server_name": version_label(),' not in text: raise SystemExit('server launcher identity patch failed')
+          sl.write_text(text,encoding='utf-8')
+
+          cp=Path('server_config.csv')
+          with cp.open(encoding='utf-8-sig',newline='') as f: rows=list(csv.DictReader(f))
+          found=False
+          for row in rows:
+              if row.get('key')=='server_name': row['value']='Open Night v0.9.0'; found=True
+          if not found: rows.insert(0,{'key':'server_name','value':'Open Night v0.9.0'})
+          with cp.open('w',encoding='utf-8-sig',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=['key','value']); w.writeheader(); w.writerows(rows)
+
+      - name: Commit exact candidate before tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Open Night Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          if ! git diff --quiet -- open_night_launcher.py server_launcher.py server_config.csv; then
+            git add open_night_launcher.py server_launcher.py server_config.csv
+            git commit -m 'v0.9: unify launcher release identity [skip ci]'
+          fi
+          echo "TESTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install runtime and QA dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Syntax and exact version identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile versioning.py client.py server.py common.py environment_art.py open_night_launcher.py open_night_player_launcher.py server_launcher.py server_directory.py tools/quick_local_test.py
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          from versioning import GAME_VERSION,version_label
+          import server,open_night_launcher,server_launcher
+          assert GAME_VERSION=='0.9.0'
+          assert version_label()=='Open Night v0.9.0'
+          assert server.SERVER_VERSION==GAME_VERSION
+          assert server.SERVER_NAME.startswith(version_label())
+          assert open_night_launcher.APP_TITLE==f'{version_label()} // Launcher'
+          assert server_launcher._load_config()['server_name']==version_label()
+          with Path('server_config.csv').open(encoding='utf-8-sig',newline='') as f: cfg={r['key']:r['value'] for r in csv.DictReader(f)}
+          assert cfg['server_name']==version_label()
+          assert version_label() in Path('VERSION.txt').read_text(encoding='utf-8')
+          client=Path('client.py').read_text(encoding='utf-8')
+          assert 'from versioning import GAME_VERSION' in client and 'client_version' in client
+          assert 'Open Night v0.8 / Pass 18' not in Path('server_launcher.py').read_text(encoding='utf-8')
+          print('V090_EXACT_VERSION_IDENTITY_OK')
+          PY
+
+      - name: Current v0.9 runtime contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/v090_sidewalk_driveability_audit.py
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          with Path('config/game_settings.csv').open(encoding='utf-8-sig',newline='') as f: rows=list(csv.DictReader(f))
+          cfg={(r['section'],r['key']):r['value'] for r in rows}
+          assert cfg[('movement','layer_transition_jump_seconds')]=='0.0'
+          assert cfg[('engine','client_profile_version')]=='290'
+          assert float(cfg[('vehicle','player_turn_rate')])>=3.6
+          assert int(cfg[('npc','pedestrians_per_route')])>=5
+          server=Path('server.py').read_text(encoding='utf-8'); client=Path('client.py').read_text(encoding='utf-8'); art=Path('environment_art.py').read_text(encoding='utf-8')
+          assert 'next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0' in server
+          assert 'deflected = False' in server
+          assert 'HYDRANT_BREAK_MPH = 30.0' in server and 'HYDRANT_RESPAWN_SECONDS = 300.0' in server
+          assert 'def update_hydrants(now: float)' in server and '"hydrants": visible_hydrants' in server
+          assert 'kind="dog"' in server
+          assert 'getattr(npc, "kind", "pedestrian") == "dog"' in client
+          assert 'def draw_hydrant_effects(self)' in client and 'set_hidden_street_props' in client
+          assert 'def set_hidden_street_props(self, prop_ids)' in art
+          assert '(sx + 22, sy - 22)' not in client
+          assert 'index % 4 == 0' in art
+          print('V090_CURRENT_RUNTIME_CONTRACTS_OK')
+          PY
+
+      - name: Pass 25 map identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          paths=[Path('mapfiles/data/map_001_gwb_corridor/map.csv'),Path('dev_tools/map_generator/mapfiles/data/map_001_gwb_corridor/map.csv')]
+          configs=[]
+          for path in paths:
+              with path.open(encoding='utf-8-sig',newline='') as f: cfg={r['key']:r['value'] for r in csv.DictReader(f)}
+              assert cfg['id']=='map_001_gwb_corridor'; assert cfg['release_version']=='0.9.0'; assert cfg['render_pass']=='25'; assert cfg['map_build_id']=='open_night_v0_9_0_pass25_default_only'; configs.append(cfg)
+          assert configs[0]==configs[1]
+          print('V090_PASS25_MAP_IDENTITY_OK')
+          PY
+
+      - name: Existing map release audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/building_road_audit.py
+          python tools/map_scale_bicycle_audit.py
+          python tools/multilevel_map_audit.py
+          python tools/deterministic_traffic_audit.py
+          python tools/building_art_convergence_audit.py
+
+      - name: Repository playable quick test
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python tools/quick_local_test.py
+          echo V090_QUICK_LOCAL_PLAYABLE_SMOKE_OK
+
+      - name: Push tested candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+          git push origin HEAD:v0.9.0-consolidation
+          echo "PLAYABLE_CANDIDATE_SHA=$TESTED_SHA"
