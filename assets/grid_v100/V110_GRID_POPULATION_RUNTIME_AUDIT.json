@@ -3,7 +3,7 @@
   "blocked_traffic_after_10s": [],
   "camera_zoom": 0.72,
   "dogs_spawned": 4,
-  "focus_car": "gridcar018",
+  "focus_car": "gridcar023",
   "focus_npc": "gridnpc079",
   "full_stack_panels": [
     "gameplay_player_hud_population",
@@ -35,8 +35,8 @@
   "pedestrians_stalled_after_warmup": [],
   "pedestrians_stalled_after_warmup_count": 0,
   "player_cell": [
-    44,
-    23
+    45,
+    24
   ],
   "proof": "v110_grid_native_population_full_stack",
   "road_center_cols": [

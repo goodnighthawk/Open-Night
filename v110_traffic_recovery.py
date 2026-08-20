@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""GridWorld traffic deadlock prevention and collision-safe recovery for v1.1.
+"""GridWorld traffic deadlock prevention and collision-safe recovery.
 
 The mature traffic solver already gives one car right-of-way when proposed
 footprints conflict, but a queue can still freeze when the winner's proposal is
@@ -24,6 +24,9 @@ RECOVERY_ATTEMPT_INTERVAL_SECONDS = 0.40
 RECOVERY_CLEARANCE_SCALE = 1.04
 OVERLAP_REPAIR_PASSES = 4
 ROUTE_RESEAT_LOCAL_LIMIT_SCALE = 2.8
+MAX_RECOVERY_HEADING_CHANGE_RADIANS = math.radians(8.0)
+RECOVERY_INCH_SPEED_MIN = 12.0
+RECOVERY_INCH_SPEED_MAX = 24.0
 
 _LAST_ATTEMPT: dict[str, float] = {}
 
@@ -54,6 +57,13 @@ def _route_heading(server_module, car, route: dict) -> float:
     return math.atan2(dy, dx)
 
 
+def _bounded_heading(current: float, target: float) -> float:
+    """Turn toward a recovery heading without a visible collision spin."""
+    delta = (float(target) - float(current) + math.pi) % (2.0 * math.pi) - math.pi
+    delta = max(-MAX_RECOVERY_HEADING_CHANGE_RADIANS, min(MAX_RECOVERY_HEADING_CHANGE_RADIANS, delta))
+    return float(current) + delta
+
+
 def _candidate_clear(server_module, car, x: float, y: float, heading: float) -> bool:
     if server_module._vehicle_map_blocked(car, x, y, heading):
         return False
@@ -70,11 +80,15 @@ def _candidate_clear(server_module, car, x: float, y: float, heading: float) -> 
 
 
 def _apply_recovery_pose(server_module, car, route: dict, x: float, y: float, heading: float) -> None:
+    heading = _bounded_heading(float(car.angle), float(heading))
     car.x = float(x)
     car.y = float(y)
     car.angle = float(heading)
     route_speed = max(1.0, float(route.get("speed_limit", 120.0)))
-    car.speed = max(20.0, min(48.0, route_speed * 0.32 * float(car.speed_factor)))
+    car.speed = max(
+        RECOVERY_INCH_SPEED_MIN,
+        min(RECOVERY_INCH_SPEED_MAX, route_speed * 0.16 * float(car.speed_factor)),
+    )
     car.wait_age = 0.0
     car.stuck_time = 0.0
     car.last_progress_x = car.x
@@ -115,9 +129,10 @@ def _reseat_to_nearest_clear_route_pose(server_module, car, route: dict) -> bool
         for distance, x, y, heading, next_wp in candidates:
             if local_only and distance > local_limit:
                 continue
-            if not _candidate_clear(server_module, car, x, y, heading):
+            gentle_heading = _bounded_heading(float(car.angle), heading)
+            if not _candidate_clear(server_module, car, x, y, gentle_heading):
                 continue
-            _apply_recovery_pose(server_module, car, route, x, y, heading)
+            _apply_recovery_pose(server_module, car, route, x, y, gentle_heading)
             car.next_waypoint = next_wp
             _stats(server_module)["route_reseats"] += 1
             return True
@@ -155,9 +170,10 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
     for kind, forward, lateral in candidates:
         x = float(car.x) + hx * forward + sx * lateral
         y = float(car.y) + hy * forward + sy * lateral
-        if not _candidate_clear(server_module, car, x, y, heading):
+        gentle_heading = _bounded_heading(float(car.angle), heading)
+        if not _candidate_clear(server_module, car, x, y, gentle_heading):
             continue
-        _apply_recovery_pose(server_module, car, route, x, y, heading)
+        _apply_recovery_pose(server_module, car, route, x, y, gentle_heading)
         stats["successes"] += 1
         key = "backoff_successes" if kind == "backoff" else "deflection_successes"
         stats[key] += 1

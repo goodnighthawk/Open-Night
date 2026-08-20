@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Canonical Open Night v1.1 authoritative server entry.
+"""Canonical Open Night v1.2 authoritative server entry.
 
 The mature server remains the implementation library for multiplayer, persistence,
 chat, vehicles and other gameplay. v1.0 installed the curb-safe GridWorld layout

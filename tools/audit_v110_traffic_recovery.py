@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -63,7 +64,31 @@ def _overlaps() -> list[list[str]]:
     return pairs
 
 
+def _audit_bounded_collision_recovery() -> dict:
+    car = SimpleNamespace(
+        x=0.0, y=0.0, angle=0.0, speed=90.0, speed_factor=1.0,
+        wait_age=4.0, stuck_time=3.0, last_progress_x=0.0, last_progress_y=0.0,
+    )
+    route = {"speed_limit": 120.0}
+    v110_traffic_recovery._apply_recovery_pose(server, car, route, -12.0, 0.0, math.pi)
+    max_delta = v110_traffic_recovery.MAX_RECOVERY_HEADING_CHANGE_RADIANS
+    if abs(float(car.angle)) > max_delta + 1e-9:
+        raise RuntimeError(f"collision recovery snapped heading: {car.angle!r}")
+    if not (
+        v110_traffic_recovery.RECOVERY_INCH_SPEED_MIN
+        <= float(car.speed)
+        <= v110_traffic_recovery.RECOVERY_INCH_SPEED_MAX
+    ):
+        raise RuntimeError(f"collision recovery did not use inching speed: {car.speed!r}")
+    return {
+        "max_heading_change_degrees": round(math.degrees(max_delta), 3),
+        "observed_heading_change_degrees": round(abs(math.degrees(float(car.angle))), 3),
+        "recovery_speed_px_s": round(float(car.speed), 3),
+    }
+
+
 def main() -> None:
+    bounded_recovery = _audit_bounded_collision_recovery()
     game_client = v100_client.game_client
     game_client.NetworkClient.start = lambda self: None
     v100_client.install_v100_client()
@@ -145,6 +170,7 @@ def main() -> None:
         "blocked_car_ids": sorted(blocked_seen),
         "overlap_pairs": [list(pair) for pair in sorted(overlap_seen)],
         "recovery_stats": recovery,
+        "bounded_collision_recovery": bounded_recovery,
         "grid_cell_px": int(game.grid_world.cell_px),
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

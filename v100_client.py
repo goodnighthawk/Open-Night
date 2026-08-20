@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Canonical Open Night v1.1 desktop/web client entry.
+"""Canonical Open Night v1.2 desktop/web client entry.
 
 The legacy client module remains the implementation library for mature gameplay
 features. v1.0 installed the curb-safe GridWorld refinement and shared 0.5x world

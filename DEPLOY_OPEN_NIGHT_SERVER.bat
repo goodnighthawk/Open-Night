@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title OPEN NIGHT v1.1 - Update Internet Server
+title OPEN NIGHT v1.2 - Update Internet Server
 
 call :main
 set "DEPLOY_RC=%ERRORLEVEL%"
@@ -20,7 +20,7 @@ exit /b %DEPLOY_RC%
 
 :main
 echo ============================================================
-echo   OPEN NIGHT v1.1 // RAILWAY SERVER UPDATE
+echo   OPEN NIGHT v1.2 // RAILWAY SERVER UPDATE
 echo ============================================================
 echo.
 
@@ -43,7 +43,7 @@ if errorlevel 1 goto :link_failed
 
 :deploy
 echo.
-echo Uploading the current Open Night v1.1 folder to Railway...
+echo Uploading the current Open Night v1.2 folder to Railway...
 echo This updates the existing internet server and keeps its public domain.
 echo v1.1 preserves existing prototype MySQL data and bug reports during deployment.
 echo.
@@ -53,7 +53,7 @@ if errorlevel 1 goto :deploy_failed
 
 echo.
 echo ============================================================
-echo   OPEN NIGHT v1.1 SERVER UPDATE COMPLETE
+echo   OPEN NIGHT v1.2 SERVER UPDATE COMPLETE
 echo ============================================================
 echo The configured desktop client automatically detects:
 echo.

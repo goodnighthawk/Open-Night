@@ -1,26 +1,31 @@
 {
   "blocked_car_ids": [],
+  "bounded_collision_recovery": {
+    "max_heading_change_degrees": 8.0,
+    "observed_heading_change_degrees": 8.0,
+    "recovery_speed_px_s": 19.2
+  },
   "grid_cell_px": 128,
   "lane_offsets_px": [
     64.0
   ],
   "max_stationary_allowed_seconds": 5.0,
-  "max_stationary_observed_seconds": 3.483,
-  "min_distance_observed_px": 5476.598,
+  "max_stationary_observed_seconds": 3.517,
+  "min_distance_observed_px": 4789.65,
   "min_distance_required_px": 550.0,
   "overlap_pairs": [],
   "proof": "v110_sustained_traffic_recovery",
   "recovery_stats": {
-    "attempts": 150,
-    "backoff_successes": 107,
-    "blocked_repairs": 2,
+    "attempts": 197,
+    "backoff_successes": 138,
+    "blocked_repairs": 3,
     "courtesy_overlap_clamps": 0,
-    "deflection_successes": 28,
+    "deflection_successes": 40,
     "overlap_repair_failures": 0,
-    "overlaps_detected": 87,
-    "overlaps_repaired": 87,
-    "route_reseats": 17,
-    "successes": 150
+    "overlaps_detected": 116,
+    "overlaps_repaired": 116,
+    "route_reseats": 22,
+    "successes": 197
   },
   "simulation_seconds": 75.0,
   "stalled_car_ids": [],
