@@ -43,12 +43,14 @@ def _nonroad_components(rows: list[list[str]]) -> tuple[dict[tuple[int, int], in
     return lookup, components
 
 
-def _safe_shift(rows: list[list[str]], building: dict, desired_center: tuple[float, float]) -> tuple[int, int]:
+def _safe_shift_candidates(
+    rows: list[list[str]], building: dict, desired_center: tuple[float, float]
+) -> list[tuple[float, int, int, set[tuple[int, int]]]]:
     original = _footprint(building)
     cx = sum(x for x, _ in original) / len(original)
     cy = sum(y for _, y in original) / len(original)
     height, width = len(rows), len(rows[0])
-    candidates: list[tuple[float, int, int]] = []
+    candidates: list[tuple[float, int, int, set[tuple[int, int]]]] = []
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             shifted = {(x + dx, y + dy) for x, y in original}
@@ -73,11 +75,76 @@ def _safe_shift(rows: list[list[str]], building: dict, desired_center: tuple[flo
             nx, ny = cx + dx, cy + dy
             score = (nx - desired_center[0]) ** 2 + (ny - desired_center[1]) ** 2
             # Prefer the smallest movement when two options center equally well.
-            candidates.append((score + 0.001 * (abs(dx) + abs(dy)), dx, dy))
+            candidates.append((score + 0.001 * (abs(dx) + abs(dy)), dx, dy, shifted))
     if not candidates:
-        return 0, 0
-    _score, dx, dy = min(candidates)
-    return dx, dy
+        candidates.append((float("inf"), 0, 0, original))
+    return sorted(candidates, key=lambda row: (row[0], abs(row[1]) + abs(row[2]), row[1], row[2]))
+
+
+def _expanded_orthogonal(cells: set[tuple[int, int]]) -> set[tuple[int, int]]:
+    """Return cells plus their cardinal neighbours.
+
+    Distinct buildings must retain at least one GridWorld cell of setback. Besides
+    preventing collision overlap, this keeps the authored pavement seam visible
+    between different facade themes.
+    """
+    expanded = set(cells)
+    for x, y in cells:
+        expanded.update(((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)))
+    return expanded
+
+
+def _joint_safe_shifts(
+    rows: list[list[str]], group: list[dict], desired_center: tuple[float, float]
+) -> dict[str, tuple[int, int]]:
+    """Choose all shifts in a road-bounded lot as one deterministic assignment.
+
+    The earlier selector optimized each building independently. Two neighbours
+    could therefore both choose the same setback cell even though either shift
+    was safe in isolation. This small branch-and-bound search scores the same
+    nine local candidates while reserving complete footprints jointly.
+    """
+    ordered = sorted(group, key=lambda item: str(item["building_id"]))
+    candidates = {
+        str(building["building_id"]): _safe_shift_candidates(rows, building, desired_center)
+        for building in ordered
+    }
+    best_score = float("inf")
+    best_key: tuple[tuple[int, int], ...] | None = None
+    best: dict[str, tuple[int, int]] | None = None
+
+    def visit(
+        index: int,
+        score: float,
+        reserved_with_margin: set[tuple[int, int]],
+        chosen: dict[str, tuple[int, int]],
+    ) -> None:
+        nonlocal best_score, best_key, best
+        if score > best_score:
+            return
+        if index == len(ordered):
+            key = tuple(chosen[str(building["building_id"])] for building in ordered)
+            if score < best_score or (score == best_score and (best_key is None or key < best_key)):
+                best_score, best_key, best = score, key, dict(chosen)
+            return
+        building = ordered[index]
+        building_id = str(building["building_id"])
+        for candidate_score, dx, dy, footprint in candidates[building_id]:
+            if footprint & reserved_with_margin:
+                continue
+            chosen[building_id] = (dx, dy)
+            visit(
+                index + 1,
+                score + candidate_score,
+                reserved_with_margin | _expanded_orthogonal(footprint),
+                chosen,
+            )
+            chosen.pop(building_id, None)
+
+    visit(0, 0.0, set(), {})
+    if best is None:
+        raise RuntimeError("no collision-free building-centering assignment for road-bounded lot")
+    return best
 
 
 def curb_safe_building_shifts(rows: list[list[str]], buildings: list[dict]) -> dict[str, tuple[int, int]]:
@@ -95,8 +162,7 @@ def curb_safe_building_shifts(rows: list[list[str]], buildings: list[dict]) -> d
         bx0 = min(x for x, _ in component); bx1 = max(x for x, _ in component)
         by0 = min(y for _, y in component); by1 = max(y for _, y in component)
         block_center = ((bx0 + bx1) / 2.0, (by0 + by1) / 2.0)
-        for building in group:
-            shifts[str(building["building_id"])] = _safe_shift(rows, building, block_center)
+        shifts.update(_joint_safe_shifts(rows, group, block_center))
     return shifts
 
 

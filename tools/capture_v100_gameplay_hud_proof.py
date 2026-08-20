@@ -133,6 +133,14 @@ def main() -> None:
     }
     if int(refinement.get("centered_building_count", 0)) < 1:
         raise RuntimeError(f"curb-safe building-centering produced no centered buildings: {refinement}")
+    if refinement.get("building_overlap_cell_count") != 0:
+        raise RuntimeError(f"building-centering overlap audit failed: {refinement}")
+    if refinement.get("building_adjacent_pair_count") != 0:
+        raise RuntimeError(f"building setback audit failed: {refinement}")
+    if refinement.get("minimum_building_setback_cells") != 1:
+        raise RuntimeError(f"building setback contract missing: {refinement}")
+    if refinement.get("building_edge_alpha_policy") != "source_alpha_preserved_outline_ink_recoloured":
+        raise RuntimeError(f"building edge alpha policy failed: {refinement}")
     if refinement.get("fire_escape_outside_collision_count") != 25:
         raise RuntimeError(f"fire-escape runtime audit failed: {refinement}")
     if refinement.get("street_lamp_asset_sync_count", 0) < 40:

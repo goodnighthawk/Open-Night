@@ -183,6 +183,31 @@ def apply_world_refinement(world):
     old_footprints = {str(b["building_id"]): _footprint(b) for b in buildings}
     shifts = _building_shifts(rows, buildings)
 
+    shifted_footprints = {
+        building_id: {(x + shifts[building_id][0], y + shifts[building_id][1]) for x, y in cells}
+        for building_id, cells in old_footprints.items()
+    }
+    building_ids = sorted(shifted_footprints)
+    overlap_cells: set[tuple[int, int]] = set()
+    adjacent_pairs: list[tuple[str, str]] = []
+    for index, building_id in enumerate(building_ids):
+        cells = shifted_footprints[building_id]
+        neighbours = {
+            (x + dx, y + dy)
+            for x, y in cells
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        }
+        for other_id in building_ids[index + 1:]:
+            other = shifted_footprints[other_id]
+            overlap_cells.update(cells & other)
+            if neighbours & other:
+                adjacent_pairs.append((building_id, other_id))
+    if overlap_cells or adjacent_pairs:
+        raise RuntimeError(
+            "building centering violated the one-cell setback contract: "
+            f"overlap_cells={sorted(overlap_cells)[:8]} adjacent_pairs={adjacent_pairs[:8]}"
+        )
+
     for cells in old_footprints.values():
         for x, y in cells:
             rows[y][x] = "pavement_small"
@@ -237,6 +262,10 @@ def apply_world_refinement(world):
     world.data.setdefault("runtime_refinement", {}).update({
         "composition_pass": "road_bounded_lot_center_v1",
         "centered_building_count": sum(delta != (0, 0) for delta in shifts.values()),
+        "building_overlap_cell_count": len(overlap_cells),
+        "building_adjacent_pair_count": len(adjacent_pairs),
+        "minimum_building_setback_cells": 1,
+        "building_edge_alpha_policy": "source_alpha_preserved_outline_ink_recoloured",
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
         "fixture_and_emitter_authority": "same_grid_object_record",
@@ -258,29 +287,14 @@ def _install_outline_refinement() -> None:
         luminance = (54 * color.r + 183 * color.g + 19 * color.b) // 256
         return maximum < 165 and luminance < 135
 
+    # GridRenderer already replaces outline ink from neighbouring coloured pixels
+    # while preserving source alpha. Only broaden the outline classifier here.
+    # The previous runtime wrapper composited every edge over an opaque fill tile;
+    # that erased the modular silhouette and produced full-cell coloured boxes
+    # which appeared to cross into adjacent buildings.
     GridRenderer._is_dark_building_outline = staticmethod(is_outline)
-    original_tile_surface = GridRenderer._tile_surface
-    themes = ("dark_green", "blue", "green", "red", "yellow")
-
-    @lru_cache(maxsize=256)
-    def tile_surface_without_black_frame(self, tile_id: str):
-        image = original_tile_surface(self, tile_id)
-        if not tile_id.startswith("bld_"):
-            return image
-        theme = next((name for name in themes if tile_id.startswith(f"bld_{name}_")), None)
-        if theme is None or tile_id == f"bld_{theme}_fill":
-            return image
-        # Edge pieces contain transparent perimeter pixels. In the old renderer
-        # those holes exposed the near-black framebuffer as a heavy box outline.
-        # Composite the edge art over its matching opaque roof/facade fill tile so
-        # the silhouette remains authored while no black framebuffer leaks through.
-        underlay = original_tile_surface(self, f"bld_{theme}_fill").copy()
-        underlay.blit(image, (0, 0))
-        return underlay
-
-    GridRenderer._tile_surface = tile_surface_without_black_frame
     try:
-        original_tile_surface.cache_clear()
+        GridRenderer._tile_surface.cache_clear()
         GridRenderer._tile_surface_scaled.cache_clear()
     except AttributeError:
         pass
