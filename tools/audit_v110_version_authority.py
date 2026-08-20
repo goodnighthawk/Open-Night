@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -11,6 +12,7 @@ if str(ROOT) not in sys.path:
 
 from versioning import GAME_VERSION, version_label
 from v110_server_launcher_patch import canonicalize_saved_config
+import v110_version_client
 
 
 EXPECTED = "1.1"
@@ -23,6 +25,40 @@ def read(relative: str) -> str:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def exercise_client_version_gate() -> None:
+    class FakeDiscovery:
+        def snapshot(self):
+            return [
+                {"uri": "wss://old", "name": "Old Server", "version": "0.8.3"},
+                {"uri": "wss://current", "name": "Current Server", "version": GAME_VERSION},
+            ]
+
+    class FakeLauncher:
+        def __init__(self):
+            self.selected_uri = "wss://old"
+            self.message = ""
+
+        def _connect_selected(self, servers):
+            return "joined"
+
+    fake_client = SimpleNamespace(Launcher=FakeLauncher, DiscoveryService=FakeDiscovery)
+    v110_version_client.install(fake_client)
+
+    servers = FakeDiscovery().snapshot()
+    old = next(server for server in servers if server["uri"] == "wss://old")
+    current = next(server for server in servers if server["uri"] == "wss://current")
+    require(old["compatible"] is False, "stale discovered server was not marked incompatible")
+    require("[INCOMPATIBLE]" in old["name"], "stale discovered server lacks visible warning")
+    require(current["compatible"] is True, "matching discovered server was marked incompatible")
+    require("[INCOMPATIBLE]" not in current["name"], "matching discovered server was visibly warned")
+
+    launcher = FakeLauncher()
+    require(launcher._connect_selected(servers) is None, "stale discovered server was joinable")
+    require("Version mismatch" in launcher.message, "stale join did not explain the mismatch")
+    launcher.selected_uri = "wss://current"
+    require(launcher._connect_selected(servers) == "joined", "matching server was blocked")
 
 
 def main() -> None:
@@ -54,8 +90,11 @@ def main() -> None:
     require("v110_version_client.install(game_client)" in client_entry,
             "canonical client did not install the v1.1 version gate")
     client_gate = read("v110_version_client.py")
-    require("server_version != GAME_VERSION" in client_gate,
+    require("server_is_compatible" in client_gate,
             "client version gate does not enforce exact parity")
+    require("[INCOMPATIBLE]" in client_gate,
+            "client browser does not visibly flag stale discovered servers")
+    exercise_client_version_gate()
 
     railway = read("railway.toml")
     require("PYMMO_PATCH_ID=open-night-v1.1" in railway,
@@ -90,6 +129,7 @@ def main() -> None:
         "railway_patch_id": "open-night-v1.1",
         "railway_preserves_persistence": True,
         "discovered_server_exact_version_gate": True,
+        "discovered_server_visible_incompatibility_warning": True,
         "legacy_saved_server_name_migration": True,
         "custom_server_names_preserved": True,
     }
