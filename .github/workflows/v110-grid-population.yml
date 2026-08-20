@@ -88,12 +88,17 @@ jobs:
           assert not audit['pedestrians_off_pavement'], audit
           assert not audit['blocked_traffic_after_10s'], audit
           assert audit['grid_cell_px'] == 128, audit
+          # Full-size v1.1 street proportion: a normal car must be at least 2.5x
+          # the ~58 px Ground player height. Never regress to the old ~83 px toy car.
+          assert audit['vehicle_client_target_length_min_px'] >= 145.0, audit
+          assert audit['vehicle_collision_to_visual_ratio_min'] >= 0.78, audit
           assert traffic['simulation_seconds'] >= 60, traffic
           assert not traffic['stalled_car_ids'], traffic
           assert not traffic['undertravel_car_ids'], traffic
           assert not traffic['blocked_car_ids'], traffic
           assert not traffic['overlap_pairs'], traffic
           assert traffic['max_stationary_observed_seconds'] <= traffic['max_stationary_allowed_seconds'], traffic
+          assert traffic['lane_offsets_px'] and min(abs(float(v)) for v in traffic['lane_offsets_px']) >= 44.0, traffic
           print(json.dumps({'population': audit, 'traffic_recovery': traffic}, indent=2, sort_keys=True))
           PY
       - name: Upload v1.1 full-stack population proof
