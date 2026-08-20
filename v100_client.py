@@ -22,6 +22,7 @@ import client as game_client
 import bug_chat_shortcut
 import portrait_head_client
 import v110_bug_delivery_client
+import v110_bug_railway_relay_client
 import v110_version_client
 
 
@@ -33,6 +34,9 @@ def install_v100_client() -> None:
     bug_chat_shortcut.install()
     v110_version_client.install(game_client)
     v110_bug_delivery_client.install(game_client)
+    # Reports always target the public Railway review service, independent of
+    # whichever local/LAN/internet server is carrying gameplay.
+    v110_bug_railway_relay_client.install(game_client)
 
 
 async def main() -> None:
