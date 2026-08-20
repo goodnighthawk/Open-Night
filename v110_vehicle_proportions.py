@@ -5,9 +5,10 @@ from __future__ import annotations
 GridWorld Ground renders the player at a 2x minimum scale, so the previous v1.1
 sedan target (~83 px long) still read as a toy beside a roughly 58 px tall player.
 This module scales the authoritative vehicle metadata so a normal sedan is about
-2.6 player-heights long while keeping its collision body synchronized with the
-visible sprite. The mature vehicle catalog remains the source of relative class
-sizes: vans, buses, limos and trucks still scale from their authored proportions.
+2.6 player-heights long while keeping a road-fitting collision body synchronized
+closely enough to prevent visible clipping. The mature vehicle catalog remains the
+source of relative class sizes: vans, buses, limos and trucks still scale from
+their authored proportions.
 
 The same install point also activates the bounded v1.1 GridWorld traffic recovery
 watchdog so every runtime path (server and proof harness) uses identical vehicle
@@ -20,8 +21,11 @@ import v110_traffic_recovery
 # the client after draw_vehicle's retained 1.38 multiplier. Against the ~58 px
 # GridWorld player this is ~2.62:1 instead of the old ~1.43:1 toy-car ratio.
 RENDER_META_SCALE = 2.30
-COLLISION_LENGTH_META_SCALE = 2.61
-COLLISION_WIDTH_META_SCALE = 3.00
+# The collision envelope deliberately stays slightly inside the visible sprite.
+# At ~80% of visible sedan length it still prevents obvious clipping while fitting
+# cleanly through the authored three-cell road intersections.
+COLLISION_LENGTH_META_SCALE = 2.50
+COLLISION_WIDTH_META_SCALE = 2.65
 CLIENT_RENDER_MULTIPLIER = 1.38
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
 MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 2.50
