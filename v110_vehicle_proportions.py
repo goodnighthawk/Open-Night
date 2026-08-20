@@ -2,33 +2,31 @@ from __future__ import annotations
 
 """v1.1 vehicle proportions matched to the normalized GridWorld/player scale.
 
-GridWorld Ground renders the player at a 2x minimum scale, so the previous v1.1
-sedan target (~83 px long) still read as a toy beside a roughly 58 px tall player.
-This module scales the authoritative vehicle metadata so a normal sedan is about
-2.6 player-heights long while keeping a road-fitting collision body synchronized
-closely enough to prevent visible clipping. The mature vehicle catalog remains the
-source of relative class sizes: vans, buses, limos and trucks still scale from
-their authored proportions.
+The earlier v1.1 correction was still visually too conservative in actual gameplay:
+vehicles were technically larger than legacy traffic but continued to read as toys
+against the broad GridWorld roads and buildings.  This pass makes an ordinary sedan
+roughly 3.4 player-heights long on screen, while preserving the authored relative
+sizes of vans, buses, limos and trucks.
 
-The same install point also activates the bounded v1.1 GridWorld traffic recovery
-watchdog so every runtime path (server and proof harness) uses identical vehicle
-proportions, lane separation and deadlock handling.
+Collision growth is intentionally smaller than visual growth.  The traffic solver
+therefore keeps enough intersection clearance while the sprite finally has the
+visual mass expected of a car.  The recovery watchdog remains installed from the
+same authoritative metadata hook.
 """
 
 import v110_traffic_recovery
 
-# A 48 px legacy sedan becomes ~110 px of server render metadata and ~152 px on
+# A 48 px legacy sedan becomes ~144 px of server render metadata and ~199 px on
 # the client after draw_vehicle's retained 1.38 multiplier. Against the ~58 px
-# GridWorld player this is ~2.62:1 instead of the old ~1.43:1 toy-car ratio.
-RENDER_META_SCALE = 2.30
-# The collision envelope deliberately stays slightly inside the visible sprite.
-# At ~80% of visible sedan length it still prevents obvious clipping while fitting
-# cleanly through the authored three-cell road intersections.
-COLLISION_LENGTH_META_SCALE = 2.50
-COLLISION_WIDTH_META_SCALE = 2.65
+# GridWorld player this is ~3.43:1, giving cars readable real-world visual mass.
+RENDER_META_SCALE = 3.00
+# Collision envelopes remain smaller than the visible sprite so the larger visual
+# treatment does not consume the full three-cell road/intersection clearance.
+COLLISION_LENGTH_META_SCALE = 2.65
+COLLISION_WIDTH_META_SCALE = 2.75
 CLIENT_RENDER_MULTIPLIER = 1.38
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
-MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 2.50
+MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 3.25
 MIN_EXPECTED_SEDAN_LENGTH_PX = GROUND_PLAYER_TARGET_HEIGHT_PX * MIN_SEDAN_TO_PLAYER_LENGTH_RATIO
 
 
@@ -52,8 +50,6 @@ def expected_sedan_to_player_ratio(server_render_length: float, player_height_px
 
 def install(server_module) -> None:
     if bool(getattr(server_module, "_v110_vehicle_proportions_installed", False)):
-        # Recovery is independently idempotent; keep it installed even if another
-        # harness applied the metadata patch first.
         v110_traffic_recovery.install(server_module)
         return
     original = server_module._traffic_asset
