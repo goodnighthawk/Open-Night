@@ -22,7 +22,9 @@ import v110_bug_delivery_server
 import v110_bug_railway_relay_server
 import v110_grid_population
 import v110_pedestrian_flow
+import v110_vehicle_proportions
 v110_pedestrian_flow.install(v110_grid_population)
+v110_vehicle_proportions.install(server)
 from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
 from versioning import version_label
