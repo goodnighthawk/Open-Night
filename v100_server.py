@@ -8,6 +8,8 @@ and 0.5x world normalization; v1.1 additionally derives traffic and pedestrian
 routes from that same normalized GridWorld before the simulation starts.
 """
 
+import sys
+
 import v100_runtime_refinement
 import v100_safe_layout
 v100_safe_layout.install(v100_runtime_refinement)
@@ -19,6 +21,7 @@ import server
 import v110_grid_population
 from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
+from versioning import version_label
 
 
 _legacy_validate_map = server.validate_map
@@ -78,6 +81,16 @@ def install_v100_server() -> None:
 
 def main() -> None:
     install_v100_server()
+    # The canonical entrypoint owns the public/default identity as well as the
+    # GridWorld runtime. This prevents an old implementation-library constant
+    # from leaking back into discovery after a version promotion.
+    server.SERVER_NAME = version_label()
+    if len(sys.argv) == 1:
+        # The retained graphical server-control window historically spawned
+        # server.py directly. Patch only that no-argument launcher path so the
+        # child also returns through this canonical v1.1 entrypoint.
+        import v110_server_launcher_patch
+        v110_server_launcher_patch.install()
     server.cli_main()
 
 
