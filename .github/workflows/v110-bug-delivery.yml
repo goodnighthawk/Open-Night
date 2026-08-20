@@ -7,6 +7,10 @@ on:
       - 'gameplay/issue_reporter.py'
       - 'v110_bug_delivery_client.py'
       - 'v110_bug_delivery_server.py'
+      - 'v110_bug_railway_relay_client.py'
+      - 'v110_bug_railway_relay_server.py'
+      - 'bug_github_mirror.py'
+      - 'config/public_servers.csv'
       - 'v100_client.py'
       - 'v100_server.py'
       - 'tools/audit_v110_bug_delivery.py'
@@ -17,6 +21,10 @@ on:
       - 'gameplay/issue_reporter.py'
       - 'v110_bug_delivery_client.py'
       - 'v110_bug_delivery_server.py'
+      - 'v110_bug_railway_relay_client.py'
+      - 'v110_bug_railway_relay_server.py'
+      - 'bug_github_mirror.py'
+      - 'config/public_servers.csv'
       - 'v100_client.py'
       - 'v100_server.py'
       - 'tools/audit_v110_bug_delivery.py'
@@ -32,6 +40,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile bug delivery runtime
-        run: python -m py_compile gameplay/issue_reporter.py v110_bug_delivery_client.py v110_bug_delivery_server.py v100_client.py v100_server.py tools/audit_v110_bug_delivery.py
-      - name: Audit migration, acknowledgement state, and idempotent retry
+        run: python -m py_compile gameplay/issue_reporter.py v110_bug_delivery_client.py v110_bug_delivery_server.py v110_bug_railway_relay_client.py v110_bug_railway_relay_server.py bug_github_mirror.py v100_client.py v100_server.py tools/audit_v110_bug_delivery.py
+      - name: Audit local durability, Railway routing, acknowledgement, GitHub visibility, and idempotent retry
         run: python tools/audit_v110_bug_delivery.py
