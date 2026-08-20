@@ -26,7 +26,9 @@ import server
 import v100_client
 import v110_grid_population
 import v110_pedestrian_flow
+import v110_vehicle_proportions
 v110_pedestrian_flow.install(v110_grid_population)
+v110_vehicle_proportions.install(server)
 
 OUT = ROOT / "assets" / "grid_v100" / "V110_POPULATION_RUNTIME_PROOF_1280x720.png"
 REVIEW = ROOT / "assets" / "grid_v100" / "V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png"
@@ -36,6 +38,8 @@ PROOF_TRAFFIC = 24
 FLOW_WARMUP_TICKS = 300
 FLOW_MEASURE_TICKS = 300
 MIN_FLOW_DISTANCE_5S = 20.0
+MIN_CLIENT_CAR_LENGTH_PX = 74.0
+MIN_COLLISION_TO_VISUAL_RATIO = 0.78
 
 
 def _distance(a, b) -> float:
@@ -59,6 +63,19 @@ def _advance_population(dt: float, tick_start: int, tick_stop: int, *, track_ped
                 px, py = before[npc.npc_id]
                 travelled[npc.npc_id] = travelled.get(npc.npc_id, 0.0) + math.hypot(npc.x - px, npc.y - py)
     return travelled
+
+
+def _overlapping_car_pairs() -> list[list[str]]:
+    pairs: list[list[str]] = []
+    cars = list(server.traffic_vehicles)
+    for index, car in enumerate(cars):
+        for other in cars[index + 1:]:
+            if server._oriented_boxes_overlap(
+                car.x, car.y, car.angle, car.collision_length, car.collision_width,
+                other.x, other.y, other.angle, other.collision_length, other.collision_width,
+            ):
+                pairs.append([car.vehicle_id, other.vehicle_id])
+    return pairs
 
 
 def main() -> None:
@@ -98,7 +115,7 @@ def main() -> None:
     )
 
     # The old reciprocal tree-walk routes could pass the first 2.5 seconds and
-    # then deadlock once pedestrians met head-on.  Warm the city for five seconds,
+    # then deadlock once pedestrians met head-on. Warm the city for five seconds,
     # then measure actual path length during a separate five-second window.
     _advance_population(dt, 150, FLOW_WARMUP_TICKS)
     pedestrian_travel = _advance_population(
@@ -126,6 +143,16 @@ def main() -> None:
         car.vehicle_id for car in server.traffic_vehicles
         if v110_grid_population._grid_vehicle_blocked(game.grid_world, car, car.x, car.y, car.angle)
     ]
+    overlapping_cars = _overlapping_car_pairs()
+    client_target_lengths = [
+        v110_vehicle_proportions.expected_client_render_length(car.render_length)
+        for car in server.traffic_vehicles
+    ]
+    collision_visual_ratios = [
+        float(car.collision_length) / v110_vehicle_proportions.expected_client_render_length(car.render_length)
+        for car in server.traffic_vehicles
+    ]
+
     if len(server.traffic_vehicles) < 6:
         raise RuntimeError(f"v1.1 proof expected at least six safe traffic cars, got {len(server.traffic_vehicles)}")
     if len(pedestrians) < 12:
@@ -144,6 +171,16 @@ def main() -> None:
         raise RuntimeError(f"pedestrians left GridWorld pavement: {off_pavement_pedestrians[:8]}")
     if blocked_cars:
         raise RuntimeError(f"traffic left GridWorld road collision: {blocked_cars[:8]}")
+    if overlapping_cars:
+        raise RuntimeError(f"traffic collision bodies overlap after 10 seconds: {overlapping_cars[:8]}")
+    if client_target_lengths and min(client_target_lengths) < MIN_CLIENT_CAR_LENGTH_PX:
+        raise RuntimeError(
+            f"underscaled vehicle remains: min client target {min(client_target_lengths):.1f}px < {MIN_CLIENT_CAR_LENGTH_PX:.1f}px"
+        )
+    if collision_visual_ratios and min(collision_visual_ratios) < MIN_COLLISION_TO_VISUAL_RATIO:
+        raise RuntimeError(
+            f"vehicle collision body is too small for its visible sprite: ratio={min(collision_visual_ratios):.3f}"
+        )
 
     game.vehicles = {
         car.vehicle_id: game_client.RemoteVehicle(car.public_dict())
@@ -195,8 +232,8 @@ def main() -> None:
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
     game.notice = (
-        f"v1.1 pedestrian-flow proof — {visible_cars} cars + "
-        f"{visible_pedestrians} pedestrians here; stalled {len(stalled_pedestrians)}/{len(pedestrians)}"
+        f"v1.1 flow/vehicle proof — {visible_cars} cars + {visible_pedestrians} pedestrians; "
+        f"stalled {len(stalled_pedestrians)}/{len(pedestrians)}; car min {min(client_target_lengths):.0f}px"
     )
     game.notice_until = 10**12
 
@@ -252,6 +289,7 @@ def main() -> None:
     review.blit(pygame.transform.smoothscale(raw_overview, (2560, 720)), (0, 720))
     pygame.image.save(review, REVIEW)
 
+    sorted_distances = sorted(pedestrian_travel.values())
     audit.update({
         "proof": "v110_grid_native_population_full_stack",
         "camera_zoom": PROOF_ZOOM,
@@ -262,9 +300,16 @@ def main() -> None:
         "pedestrians_stalled_after_warmup": stalled_pedestrians,
         "pedestrians_stalled_after_warmup_count": len(stalled_pedestrians),
         "pedestrians_off_pavement": off_pavement_pedestrians,
-        "pedestrian_distance_min_px": round(min(pedestrian_travel.values(), default=0.0), 3),
-        "pedestrian_distance_median_px": round(sorted(pedestrian_travel.values())[len(pedestrian_travel) // 2], 3) if pedestrian_travel else 0.0,
+        "pedestrian_distance_min_px": round(min(sorted_distances, default=0.0), 3),
+        "pedestrian_distance_median_px": round(sorted_distances[len(sorted_distances) // 2], 3) if sorted_distances else 0.0,
         "blocked_traffic_after_10s": blocked_cars,
+        "overlapping_traffic_after_10s": overlapping_cars,
+        "vehicle_client_target_length_min_px": round(min(client_target_lengths, default=0.0), 3),
+        "vehicle_client_target_length_max_px": round(max(client_target_lengths, default=0.0), 3),
+        "vehicle_collision_to_visual_ratio_min": round(min(collision_visual_ratios, default=0.0), 4),
+        "vehicle_render_meta_scale": v110_vehicle_proportions.RENDER_META_SCALE,
+        "vehicle_collision_length_meta_scale": v110_vehicle_proportions.COLLISION_LENGTH_META_SCALE,
+        "vehicle_collision_width_meta_scale": v110_vehicle_proportions.COLLISION_WIDTH_META_SCALE,
         "focus_car": focus_car.vehicle_id,
         "focus_npc": focus_npc.npc_id,
         "visible_cars_in_proof_window": visible_cars,
