@@ -35,6 +35,13 @@ def install_v100_client() -> None:
     bug_chat_shortcut.install()
     v110_version_client.install(game_client)
     v110_population_render.install(game_client)
+    # GridWorld Ground already guarantees a 2x player render. Ambient people
+    # must share that minimum or stale/default settings recreate the half-sized
+    # NPC regression reported in v1.1 playtests.
+    if v110_population_render.effective_npc_scale(
+        {"render": {"player_scale": 1, "npc_scale": 1}}, grid_ground=True
+    ) < 2.0:
+        raise RuntimeError("v1.1 Ground NPC scale contract is below the player minimum")
     v110_bug_delivery_client.install(game_client)
     # Reports always target the public Railway review service, independent of
     # whichever local/LAN/internet server is carrying gameplay.
