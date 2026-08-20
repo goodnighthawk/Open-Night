@@ -46,7 +46,11 @@ for /f "delims=" %%H in ('"!GIT_EXE!" rev-parse HEAD 2^>nul') do set "LOCAL_SHA=
 for /f "delims=" %%H in ('"!GIT_EXE!" rev-parse origin/main 2^>nul') do set "REMOTE_SHA=%%H"
 if not defined REMOTE_SHA exit /b 0
 if /i "!LOCAL_SHA!"=="!REMOTE_SHA!" (
-  echo [UPDATE] Open Night is current.
+  set "INSTALLED_VERSION=unknown"
+  if exist "VERSION.txt" set /p INSTALLED_VERSION=<"VERSION.txt"
+  echo [UPDATE] Open Night v!INSTALLED_VERSION! is current.
+  echo [UPDATE] Install: %CD%
+  echo [UPDATE] Commit: !LOCAL_SHA!
   exit /b 0
 )
 

@@ -102,8 +102,9 @@ class GridRenderer:
 
         The supplied modular pieces contain thick near-black outline strokes. Those
         strokes become a heavy rectangular frame when the pieces are synthesized
-        into larger buildings. Fill only dark opaque pixels from the nearest coloured
-        opaque neighbour, preserving transparency and the original silhouette.
+        into larger buildings. Remove only dark pixels connected to the tile edge;
+        recolouring them produced the coloured frames reported by players, while
+        removing every dark pixel would erase legitimate rooftop detail.
         This is applied only to non-fill ``bld_*`` tiles; roof fill and props are not
         altered.
         """
@@ -118,21 +119,29 @@ class GridRenderer:
                 color = source.get_at((x, y))
                 is_dark = cls._is_dark_building_outline(color)
                 dark[y][x] = is_dark
-                if color.a > 160 and not is_dark:
+        # The art often has transparent padding, so the visible frame is not
+        # necessarily on pixel row/column zero. Seed dark pixels bordering that
+        # transparent exterior and flood only through contiguous frame ink.
+        for y in range(height):
+            for x in range(width):
+                if not dark[y][x]:
+                    continue
+                neighbours = ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+                if any(not (0 <= nx < width and 0 <= ny < height) or source.get_at((nx, ny)).a <= 24
+                       for nx, ny in neighbours):
                     visited[y][x] = True
                     queue.append((x, y))
 
         while queue:
             x, y = queue.popleft()
-            donor = image.get_at((x, y))
+            color = image.get_at((x, y))
+            image.set_at((x, y), (color.r, color.g, color.b, 0))
             for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                 if not (0 <= nx < width and 0 <= ny < height):
                     continue
                 if visited[ny][nx] or not dark[ny][nx]:
                     continue
                 visited[ny][nx] = True
-                alpha = source.get_at((nx, ny)).a
-                image.set_at((nx, ny), (donor.r, donor.g, donor.b, alpha))
                 queue.append((nx, ny))
         return image
 

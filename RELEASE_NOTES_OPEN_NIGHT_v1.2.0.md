@@ -16,3 +16,11 @@ Open Night v1.2 is the collision-recovery release based on player bug #30.
 - `main` remains the only normal player update branch and the production Railway service remains `open-night`.
 
 The multiplayer protocol/build version is `1.2`; v1.1 clients are intentionally blocked from joining until updated.
+
+Corrective player-report pass:
+
+- Restores synchronized GridWorld traffic lights and preserves zebra-crossing pedestrian routes.
+- Allows player-driven vehicles across lane paint and onto sidewalks while keeping AI traffic road-bound.
+- Renders supplier and buyer as stationary people at safe walkable destinations.
+- Removes exterior modular-building frame ink without erasing rooftop detail.
+- Adds a dedicated Controls page and makes the updater print its exact version, install path, and commit.

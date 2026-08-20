@@ -95,7 +95,7 @@ def main() -> None:
     opaque_edges = [row["tile_id"] for row in alpha_rows if row["transparent_or_translucent_px"] <= 0]
     if opaque_edges:
         errors.append(f"building edge alpha was erased: {opaque_edges[:12]}")
-    if refinement.get("building_edge_alpha_policy") != "source_alpha_preserved_outline_ink_recoloured":
+    if refinement.get("building_edge_alpha_policy") != "source_alpha_preserved_exterior_frame_removed":
         errors.append(f"unexpected edge policy: {refinement}")
 
     audit = {

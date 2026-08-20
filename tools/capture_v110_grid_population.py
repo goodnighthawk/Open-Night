@@ -25,6 +25,7 @@ v100_scale_normalization.install()
 import server
 import v100_client
 import v110_grid_population
+from versioning import GAME_VERSION
 import v110_pedestrian_flow
 import v110_vehicle_proportions
 v110_pedestrian_flow.install(v110_grid_population)
@@ -232,7 +233,7 @@ def main() -> None:
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
     game.notice = (
-        f"v1.1 flow/vehicle proof — {visible_cars} cars + {visible_pedestrians} pedestrians; "
+        f"v{GAME_VERSION} flow/vehicle proof — {visible_cars} cars + {visible_pedestrians} pedestrians; "
         f"stalled {len(stalled_pedestrians)}/{len(pedestrians)}; car min {min(client_target_lengths):.0f}px"
     )
     game.notice_until = 10**12

@@ -238,6 +238,18 @@ def apply_world_refinement(world):
             item["gx"] = int(item["gx"]) + dx
             item["gy"] = int(item["gy"]) + dy
 
+        if item.get("composition_pass") == "roof_palette_v1":
+            # Keep equipment visibly legible while fully inside its authoritative
+            # inboard roof cell. Recenter after scaling so no decal clips a wall.
+            inset = max(16, int(round(world.cell_px * 0.125)))
+            minimum = max(64, int(round(world.cell_px * 0.50)))
+            width = min(world.cell_px - inset, max(minimum, int(round(float(item.get("width_px", minimum)) * 1.18))))
+            height = min(world.cell_px - inset, max(minimum, int(round(float(item.get("height_px", minimum)) * 1.18))))
+            item["width_px"], item["height_px"] = width, height
+            item["offset_x_px"] = (world.cell_px - width) // 2
+            item["offset_y_px"] = (world.cell_px - height) // 2
+            item["placement_policy"] = "centered_inboard_roof_cell_v12"
+
     fire_escape_count = _move_fire_escapes(world, rows, buildings)
     lamp_count = 0
     seen_lights: set[str] = set()
@@ -265,7 +277,7 @@ def apply_world_refinement(world):
         "building_overlap_cell_count": len(overlap_cells),
         "building_adjacent_pair_count": len(adjacent_pairs),
         "minimum_building_setback_cells": 1,
-        "building_edge_alpha_policy": "source_alpha_preserved_outline_ink_recoloured",
+        "building_edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
         "fixture_and_emitter_authority": "same_grid_object_record",
@@ -285,13 +297,13 @@ def _install_outline_refinement() -> None:
             return False
         maximum = max(color.r, color.g, color.b)
         luminance = (54 * color.r + 183 * color.g + 19 * color.b) // 256
-        return maximum < 165 and luminance < 135
+        # Only near-black perimeter ink is a frame. The former broad threshold
+        # classified legitimate dark-blue/brown roof fills as outlines and made
+        # whole building tiles bleed into their neighbours.
+        return maximum < 108 and luminance < 92
 
-    # GridRenderer already replaces outline ink from neighbouring coloured pixels
-    # while preserving source alpha. Only broaden the outline classifier here.
-    # The previous runtime wrapper composited every edge over an opaque fill tile;
-    # that erased the modular silhouette and produced full-cell coloured boxes
-    # which appeared to cross into adjacent buildings.
+    # GridRenderer removes only exterior-connected frame ink while preserving
+    # source alpha and isolated rooftop detail. Keep the classifier narrow.
     GridRenderer._is_dark_building_outline = staticmethod(is_outline)
     try:
         GridRenderer._tile_surface.cache_clear()

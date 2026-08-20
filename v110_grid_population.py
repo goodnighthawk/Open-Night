@@ -246,7 +246,12 @@ def _grid_vehicle_blocked(world, car, x: float, y: float, angle: float) -> bool:
         (x - ca * hl - sa * hw, y - sa * hl + ca * hw),
         (x - ca * hl + sa * hw, y - sa * hl - ca * hw),
     ]
-    return any(world.collision_at("ground", px, py) != "road" for px, py in probes)
+    allowed = {"road"}
+    # Player-controlled cars may cross painted dividers and mount sidewalks.
+    # Ambient traffic remains road-bound so its deterministic flow stays safe.
+    if bool(getattr(car, "controlled_by", "")):
+        allowed.update({"walk", "sidewalk"})
+    return any(world.collision_at("ground", px, py) not in allowed for px, py in probes)
 
 
 def install(server_module, world) -> None:

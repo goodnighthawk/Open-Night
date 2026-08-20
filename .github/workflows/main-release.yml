@@ -31,6 +31,7 @@ jobs:
           tools/audit_main_release.py tools/audit_v110_version_authority.py
           tools/audit_v110_bug_delivery.py tools/capture_v110_grid_population.py
           tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
+          tools/audit_v120_player_reports.py
       - name: Verify player-approved pixel vehicle fleet
         env:
           SDL_VIDEODRIVER: dummy
@@ -57,6 +58,11 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/v100_building_setback_runtime_audit.py
+      - name: Verify corrective v1.2 player reports
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_v120_player_reports.py
       - name: Verify release audit bundle
         run: |
           test -f assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png

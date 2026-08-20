@@ -2806,8 +2806,10 @@ class Game:
         # Physical destination rings belong to the world.  Role text is drawn
         # later in draw_job_location_labels() after camera rotation/zoom.
         sx, sy = self.world_to_screen(*pos)
+        appearance = normalize_character({"preset": 2 if label == "SUPPLIER" else 4})
+        draw_character(self.screen, (sx, sy), 0.0, appearance, scale=2, moving=False, anim_time=0.0)
         pygame.draw.circle(self.screen, color, (sx, sy), 34, width=4)
-        pygame.draw.circle(self.screen, color, (sx, sy), 8)
+        pygame.draw.circle(self.screen, color, (sx, sy + 25), 5)
 
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""
@@ -3183,6 +3185,7 @@ class Game:
             "resume": pygame.Rect(panel.x + 24, panel.bottom - 64, 130, 40),
             "settings": pygame.Rect(panel.x + 166, panel.bottom - 64, 130, 40),
             "friends": pygame.Rect(panel.x + 308, panel.bottom - 64, 130, 40),
+            "controls": pygame.Rect(panel.x + 450, panel.bottom - 64, 130, 40),
             "quit": pygame.Rect(panel.right - 154, panel.bottom - 64, 130, 40),
             "back": pygame.Rect(panel.x + 24, panel.bottom - 64, 130, 40),
         }
@@ -3253,6 +3256,21 @@ class Game:
         title = self.big_font.render("PAUSED / OPTIONS", True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 32, panel.y + 24))
 
+        if self.pause_page == "controls":
+            self.screen.blit(self.font.render("CONTROLS", True, accent), (panel.x + 32, panel.y + 92))
+            controls = [
+                "WASD / arrows    Move / drive", "SHIFT            Sprint / full throttle",
+                "Space            Jump", "C                Crouch (hold)",
+                "Middle mouse     Rotate camera", "Mouse wheel      Zoom",
+                "T                Enter or exit vehicle", "E                Interact",
+                "I or TAB         Inventory", "M                World map",
+                "F2               Messages", "F10 or /bug      Report a bug",
+            ]
+            for i, line in enumerate(controls):
+                self.screen.blit(self.small_font.render(line, True, TEXT_COLOR), (panel.x + 48, panel.y + 135 + i * 29))
+            self._draw_menu_button(buttons["back"], "BACK")
+            return
+
         if self.pause_page == "settings":
             self.screen.blit(self.font.render("SETTINGS", True, accent), (panel.x + 32, panel.y + 92))
             content = pygame.Rect(panel.x + 24, panel.y + 132, panel.width - 48, panel.height - 218)
@@ -3321,12 +3339,17 @@ class Game:
         self._draw_menu_button(buttons["resume"], "RESUME")
         self._draw_menu_button(buttons["settings"], "SETTINGS")
         self._draw_menu_button(buttons["friends"], "FRIENDS")
+        self._draw_menu_button(buttons["controls"], "CONTROLS")
         self._draw_menu_button(buttons["quit"], "QUIT GAME")
 
     def handle_pause_click(self, pos: tuple[int,int]) -> str | None:
         if not self.pause_menu_open:
             return None
         _, buttons, toggles = self._pause_layout()
+        if self.pause_page == "controls":
+            if buttons["back"].collidepoint(pos):
+                self.pause_page = "main"
+            return None
         if self.pause_page == "settings":
             if buttons["back"].collidepoint(pos):
                 self.pause_page = "main"
@@ -3366,6 +3389,9 @@ class Game:
             self.pause_scroll = 0
         elif buttons["friends"].collidepoint(pos):
             self.pause_page = "friends"
+            self.pause_scroll = 0
+        elif buttons["controls"].collidepoint(pos):
+            self.pause_page = "controls"
             self.pause_scroll = 0
         elif buttons["quit"].collidepoint(pos):
             return "quit"

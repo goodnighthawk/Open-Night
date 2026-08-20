@@ -66,7 +66,31 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
         "normalized_points": normalized,
         "authority": "gridworld_ground_walkable",
     }
+    _install_grid_traffic_signals(map_config, world)
     return normalized
+
+
+def _install_grid_traffic_signals(map_config: dict, world) -> None:
+    """Restore synchronized signals at GridWorld road intersections."""
+    if map_config.get("traffic_signals"):
+        return
+    try:
+        from v110_pedestrian_connectivity import road_bands
+        horizontal, vertical = road_bands(world)
+    except Exception:
+        return
+    signals = []
+    margin = max(18.0, world.cell_px * 0.22)
+    for row_index, row in enumerate(horizontal):
+        for col_index, col in enumerate(vertical):
+            cx, cy = world.cell_center((col.start + col.end) // 2, (row.start + row.end) // 2)
+            for arm, dx, dy, phase in (("nw", -margin, -margin, 0), ("se", margin, margin, 0),
+                                       ("ne", margin, -margin, 1), ("sw", -margin, margin, 1)):
+                signals.append({"id": f"grid_signal_{row_index:02d}_{col_index:02d}_{arm}",
+                                "pos": [round(cx + dx, 3), round(cy + dy, 3)],
+                                "phase": phase, "orientation": arm, "grid_native": True})
+    map_config["traffic_signals"] = signals
+    map_config.setdefault("runtime", {})["grid_traffic_signal_count"] = len(signals)
 
 
 def install_client(game_client) -> None:
