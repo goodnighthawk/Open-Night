@@ -105,7 +105,7 @@ def _send_row(game, row: dict[str, str], *, announce: bool = False) -> bool:
         return False
     if not bool(getattr(game, "connected", False)):
         if announce:
-            game.notice = "Bug saved locally — it will send when a v1.1 review server is available"
+            game.notice = "Bug saved locally — it will send automatically when a v1.1 review server is available"
             game.notice_until = time.monotonic() + 5.0
         return False
     game.network.send(_submission_from_row(row))
@@ -133,6 +133,10 @@ def _observe_server_message(game, message) -> None:
             )
             game._bug_delivery_inflight = None
             game._bug_delivery_inflight_sent_at = 0.0
+            game._bug_delivery_notice_override = (
+                "Bug saved locally — connection lost; automatic retry is queued",
+                5.0,
+            )
         if connected:
             game._bug_delivery_retry_at = now + RECONNECT_RETRY_DELAY_SECONDS
         return
@@ -141,15 +145,20 @@ def _observe_server_message(game, message) -> None:
         return
     report_id = getattr(game, "_bug_delivery_inflight", None)
     if kind == "bug_report_receipt":
+        server_report_id = int(message.get("report_id", 0) or 0)
         if report_id:
             mark_issue_report_submitted(
                 report_id,
-                int(message.get("report_id", 0) or 0),
+                server_report_id,
                 str(message.get("status", "pending")),
             )
         game._bug_delivery_inflight = None
         game._bug_delivery_inflight_sent_at = 0.0
         game._bug_delivery_retry_at = now + 1.0
+        game._bug_delivery_notice_override = (
+            f"Bug report #{server_report_id} submitted — local backup retained",
+            5.0,
+        )
     elif kind == "bug_report_error":
         text = str(message.get("text", "server upload failed"))
         retryable = _retryable_error(text)
@@ -158,6 +167,16 @@ def _observe_server_message(game, message) -> None:
         game._bug_delivery_inflight = None
         game._bug_delivery_inflight_sent_at = 0.0
         game._bug_delivery_retry_at = now + _retry_delay(text) if retryable else float("inf")
+        if retryable:
+            game._bug_delivery_notice_override = (
+                "Bug saved locally — server queue unavailable; automatic retry is queued",
+                6.0,
+            )
+        else:
+            game._bug_delivery_notice_override = (
+                "Bug saved locally — report needs attention: " + text[:120],
+                7.0,
+            )
 
 
 def _current_build_family(game) -> str:
@@ -176,6 +195,8 @@ def _pump_outbox(game) -> None:
             game._bug_delivery_inflight = None
             game._bug_delivery_inflight_sent_at = 0.0
             game._bug_delivery_retry_at = now + 15.0
+            game.notice = "Bug saved locally — acknowledgement timed out; automatic retry is queued"
+            game.notice_until = now + 6.0
         return
     if not bool(getattr(game, "connected", False)):
         return
@@ -212,6 +233,7 @@ def install(game_client) -> None:
         self._bug_delivery_inflight_sent_at = 0.0
         self._bug_delivery_retry_at = time.monotonic() + RECONNECT_RETRY_DELAY_SECONDS
         self._bug_delivery_next_scan = 0.0
+        self._bug_delivery_notice_override = None
         incoming = getattr(self.network, "incoming", None)
         if incoming is not None and not isinstance(incoming, _ObservedQueue):
             self.network.incoming = _ObservedQueue(incoming, lambda message: _observe_server_message(self, message))
@@ -279,6 +301,11 @@ def install(game_client) -> None:
 
     def process_network_v110(self) -> None:
         original_process_network(self)
+        override = getattr(self, "_bug_delivery_notice_override", None)
+        if override:
+            self.notice = str(override[0])
+            self.notice_until = time.monotonic() + float(override[1])
+            self._bug_delivery_notice_override = None
         _pump_outbox(self)
 
     game.__init__ = init_v110
