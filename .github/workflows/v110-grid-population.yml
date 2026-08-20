@@ -10,6 +10,7 @@ on:
       - 'v100_client.py'
       - 'v110_grid_population.py'
       - 'v110_pedestrian_flow.py'
+      - 'v110_pedestrian_connectivity.py'
       - 'v110_vehicle_proportions.py'
       - 'v110_traffic_recovery.py'
       - 'v100_runtime_refinement.py'
@@ -31,6 +32,7 @@ on:
       - 'v100_client.py'
       - 'v110_grid_population.py'
       - 'v110_pedestrian_flow.py'
+      - 'v110_pedestrian_connectivity.py'
       - 'v110_vehicle_proportions.py'
       - 'v110_traffic_recovery.py'
       - 'v100_runtime_refinement.py'
@@ -56,7 +58,7 @@ jobs:
       - name: Install runtime dependencies
         run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'websockets>=16,<18' 'mysql-connector-python>=9,<10' 'Pillow>=10,<13'
       - name: Compile v1.1 population runtime
-        run: python -m py_compile v100_server.py v100_client.py v110_grid_population.py v110_pedestrian_flow.py v110_vehicle_proportions.py v110_traffic_recovery.py server.py client.py grid_world.py grid_runtime.py tools/capture_v110_grid_population.py tools/audit_v110_traffic_recovery.py
+        run: python -m py_compile v100_server.py v100_client.py v110_grid_population.py v110_pedestrian_flow.py v110_pedestrian_connectivity.py v110_vehicle_proportions.py v110_traffic_recovery.py server.py client.py grid_world.py grid_runtime.py tools/capture_v110_grid_population.py tools/audit_v110_traffic_recovery.py
       - name: Render and exercise GridWorld-native traffic + pedestrians
         env:
           SDL_VIDEODRIVER: dummy
@@ -86,6 +88,16 @@ jobs:
           assert audit['pedestrian_one_way_cycle_routes'] == audit['pedestrian_route_count'], audit
           assert audit['pedestrians_stalled_after_warmup_count'] <= max(2, audit['pedestrians_spawned'] // 20), audit
           assert not audit['pedestrians_off_pavement'], audit
+          # v1.1 must be one useful city-scale pedestrian graph rather than
+          # isolated local pavement loops around individual buildings.
+          assert audit['pedestrian_crosswalk_count'] >= 48, audit
+          assert audit['pedestrian_intersection_crosswalk_count'] >= 32, audit
+          assert audit['pedestrian_midblock_crosswalk_count'] >= 8, audit
+          assert audit['pedestrian_sidewalk_apron_count'] >= 16, audit
+          assert audit['pedestrian_connected_route_count'] >= 12, audit
+          assert audit['pedestrian_multiblock_route_count'] >= 6, audit
+          assert audit['pedestrian_crosswalk_route_count'] >= 6, audit
+          assert audit['pedestrian_route_network_components'] == 1, audit
           assert not audit['blocked_traffic_after_10s'], audit
           assert audit['grid_cell_px'] == 128, audit
           # Full-size v1.1 street proportion: a normal car must be at least 2.5x
