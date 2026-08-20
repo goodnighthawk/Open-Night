@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import asyncio
 import csv
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -115,6 +117,34 @@ def exercise_server_idempotency() -> dict:
     return {"dedupe_existing_id": 42, "new_create_id": 123}
 
 
+async def _exercise_pre_cooldown_retry_async() -> dict:
+    receipts = []
+    original_calls = []
+
+    class FakeDB:
+        pass
+
+    async def send_json(_websocket, payload):
+        receipts.append(payload)
+
+    async def original(_session, _message):
+        original_calls.append(True)
+
+    server = SimpleNamespace(asyncio=asyncio, DB=FakeDB(), USE_MYSQL=True, send_json=send_json)
+    session = SimpleNamespace(websocket=object())
+    message = {"context": {"client_report_id": "ON-20260820T004555_000000Z"}}
+    saved_lookup = v110_bug_delivery_server._lookup_existing_client_report
+    try:
+        v110_bug_delivery_server._lookup_existing_client_report = lambda db, client_id: 55
+        await v110_bug_delivery_server._process_bug_report_idempotent(server, original, session, message)
+    finally:
+        v110_bug_delivery_server._lookup_existing_client_report = saved_lookup
+    require(not original_calls, "known retry fell through to cooldown/storage path")
+    require(receipts and receipts[0].get("report_id") == 55, "known retry did not receive existing report receipt")
+    require(receipts[0].get("duplicate_retry") is True, "retry receipt is not marked duplicate_retry")
+    return {"pre_cooldown_receipt": 55}
+
+
 def exercise_client_acknowledgement() -> dict:
     class FakeNetwork:
         def __init__(self):
@@ -129,6 +159,7 @@ def exercise_client_acknowledgement() -> dict:
             self._bug_delivery_inflight = None
             self._bug_delivery_inflight_sent_at = 0.0
             self._bug_delivery_retry_at = 0.0
+            self._bug_delivery_notice_override = None
             self.notice = ""
             self.notice_until = 0.0
         def _build_version(self):
@@ -161,7 +192,18 @@ def exercise_client_acknowledgement() -> dict:
             stored = issue_reporter.get_issue_report(row["report_id"], path)
             require(stored and stored["status"] == "submitted", "server receipt did not close outbox")
             require(stored["server_report_id"] == "91", "server receipt ID missing locally")
-            return {"sent_client_id": row["report_id"], "server_report_id": 91}
+            require(game._bug_delivery_notice_override and "submitted" in game._bug_delivery_notice_override[0], "receipt notice does not confirm submission")
+
+            retry = dict(row)
+            retry["report_id"] = "ON-20260820T005001_000000Z"
+            retry["status"] = "pending_server_review"
+            issue_reporter._write_rows_atomic(path, [retry])
+            game._bug_delivery_inflight = retry["report_id"]
+            v110_bug_delivery_client._observe_server_message(game, {"type": "bug_report_error", "text": "the server review queue is unavailable"})
+            failed = issue_reporter.get_issue_report(retry["report_id"], path)
+            require(failed and failed["status"] == "retry_pending", "temporary server failure was not queued for retry")
+            require(game._bug_delivery_notice_override and "automatic retry" in game._bug_delivery_notice_override[0], "retry notice is not explicit")
+            return {"sent_client_id": row["report_id"], "server_report_id": 91, "retry_status": failed["status"]}
         finally:
             if old_root is None:
                 os.environ.pop("PYMMO_SHARED_DATA", None)
@@ -173,6 +215,7 @@ def main() -> None:
     print({
         "synthetic": exercise_synthetic_mixed_schema(),
         "server": exercise_server_idempotency(),
+        "pre_cooldown": asyncio.run(_exercise_pre_cooldown_retry_async()),
         "client": exercise_client_acknowledgement(),
         "uploaded_fixture": exercise_real_mixed_schema_fixture(),
     })
