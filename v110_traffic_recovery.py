@@ -22,8 +22,8 @@ collision and every other vehicle body before it is committed.
 
 import math
 
-LANE_OFFSET_RATIO = 0.36
-TURN_RADIUS_RATIO = 0.50
+LANE_OFFSET_RATIO = 0.50
+TURN_RADIUS_RATIO = 0.60
 STALL_RECOVERY_SECONDS = 1.70
 RECOVERY_ATTEMPT_INTERVAL_SECONDS = 0.40
 RECOVERY_CLEARANCE_SCALE = 1.04
@@ -86,7 +86,7 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
     side = max(24.0, body_width * 0.72 + 10.0)
 
     # Distances scale with the body. The former fixed 16/28/42 px retreat was
-    # appropriate for toy-sized cars but too short to separate a ~130 px sedan.
+    # appropriate for toy-sized cars but too short to separate a full-size sedan.
     back1 = max(24.0, body_length * 0.24)
     back2 = max(42.0, body_length * 0.42)
     back3 = max(62.0, body_length * 0.62)
@@ -179,8 +179,8 @@ def _install_grid_lane_separation() -> None:
 
     def build_traffic_routes_v110(world):
         routes = original(world)
-        minimum_offset = max(34.0, float(world.cell_px) * LANE_OFFSET_RATIO)
-        minimum_turn = max(48.0, float(world.cell_px) * TURN_RADIUS_RATIO)
+        minimum_offset = max(48.0, float(world.cell_px) * LANE_OFFSET_RATIO)
+        minimum_turn = max(64.0, float(world.cell_px) * TURN_RADIUS_RATIO)
         for route in routes:
             try:
                 current = float(route.get("lane_offset", 0.0))
