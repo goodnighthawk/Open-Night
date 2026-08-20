@@ -2,13 +2,19 @@ from __future__ import annotations
 
 """v1.1 vehicle proportions matched to the normalized GridWorld/player scale.
 
-The approved vehicle manifest predates the 128 px GridWorld normalization.  The
+The approved vehicle manifest predates the 128 px GridWorld normalization. The
 client already enlarged the old render_length, but the authoritative collision
 body remained much smaller, so cars looked undersized and their visible sprites
-could overlap before avoidance/collision engaged.  Scale the catalog metadata at
+could overlap before avoidance/collision engaged. Scale the catalog metadata at
 the server boundary so rendering and physics remain synchronized without rewriting
 the shared art manifest.
+
+The same install point also activates the bounded v1.1 GridWorld traffic recovery
+watchdog so every runtime path (server and proof harness) uses identical vehicle
+proportions, lane separation and deadlock handling.
 """
+
+import v110_traffic_recovery
 
 RENDER_META_SCALE = 1.25
 COLLISION_LENGTH_META_SCALE = 1.42
@@ -32,6 +38,9 @@ def expected_client_render_length(server_render_length: float) -> float:
 
 def install(server_module) -> None:
     if bool(getattr(server_module, "_v110_vehicle_proportions_installed", False)):
+        # Recovery is independently idempotent; keep it installed even if another
+        # harness applied the metadata patch first.
+        v110_traffic_recovery.install(server_module)
         return
     original = server_module._traffic_asset
 
@@ -41,3 +50,4 @@ def install(server_module) -> None:
     server_module._v110_original_traffic_asset = original
     server_module._traffic_asset = traffic_asset_v110
     server_module._v110_vehicle_proportions_installed = True
+    v110_traffic_recovery.install(server_module)
