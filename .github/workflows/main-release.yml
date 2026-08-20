@@ -21,14 +21,21 @@ jobs:
         run: >-
           python -m py_compile
           main.py railway_entry.py v100_client.py v100_server.py
+          vehicle_art.py vehicle_catalog.py
           v110_grid_population.py v110_pedestrian_flow.py v110_pedestrian_connectivity.py
           v110_vehicle_proportions.py v110_traffic_recovery.py
           v110_bug_delivery_client.py v110_bug_delivery_server.py
           v110_bug_railway_relay_client.py v110_bug_railway_relay_server.py
           v110_version_client.py versioning.py
+          tools/import_player_vehicle_sheets.py tools/audit_player_vehicle_fleet.py
           tools/audit_main_release.py tools/audit_v110_version_authority.py
           tools/audit_v110_bug_delivery.py tools/capture_v110_grid_population.py
           tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
+      - name: Verify player-approved pixel vehicle fleet
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_player_vehicle_fleet.py
       - name: Verify main-only player/update authority
         run: python tools/audit_main_release.py
       - name: Verify client/server version authority
