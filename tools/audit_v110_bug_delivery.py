@@ -287,7 +287,11 @@ def exercise_railway_client_route() -> dict:
             require(stored["server_report_id"] == "144", "Railway DB report ID not persisted")
             require("GitHub issue #52" in game.notice, "player did not receive GitHub-readable acknowledgement")
             uri = v110_bug_railway_relay_client._public_relay_uri()
-            require(uri.startswith("wss://") and "railway.app" in uri, "configured relay is not the public Railway endpoint")
+            require(
+                uri == "wss://open-night-production.up.railway.app",
+                f"configured relay is not the canonical production Railway endpoint: {uri!r}",
+            )
+            require("open-night-v1-1" not in uri, "configured relay still targets retired staging")
             return {"railway_db_id": 144, "github_issue": 52, "relay_uri": uri}
         finally:
             if old_root is None:
