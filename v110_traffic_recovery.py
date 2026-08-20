@@ -9,16 +9,14 @@ for reservation-cancelled cars and nudged 10 px without checking nearby cars.
 That left ordinary following queues able to accumulate ``stuck_time`` forever
 and could recover one jam by creating another overlap.
 
-This module keeps the existing authoritative solver and adds three bounded fixes:
-
-* wider deterministic lane separation on the three-cell GridWorld road bands;
-* a strict no-overlap collision envelope for v1.1 traffic (the mature solver's
-  old 0.92 courtesy scale could permit a small real body overlap after waiting);
-* a post-tick watchdog for every AI car, with recovery candidates verified
-  against GridWorld collision and every nearby vehicle footprint.
+This module keeps the existing authoritative solver and adds bounded GridWorld
+fixes: wider deterministic lane separation, a strict full-body collision envelope,
+a post-tick overlap repair for legacy retreat collisions, and a watchdog for every
+AI car whose ``stuck_time`` keeps growing outside the reservation-cancel path.
 
 Recovery prefers a short lane-aligned back-off, then a small lateral deflection.
-No recovery point may enter buildings/sidewalk collision or overlap another car.
+Every candidate is checked against authoritative road collision and every other
+vehicle body before it is committed.
 """
 
 import math
@@ -27,6 +25,7 @@ LANE_OFFSET_RATIO = 0.30
 STALL_RECOVERY_SECONDS = 1.70
 RECOVERY_ATTEMPT_INTERVAL_SECONDS = 0.40
 RECOVERY_CLEARANCE_SCALE = 1.04
+OVERLAP_REPAIR_PASSES = 4
 
 _LAST_ATTEMPT: dict[str, float] = {}
 
@@ -34,16 +33,14 @@ _LAST_ATTEMPT: dict[str, float] = {}
 def _stats(server_module) -> dict:
     value = getattr(server_module, "_v110_traffic_recovery_stats", None)
     if not isinstance(value, dict):
-        value = {
-            "attempts": 0,
-            "successes": 0,
-            "backoff_successes": 0,
-            "deflection_successes": 0,
-            "courtesy_overlap_clamps": 0,
-        }
+        value = {}
         server_module._v110_traffic_recovery_stats = value
-    else:
-        value.setdefault("courtesy_overlap_clamps", 0)
+    for key in (
+        "attempts", "successes", "backoff_successes", "deflection_successes",
+        "courtesy_overlap_clamps", "overlaps_detected", "overlaps_repaired",
+        "overlap_repair_failures",
+    ):
+        value.setdefault(key, 0)
     return value
 
 
@@ -75,7 +72,7 @@ def _candidate_clear(server_module, car, x: float, y: float, heading: float) -> 
 
 
 def recover_visible_stall(server_module, car, route: dict) -> bool:
-    """Move a persistently stalled AI car to the nearest verified free road spot."""
+    """Move a stalled/overlapping AI car to the nearest verified free road spot."""
     stats = _stats(server_module)
     stats["attempts"] += 1
 
@@ -84,16 +81,19 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
     sx, sy = -hy, hx
     side = max(18.0, float(car.collision_width) * 0.78 + 10.0)
 
-    # Keep every correction small enough to read as collision deflection rather
-    # than a teleport. Back-off is preferred because it preserves lane order.
+    # Back-off preserves route ordering. The lateral candidates are the requested
+    # GTA-like collision deflection fallback when a queue prevents straight retreat.
     candidates = [
         ("backoff", -16.0, 0.0),
         ("backoff", -28.0, 0.0),
         ("backoff", -42.0, 0.0),
+        ("backoff", -58.0, 0.0),
         ("deflection", -12.0, side),
         ("deflection", -12.0, -side),
         ("deflection", -26.0, side),
         ("deflection", -26.0, -side),
+        ("deflection", -42.0, side),
+        ("deflection", -42.0, -side),
         ("deflection", 4.0, side),
         ("deflection", 4.0, -side),
     ]
@@ -117,6 +117,55 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
         stats[key] += 1
         return True
     return False
+
+
+def _overlap_pairs(server_module) -> list[tuple[object, object]]:
+    cars = list(server_module.traffic_vehicles)
+    pairs: list[tuple[object, object]] = []
+    for index, car in enumerate(cars):
+        for other in cars[index + 1:]:
+            if server_module._oriented_boxes_overlap(
+                car.x, car.y, car.angle, car.collision_length, car.collision_width,
+                other.x, other.y, other.angle, other.collision_length, other.collision_width,
+            ):
+                pairs.append((car, other))
+    return pairs
+
+
+def _repair_current_overlaps(server_module, routes: list[dict]) -> None:
+    """Repair the mature solver's unchecked cancelled-car retreat collisions.
+
+    The legacy Phase 2b verifies moving proposals against retreat positions but
+    skips cars already in the cancelled set. Two retreating losers can therefore
+    finish the same tick overlapping even though neither proposal overlapped.
+    Repair after commit, moving only AI traffic and checking the final candidate
+    against every current body.
+    """
+    stats = _stats(server_module)
+    for _ in range(OVERLAP_REPAIR_PASSES):
+        pairs = _overlap_pairs(server_module)
+        if not pairs:
+            return
+        stats["overlaps_detected"] += len(pairs)
+        progress = False
+        for car, other in pairs:
+            movable = [
+                obj for obj in (car, other)
+                if not obj.controlled_by and not obj.parked and int(obj.route_index) >= 0
+            ]
+            movable.sort(key=lambda obj: (float(obj.wait_age), float(obj.stuck_time), str(obj.vehicle_id)))
+            repaired = False
+            for loser in movable:
+                route = routes[int(loser.route_index) % len(routes)]
+                if recover_visible_stall(server_module, loser, route):
+                    stats["overlaps_repaired"] += 1
+                    repaired = True
+                    progress = True
+                    break
+            if not repaired:
+                stats["overlap_repair_failures"] += 1
+        if not progress:
+            break
 
 
 def _install_grid_lane_separation() -> None:
@@ -173,16 +222,11 @@ def install(server_module) -> None:
             courtesy_scale=scale,
         )
 
-    # Phase 2b in the mature solver used a 0.92 courtesy envelope after a car had
-    # waited. That was intentionally permissive, but with larger v1.1 sprites it
-    # becomes a real visible overlap. GridWorld now keeps the full physical body.
     server_module._traffic_footprints_conflict = traffic_footprints_conflict_v110
 
     def safe_visible_recovery(car, route: dict) -> bool:
         return recover_visible_stall(server_module, car, route)
 
-    # The original solver calls this for reservation-cancelled cars. Replacing
-    # only the helper removes the unsafe unchecked 10 px nudge.
     server_module._recover_visible_stall = safe_visible_recovery
 
     def update_traffic_v110(dt: float, sessions, server_time: float) -> None:
@@ -192,6 +236,11 @@ def install(server_module) -> None:
         routes = server_module.ACTIVE_MAP.get("traffic_routes", []) or []
         if not routes:
             return
+
+        # First remove any overlap produced by simultaneous legacy retreat moves;
+        # the sustained audit checks the post-tick authoritative state.
+        _repair_current_overlaps(server_module, routes)
+
         configured = float(server_module.TRAFFIC_AI.get("visible_stall_recovery_seconds", STALL_RECOVERY_SECONDS))
         threshold = min(STALL_RECOVERY_SECONDS, max(0.75, configured))
         stalled = sorted(
