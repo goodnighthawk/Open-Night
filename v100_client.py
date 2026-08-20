@@ -24,6 +24,7 @@ import portrait_head_client
 import v110_bug_delivery_client
 import v110_bug_railway_relay_client
 import v110_job_locations
+import v110_pedestrian_connectivity
 import v110_population_render
 import v110_version_client
 
@@ -38,6 +39,9 @@ def install_v100_client() -> None:
     # Normalize gameplay destinations as soon as the canonical GridWorld has
     # been attached to the Game instance, before map/minimap interaction uses them.
     v110_job_locations.install_client(game_client)
+    # Widen the visible sidewalks and register all v1.1 zebra links before the
+    # GridWorld renderer builds either the gameplay frame or cached M-map.
+    v110_pedestrian_connectivity.install_client(game_client)
     v110_population_render.install(game_client)
     # GridWorld Ground already guarantees a 2x player render. Ambient people
     # must share that minimum or stale/default settings recreate the half-sized
