@@ -4,17 +4,18 @@ from __future__ import annotations
 
 The mature traffic solver already gives one car right-of-way when proposed
 footprints conflict, but a queue can still freeze when the winner's proposal is
-blocked by the loser's *current* body.  The old visible-stall recovery only ran
+blocked by the loser's *current* body. The old visible-stall recovery only ran
 for reservation-cancelled cars and nudged 10 px without checking nearby cars.
 That left ordinary following queues able to accumulate ``stuck_time`` forever
 and could recover one jam by creating another overlap.
 
-This module keeps the existing authoritative solver and adds two bounded fixes:
+This module keeps the existing authoritative solver and adds three bounded fixes:
 
-* wider deterministic lane separation on the three-cell GridWorld road bands,
-  leaving more room for the enlarged v1.1 car bodies at junctions;
-* a post-tick watchdog for every AI car, with recovery candidates that are
-  verified against GridWorld collision and every nearby vehicle footprint.
+* wider deterministic lane separation on the three-cell GridWorld road bands;
+* a strict no-overlap collision envelope for v1.1 traffic (the mature solver's
+  old 0.92 courtesy scale could permit a small real body overlap after waiting);
+* a post-tick watchdog for every AI car, with recovery candidates verified
+  against GridWorld collision and every nearby vehicle footprint.
 
 Recovery prefers a short lane-aligned back-off, then a small lateral deflection.
 No recovery point may enter buildings/sidewalk collision or overlap another car.
@@ -38,8 +39,11 @@ def _stats(server_module) -> dict:
             "successes": 0,
             "backoff_successes": 0,
             "deflection_successes": 0,
+            "courtesy_overlap_clamps": 0,
         }
         server_module._v110_traffic_recovery_stats = value
+    else:
+        value.setdefault("courtesy_overlap_clamps", 0)
     return value
 
 
@@ -150,7 +154,29 @@ def install(server_module) -> None:
         return
 
     original_update = server_module.update_traffic
+    original_conflict = server_module._traffic_footprints_conflict
     server_module._v110_original_update_traffic = original_update
+    server_module._v110_original_traffic_footprints_conflict = original_conflict
+
+    def traffic_footprints_conflict_v110(
+        car, x: float, y: float, heading: float,
+        other, ox: float, oy: float, other_heading: float,
+        *, courtesy_scale: float = 1.0,
+    ) -> bool:
+        scale = float(courtesy_scale)
+        if bool(getattr(server_module, "GRID_RUNTIME_ACTIVE", False)) and scale < 1.0:
+            _stats(server_module)["courtesy_overlap_clamps"] += 1
+            scale = 1.0
+        return original_conflict(
+            car, x, y, heading,
+            other, ox, oy, other_heading,
+            courtesy_scale=scale,
+        )
+
+    # Phase 2b in the mature solver used a 0.92 courtesy envelope after a car had
+    # waited. That was intentionally permissive, but with larger v1.1 sprites it
+    # becomes a real visible overlap. GridWorld now keeps the full physical body.
+    server_module._traffic_footprints_conflict = traffic_footprints_conflict_v110
 
     def safe_visible_recovery(car, route: dict) -> bool:
         return recover_visible_stall(server_module, car, route)
