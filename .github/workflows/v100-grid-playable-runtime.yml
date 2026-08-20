@@ -1,0 +1,88 @@
+name: Promote v1.0 Grid Playable Runtime
+
+on:
+  push:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'grid_world.py'
+      - 'grid_renderer.py'
+      - 'grid_runtime.py'
+      - 'assets/grid_v100/**'
+      - 'mapfiles/data/map_001_gwb_corridor/grid_v100/**'
+      - 'tools/apply_v100_grid_playable_runtime.py'
+      - 'server.py'
+      - 'client.py'
+      - '.github/workflows/v100-grid-playable-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote-grid-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.0-art-overlay
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact runtime patch
+        run: python tools/apply_v100_grid_playable_runtime.py
+      - name: Compile promoted runtime
+        run: python -m py_compile grid_world.py grid_renderer.py grid_runtime.py server.py client.py tools/apply_v100_grid_playable_runtime.py
+      - name: Audit authoritative Ground map
+        run: |
+          python - <<'PY'
+          from grid_runtime import load_ground_grid
+          w = load_ground_grid()
+          assert (w.width, w.height, w.cell_px) == (64, 48, 256)
+          assert w.data.get('authority') == 'grid'
+          assert w.data.get('source_pack') == 'city_block.zip'
+          assert w.data.get('runtime', {}).get('ground_playable') is True
+          assert w.data.get('runtime', {}).get('legacy_surface_entities') is False
+          assert len(w.objects) >= 150
+          building_cells = sum(
+              1 for row in w.layers['ground'] for tile_id in row
+              if tile_id.startswith('bld_')
+          )
+          assert building_cells >= 250, building_cells
+          spawn = w.choose_spawn('ground', 18.0)
+          assert w.circle_walkable('ground', *spawn, 18.0)
+          # Find a blocked building cell and prove it rejects player collision.
+          blocked = None
+          for gy, row in enumerate(w.layers['ground']):
+              for gx, tile_id in enumerate(row):
+                  if tile_id.startswith('bld_'):
+                      blocked = w.cell_center(gx, gy)
+                      break
+              if blocked:
+                  break
+          assert blocked is not None
+          assert not w.circle_walkable('ground', *blocked, 18.0)
+          # Moving from a walkable cell toward a blocked cell may slide/stop but
+          # may never end inside blocked art geometry.
+          sx, sy = spawn
+          ex, ey = w.move_circle('ground', sx, sy, blocked[0]-sx, blocked[1]-sy, 18.0)
+          assert w.circle_walkable('ground', ex, ey, 18.0)
+          print('V100_GRID_PLAYABLE_AUDIT_OK', 'objects=', len(w.objects), 'building_cells=', building_cells, 'spawn=', spawn)
+          PY
+      - name: Verify patch idempotency
+        run: |
+          before=$(git diff -- server.py client.py | sha256sum | cut -d' ' -f1)
+          python tools/apply_v100_grid_playable_runtime.py
+          after=$(git diff -- server.py client.py | sha256sum | cut -d' ' -f1)
+          test "$before" = "$after"
+      - name: Publish promoted client/server runtime
+        run: |
+          if git diff --quiet -- server.py client.py; then
+            echo 'Grid runtime already promoted on branch.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.py client.py
+          git commit -m 'v1.0: make grid Ground playable in multiplayer runtime'
+          git push origin HEAD:v1.0-art-overlay

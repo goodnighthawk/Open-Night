@@ -1,97 +1,158 @@
 from __future__ import annotations
 
 import math
+import os
 import time
+from functools import lru_cache
+from pathlib import Path
+
 import pygame
 
 from character_art import draw_character
 from interior_layout import (
     EXIT_TILE,
-    ROOM_H as INTERIOR_ROOM_H,
-    ROOM_W as INTERIOR_ROOM_W,
-    START_TILE,
+    ROOM_H,
+    ROOM_W,
     blocked_tiles,
+    building_rect,
+    interior_building_id,
+    interior_cell_size,
+    interior_exit_world,
+    interior_floor_rect,
+    near_exit,
+    tile_center_world,
 )
 
 
-class IsometricInterior:
-    """Small Habbo-inspired *layout language* demo using original procedural art.
+ROOT = Path(__file__).resolve().parent
+APPROVED_DIR = ROOT / "assets" / "environment" / "approved"
 
-    The room uses a fixed 2:1 isometric grid, low walls, compact furniture,
-    occlusion-friendly sorting, and grid-snapped placement. It intentionally
-    doesn't reproduce Habbo assets or room layouts.
+# The old renderer used an independent 2:1 isometric grid. v1.0 keeps the same
+# room presets as authored furniture vocabulary, but renders every surface,
+# prop and player in the exterior orthographic X/Y projection.
+ROOM_PRESETS = {
+    "starter_apartment": {
+        "title": "FORT LEE STARTER APARTMENT", "floor": "city_beige_stone_64.png", "wall": "city_red_brick2_64.png", "accent": (170,112,86),
+        "f": [("sofa",6,2,(119,72,91)),("coffee",5,3,(112,82,60)),("tv",7,1,(44,51,56)),("bed",2,2,(75,112,145)),("nightstand",1,2,(102,76,57)),("lamp",1,1,(208,166,79)),("counter",7,5,(76,87,89)),("fridge",8,5,(144,151,150)),("table",4,5,(111,80,58)),("plant",8,2,(58,103,64)),("bookshelf",0,3,(84,61,47)),("toilet",8,7,(171,177,174)),("sink",7,7,(139,154,154))],
+    },
+    "corner_shop": {
+        "title": "BRIDGE CORNER STORE", "floor": "city_concrete_64.png", "wall": "city_brown_brick_64.png", "accent": (191,145,72),
+        "f": [("counter",6,2,(101,76,57)),("counter",7,2,(101,76,57)),("bookshelf",8,1,(82,60,45)),("bookshelf",8,3,(82,60,45)),("table",4,4,(109,82,57)),("plant",1,1,(57,102,64)),("fridge",7,5,(143,149,148)),("tv",2,2,(46,53,58))],
+    },
+    "night_diner": {
+        "title": "OPEN NIGHT DINER", "floor": "city_beige_stone_64.png", "wall": "city_red_brick_64.png", "accent": (205,82,68),
+        "f": [("counter",6,1,(128,64,49)),("counter",7,1,(128,64,49)),("counter",8,1,(128,64,49)),("table",3,3,(107,75,54)),("table",6,4,(107,75,54)),("table",3,6,(107,75,54)),("fridge",8,5,(148,154,151)),("plant",1,1,(55,96,57))],
+    },
+    "pharmacy": {
+        "title": "HUDSON PHARMACY", "floor": "city_gray_stone_64.png", "wall": "city_painted_plaster_64.png", "accent": (87,151,130),
+        "f": [("counter",6,2,(70,99,91)),("counter",7,2,(70,99,91)),("bookshelf",2,2,(98,115,109)),("bookshelf",2,4,(98,115,109)),("bookshelf",5,5,(98,115,109)),("fridge",8,5,(154,159,157)),("plant",1,1,(49,101,62))],
+    },
+    "laundromat": {
+        "title": "24 HOUR LAUNDROMAT", "floor": "city_gray_stone_64.png", "wall": "city_painted_plaster_64.png", "accent": (77,133,165),
+        "f": [("washer",2,2,(151,158,158)),("washer",3,2,(151,158,158)),("washer",4,2,(151,158,158)),("washer",6,4,(151,158,158)),("washer",7,4,(151,158,158)),("table",4,6,(96,89,77)),("counter",8,1,(75,87,90))],
+    },
+    "pawn_shop": {
+        "title": "PAWN & EXCHANGE", "floor": "city_concrete_64.png", "wall": "city_brown_brick_64.png", "accent": (198,147,68),
+        "f": [("counter",6,2,(88,65,50)),("counter",7,2,(88,65,50)),("bookshelf",2,1,(69,54,43)),("bookshelf",2,3,(69,54,43)),("tv",5,4,(40,46,50)),("tv",7,5,(40,46,50)),("lamp",3,5,(196,149,66)),("plant",8,1,(51,88,55))],
+    },
+    "garage": {
+        "title": "RIVERSIDE GARAGE", "floor": "city_concrete_64.png", "wall": "city_gray_stone_64.png", "accent": (187,128,63),
+        "f": [("counter",7,1,(75,72,65)),("counter",8,1,(75,72,65)),("bookshelf",1,1,(61,61,58)),("bookshelf",1,3,(61,61,58)),("workbench",5,5,(85,68,52)),("tv",8,5,(41,48,51)),("locker",2,6,(122,128,127))],
+    },
+    "nightclub": {
+        "title": "AFTER HOURS CLUB", "floor": "city_concrete_64.png", "wall": "city_red_brick2_64.png", "accent": (139,72,132),
+        "f": [("counter",7,1,(61,48,72)),("counter",8,1,(61,48,72)),("sofa",2,2,(91,47,79)),("sofa",5,4,(63,60,101)),("table",3,5,(84,65,55)),("lamp",1,1,(190,74,139)),("lamp",8,5,(66,154,179)),("plant",7,3,(43,72,53))],
+    },
+    "warehouse_office": {
+        "title": "WAREHOUSE OFFICE", "floor": "city_concrete_64.png", "wall": "city_brown_brick_64.png", "accent": (157,116,66),
+        "f": [("counter",6,2,(84,69,55)),("table",3,3,(91,70,53)),("bookshelf",8,1,(65,55,47)),("bookshelf",8,3,(65,55,47)),("tv",5,1,(39,44,47)),("locker",7,6,(130,136,134)),("plant",1,1,(50,82,53))],
+    },
+    "rooftop_loft": {
+        "title": "WASHINGTON HEIGHTS LOFT", "floor": "city_beige_stone_64.png", "wall": "city_red_brick_64.png", "accent": (104,144,174),
+        "f": [("sofa",6,2,(73,91,106)),("coffee",5,3,(102,76,58)),("tv",8,1,(40,47,52)),("bed",2,2,(91,112,135)),("nightstand",1,2,(95,70,54)),("lamp",1,1,(207,166,78)),("counter",7,5,(83,92,91)),("fridge",8,5,(146,152,150)),("plant",7,2,(54,100,61)),("bookshelf",2,5,(79,59,46))],
+    },
+}
+
+
+@lru_cache(maxsize=24)
+def _material(name: str, brightness_key: int = 100) -> pygame.Surface | None:
+    path = APPROVED_DIR / str(name)
+    if not path.is_file():
+        return None
+    try:
+        surf = pygame.image.load(str(path)).convert()
+    except (pygame.error, OSError):
+        return None
+    if brightness_key != 100:
+        overlay = pygame.Surface(surf.get_size())
+        overlay.fill((max(0, min(255, brightness_key)),) * 3)
+        surf.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+    return surf
+
+
+def _tile_material(target: pygame.Surface, texture: pygame.Surface | None, rect: pygame.Rect, fallback: tuple[int,int,int]) -> None:
+    if rect.width <= 0 or rect.height <= 0:
+        return
+    if texture is None:
+        pygame.draw.rect(target, fallback, rect)
+        return
+    tw, th = texture.get_size()
+    old_clip = target.get_clip()
+    target.set_clip(rect.clip(target.get_rect()))
+    for y in range(rect.top - (rect.top % th), rect.bottom, th):
+        for x in range(rect.left - (rect.left % tw), rect.right, tw):
+            target.blit(texture, (x, y))
+    target.set_clip(old_clip)
+
+
+def _shade(color: tuple[int,int,int], factor: float) -> tuple[int,int,int]:
+    return tuple(max(0, min(255, int(v * factor))) for v in color)
+
+
+class IsometricInterior:
+    """v1.0 world-registered First Floor renderer.
+
+    The class name is retained temporarily for client API compatibility, but no
+    isometric coordinate transform exists here. Player/furniture coordinates are
+    authoritative world X/Y values inside the bound building footprint, and the
+    camera is the same orthographic world projection used outside.
     """
 
-    TILE_W = 64
-    TILE_H = 32
-    ROOM_W = INTERIOR_ROOM_W
-    ROOM_H = INTERIOR_ROOM_H
+    ROOM_W = ROOM_W
+    ROOM_H = ROOM_H
 
-    def __init__(self) -> None:
+    def __init__(self, map_config: dict | None = None) -> None:
+        self.map_config = map_config or {}
         self.active = False
         self.room_id = "starter_apartment"
-        self.player_x, self.player_y = START_TILE
+        self.player_x = 0.0
+        self.player_y = 0.0
         self.player_aim = -math.pi / 2.0
         self.player_anim_epoch = time.monotonic()
         self.player_moving_until = 0.0
-        self.exit_tile = EXIT_TILE
-        self.title = "FORT LEE STARTER APARTMENT"
-        self.wall_a = (183, 145, 122)
-        self.wall_b = (158, 120, 104)
-        self.floor_a = (194, 174, 138)
-        self.floor_b = (183, 160, 125)
+        self.title = ROOM_PRESETS["starter_apartment"]["title"]
         self.furniture = []
         self.blocked = set()
-        self._apply_room_preset("starter_apartment")
+        self._apply_room_preset(self.room_id)
+
+    def set_map(self, map_config: dict) -> None:
+        self.map_config = map_config or {}
 
     def _apply_room_preset(self, room_id: str) -> None:
-        self.room_id = room_id
-        presets = {
-            "starter_apartment": {
-                "title":"FORT LEE STARTER APARTMENT", "wall":((184,142,133),(151,111,107)), "floor":((195,173,130),(184,159,119)),
-                "f":[("sofa",6,2,(139,81,105)),("coffee",5,3,(133,96,68)),("tv",7,1,(53,61,66)),("bed",2,2,(92,138,178)),("nightstand",1,2,(126,91,64)),("lamp",1,1,(222,187,90)),("counter",7,5,(91,105,109)),("fridge",8,5,(178,185,183)),("table",4,5,(137,97,66)),("plant",8,2,(75,137,83)),("bookshelf",0,3,(102,70,50)),("toilet",8,7,(205,211,207)),("sink",7,7,(174,192,192))]},
-            "corner_shop": {
-                "title":"BRIDGE CORNER STORE", "wall":((190,177,132),(160,148,112)), "floor":((151,164,154),(139,151,143)),
-                "f":[("counter",6,2,(122,91,65)),("counter",7,2,(122,91,65)),("bookshelf",8,1,(100,70,48)),("bookshelf",8,3,(100,70,48)),("table",4,4,(137,102,67)),("plant",1,1,(75,137,83)),("fridge",7,5,(176,184,181)),("tv",2,2,(55,63,69))]},
-            "night_diner": {
-                "title":"OPEN NIGHT DINER", "wall":((166,98,82),(126,78,74)), "floor":((188,170,143),(165,150,128)),
-                "f":[("counter",6,1,(151,74,54)),("counter",7,1,(151,74,54)),("counter",8,1,(151,74,54)),("table",3,3,(132,90,60)),("table",6,4,(132,90,60)),("table",3,6,(132,90,60)),("fridge",8,5,(183,190,186)),("plant",1,1,(72,126,73))]},
-            "pharmacy": {
-                "title":"HUDSON PHARMACY", "wall":((177,194,184),(134,161,151)), "floor":((205,202,183),(188,187,170)),
-                "f":[("counter",6,2,(91,126,116)),("counter",7,2,(91,126,116)),("bookshelf",2,2,(124,145,137)),("bookshelf",2,4,(124,145,137)),("bookshelf",5,5,(124,145,137)),("fridge",8,5,(189,194,191)),("plant",1,1,(63,133,79))]},
-            "laundromat": {
-                "title":"24 HOUR LAUNDROMAT", "wall":((144,167,184),(111,137,156)), "floor":((185,188,184),(165,170,169)),
-                "f":[("fridge",2,2,(190,194,191)),("fridge",3,2,(190,194,191)),("fridge",4,2,(190,194,191)),("fridge",6,4,(190,194,191)),("fridge",7,4,(190,194,191)),("table",4,6,(120,112,95)),("counter",8,1,(91,105,109))]},
-            "pawn_shop": {
-                "title":"PAWN & EXCHANGE", "wall":((150,125,92),(112,91,70)), "floor":((151,142,119),(133,125,106)),
-                "f":[("counter",6,2,(108,77,54)),("counter",7,2,(108,77,54)),("bookshelf",2,1,(83,60,43)),("bookshelf",2,3,(83,60,43)),("tv",5,4,(47,54,60)),("tv",7,5,(47,54,60)),("lamp",3,5,(220,175,76)),("plant",8,1,(65,113,70))]},
-            "garage": {
-                "title":"RIVERSIDE GARAGE", "wall":((126,131,132),(94,101,105)), "floor":((112,113,108),(101,103,101)),
-                "f":[("counter",7,1,(91,88,78)),("counter",8,1,(91,88,78)),("bookshelf",1,1,(73,72,67)),("bookshelf",1,3,(73,72,67)),("table",5,5,(105,83,58)),("tv",8,5,(49,57,60)),("fridge",2,6,(153,158,157))]},
-            "nightclub": {
-                "title":"AFTER HOURS CLUB", "wall":((102,75,126),(74,58,93)), "floor":((94,89,105),(80,76,92)),
-                "f":[("counter",7,1,(73,55,85)),("counter",8,1,(73,55,85)),("sofa",2,2,(111,54,95)),("sofa",5,4,(74,70,126)),("table",3,5,(103,78,64)),("lamp",1,1,(224,86,163)),("lamp",8,5,(83,189,222)),("plant",7,3,(53,93,68))]},
-            "warehouse_office": {
-                "title":"WAREHOUSE OFFICE", "wall":((137,128,113),(105,98,88)), "floor":((137,136,127),(120,120,114)),
-                "f":[("counter",6,2,(103,83,62)),("table",3,3,(113,84,59)),("bookshelf",8,1,(78,62,49)),("bookshelf",8,3,(78,62,49)),("tv",5,1,(46,52,55)),("fridge",7,6,(166,171,169)),("plant",1,1,(65,106,67))]},
-            "rooftop_loft": {
-                "title":"WASHINGTON HEIGHTS LOFT", "wall":((175,154,132),(139,117,105)), "floor":((184,166,143),(167,149,129)),
-                "f":[("sofa",6,2,(90,112,131)),("coffee",5,3,(126,91,66)),("tv",8,1,(48,56,62)),("bed",2,2,(112,140,166)),("nightstand",1,2,(117,84,61)),("lamp",1,1,(231,188,86)),("counter",7,5,(103,111,110)),("fridge",8,5,(181,187,184)),("plant",7,2,(70,132,80)),("bookshelf",2,5,(97,68,49))]},
-        }
-        p = presets.get(room_id, presets["starter_apartment"])
-        self.title = p["title"]
-        self.wall_a, self.wall_b = p["wall"]
-        self.floor_a, self.floor_b = p["floor"]
-        self.exit_tile = EXIT_TILE
-        self.furniture = list(p["f"])
-        self.blocked = blocked_tiles(room_id)
+        self.room_id = str(room_id)
+        preset = ROOM_PRESETS.get(self.room_id, ROOM_PRESETS["starter_apartment"])
+        self.title = str(preset["title"])
+        self.furniture = list(preset["f"])
+        self.blocked = blocked_tiles(self.room_id)
 
     def enter(self, room_id: str = "starter_apartment", title: str | None = None) -> None:
         self.active = True
         self._apply_room_preset(room_id)
         if title:
             self.title = str(title).upper()
-        self.player_x, self.player_y = START_TILE
+        # Server sync supplies the authoritative world position immediately.
+        # This deterministic local fallback avoids a single-frame jump on enter.
+        self.player_x, self.player_y = tile_center_world(self.map_config, self.room_id, (2, 6))
         self.player_aim = -math.pi / 2.0
         self.player_anim_epoch = time.monotonic()
         self.player_moving_until = 0.0
@@ -99,204 +160,183 @@ class IsometricInterior:
     def leave(self) -> None:
         self.active = False
 
-    def set_player_state(self, x: int, y: int, aim: float) -> None:
-        nx = max(0, min(self.ROOM_W - 1, int(x)))
-        ny = max(0, min(self.ROOM_H - 1, int(y)))
-        if (nx, ny) != (self.player_x, self.player_y):
-            self.player_moving_until = time.monotonic() + 0.22
+    def set_player_state(self, x: float, y: float, aim: float) -> None:
+        nx, ny = float(x), float(y)
+        if math.hypot(nx - self.player_x, ny - self.player_y) > 0.25:
+            self.player_moving_until = time.monotonic() + 0.16
             self.player_anim_epoch = time.monotonic()
         self.player_x, self.player_y = nx, ny
         self.player_aim = float(aim)
 
     def handle_key(self, key: int) -> bool:
-        """Return True if the key was consumed by the interior."""
+        """Consume interior controls; movement itself stays server-authoritative."""
         if not self.active:
             return False
         if key == pygame.K_ESCAPE:
             self.leave()
             return True
-        if key == pygame.K_e and (self.player_x, self.player_y) == self.exit_tile:
+        if key == pygame.K_e and near_exit(self.map_config, self.room_id, self.player_x, self.player_y):
             self.leave()
             return True
-        dx = dy = 0
-        if key in (pygame.K_w, pygame.K_UP):
-            dy = -1
-        elif key in (pygame.K_s, pygame.K_DOWN):
-            dy = 1
-        elif key in (pygame.K_a, pygame.K_LEFT):
-            dx = -1
-        elif key in (pygame.K_d, pygame.K_RIGHT):
-            dx = 1
-        else:
-            return False
-        nx = max(0, min(self.ROOM_W - 1, self.player_x + dx))
-        ny = max(0, min(self.ROOM_H - 1, self.player_y + dy))
-        if dx or dy:
-            if dx > 0: self.player_aim = 0.0
-            elif dx < 0: self.player_aim = math.pi
-            elif dy > 0: self.player_aim = math.pi / 2.0
-            else: self.player_aim = -math.pi / 2.0
-        if (nx, ny) not in self.blocked:
-            self.player_x, self.player_y = nx, ny
-            self.player_anim_epoch = time.monotonic()
-            self.player_moving_until = self.player_anim_epoch + 0.22
-        return True
+        return key in (pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_UP, pygame.K_LEFT, pygame.K_DOWN, pygame.K_RIGHT)
 
-    def _origin(self, surface: pygame.Surface) -> tuple[int, int]:
-        w, h = surface.get_size()
-        room_px_w = (self.ROOM_W + self.ROOM_H) * self.TILE_W // 2
-        return w // 2 - room_px_w // 2 + self.ROOM_H * self.TILE_W // 2, max(110, h // 2 - 130)
+    def _camera(self, surface: pygame.Surface) -> tuple[float, float]:
+        sw, sh = surface.get_size()
+        return self.player_x - sw * 0.5, self.player_y - sh * 0.5
 
-    def iso(self, gx: float, gy: float, origin: tuple[int, int]) -> tuple[int, int]:
-        ox, oy = origin
-        return int(ox + (gx - gy) * self.TILE_W / 2), int(oy + (gx + gy) * self.TILE_H / 2)
+    def _screen(self, x: float, y: float, camera: tuple[float,float]) -> tuple[int,int]:
+        return int(round(float(x) - camera[0])), int(round(float(y) - camera[1]))
 
-    def tile_poly(self, gx: int, gy: int, origin: tuple[int, int]):
-        cx, cy = self.iso(gx, gy, origin)
-        hw, hh = self.TILE_W // 2, self.TILE_H // 2
-        return [(cx, cy - hh), (cx + hw, cy), (cx, cy + hh), (cx - hw, cy)]
+    def _floor_screen_rect(self, camera: tuple[float,float]) -> pygame.Rect | None:
+        floor = interior_floor_rect(self.map_config, self.room_id)
+        if floor is None:
+            return None
+        x, y, w, h = floor
+        sx, sy = self._screen(x, y, camera)
+        return pygame.Rect(sx, sy, int(round(w)), int(round(h)))
 
-    def _draw_box(self, surface, gx, gy, origin, width, depth, height, color):
-        # Small isometric cuboid centered on the tile.
-        cx, cy = self.iso(gx, gy, origin)
-        hw = max(8, int(width * self.TILE_W / 2))
-        dh = max(5, int(depth * self.TILE_H / 2))
-        top_y = cy - height
-        top = [(cx, top_y - dh), (cx + hw, top_y), (cx, top_y + dh), (cx - hw, top_y)]
-        left = [top[3], top[2], (top[2][0], top[2][1] + height), (top[3][0], top[3][1] + height)]
-        right = [top[1], top[2], (top[2][0], top[2][1] + height), (top[1][0], top[1][1] + height)]
-        def shade(c, f): return tuple(max(0, min(255, int(v * f))) for v in c)
-        pygame.draw.polygon(surface, shade(color, .70), left)
-        pygame.draw.polygon(surface, shade(color, .82), right)
-        pygame.draw.polygon(surface, color, top)
-        pygame.draw.lines(surface, (32, 32, 33), True, top, 1)
+    def _building_screen_rect(self, camera: tuple[float,float]) -> pygame.Rect | None:
+        bid = interior_building_id(self.map_config, self.room_id)
+        rect = building_rect(self.map_config, bid)
+        if rect is None:
+            return None
+        x, y, w, h = rect
+        sx, sy = self._screen(x, y, camera)
+        return pygame.Rect(sx, sy, int(round(w)), int(round(h)))
 
-    def _draw_furniture(self, surface, item, gx, gy, color, origin):
-        cx, cy = self.iso(gx, gy, origin)
-        if item == "sofa":
-            self._draw_box(surface, gx, gy, origin, .78, .62, 24, color)
-            self._draw_box(surface, gx, gy - .10, origin, .78, .25, 39, tuple(min(255, v + 20) for v in color))
-        elif item == "bed":
-            self._draw_box(surface, gx, gy, origin, .88, .72, 14, color)
-            pygame.draw.ellipse(surface, (222, 224, 213), (cx - 17, cy - 19, 34, 18))
-        elif item in {"coffee", "table", "nightstand", "counter"}:
-            dims = {"coffee": (.55,.45,12), "table": (.72,.62,22), "nightstand": (.42,.38,22), "counter": (.82,.52,34)}[item]
-            self._draw_box(surface, gx, gy, origin, *dims, color)
-        elif item == "tv":
-            self._draw_box(surface, gx, gy, origin, .62, .28, 36, color)
-            pygame.draw.polygon(surface, (36, 59, 73), [(cx-13,cy-37),(cx+16,cy-29),(cx+16,cy-12),(cx-13,cy-20)])
-        elif item == "fridge":
-            self._draw_box(surface, gx, gy, origin, .52, .52, 58, color)
-            pygame.draw.line(surface, (80,84,84), (cx,cy-42),(cx,cy+3),1)
-        elif item == "plant":
-            self._draw_box(surface, gx, gy, origin, .34, .34, 14, (125,83,58))
-            for ang in range(0,360,60):
-                dx=int(math.cos(math.radians(ang))*13); dy=int(math.sin(math.radians(ang))*7)
-                pygame.draw.ellipse(surface, color, (cx+dx-7, cy-34+dy-5, 14, 10))
-        elif item == "bookshelf":
-            self._draw_box(surface, gx, gy, origin, .62, .34, 55, color)
-            for i in range(3): pygame.draw.line(surface,(54,38,30),(cx-11,cy-42+i*12),(cx+12,cy-35+i*12),2)
-        elif item == "lamp":
-            pygame.draw.line(surface,(91,76,53),(cx,cy-28),(cx,cy-2),3)
-            pygame.draw.polygon(surface,color,[(cx,cy-42),(cx+12,cy-28),(cx-12,cy-28)])
-        elif item == "toilet":
-            pygame.draw.ellipse(surface,color,(cx-16,cy-23,32,22)); pygame.draw.rect(surface,color,(cx-10,cy-39,20,18))
-        elif item == "sink":
-            self._draw_box(surface,gx,gy,origin,.48,.36,27,color); pygame.draw.ellipse(surface,(105,136,149),(cx-10,cy-23,20,9))
+    def _furniture_rect(self, gx: int, gy: int, camera: tuple[float,float], scale_x: float = .72, scale_y: float = .65) -> pygame.Rect:
+        cx, cy = tile_center_world(self.map_config, self.room_id, (gx, gy))
+        cw, ch = interior_cell_size(self.map_config, self.room_id)
+        sx, sy = self._screen(cx, cy, camera)
+        return pygame.Rect(0, 0, max(8, int(cw * scale_x)), max(8, int(ch * scale_y))).copy().move(0,0).inflate(0,0).clamp(pygame.Rect(sx-int(cw), sy-int(ch), int(cw*2), int(ch*2))) if False else pygame.Rect(sx - max(4,int(cw*scale_x/2)), sy - max(4,int(ch*scale_y/2)), max(8,int(cw*scale_x)), max(8,int(ch*scale_y)))
 
-    def draw(
-        self,
-        surface: pygame.Surface,
-        font: pygame.font.Font,
-        small_font: pygame.font.Font,
-        appearance: dict | None = None,
-        occupants: list[dict] | None = None,
-    ) -> None:
-        if not self.active:
-            return
-        w, h = surface.get_size()
-        surface.fill((31, 29, 31))
-        origin = self._origin(surface)
-
-        # Floor: alternating warm neutral tiles, very readable at low resolution.
-        for gy in range(self.ROOM_H):
-            for gx in range(self.ROOM_W):
-                poly = self.tile_poly(gx, gy, origin)
-                c = self.floor_a if (gx + gy) % 2 == 0 else self.floor_b
-                pygame.draw.polygon(surface, c, poly)
-                pygame.draw.lines(surface, (112, 99, 82), True, poly, 1)
-
-        # Low rear/left walls, Habbo-like in readability but procedurally original.
-        wall_h = 84
-        for gx in range(self.ROOM_W):
-            top = self.tile_poly(gx, 0, origin)
-            a, b = top[0], top[1]
-            pygame.draw.polygon(surface, self.wall_a, [a,b,(b[0],b[1]-wall_h),(a[0],a[1]-wall_h)])
-            pygame.draw.line(surface,(58,54,53),(a[0],a[1]-wall_h),(b[0],b[1]-wall_h),2)
-            pygame.draw.line(surface,(108,82,72),a,b,2)
-        for gy in range(self.ROOM_H):
-            top = self.tile_poly(0, gy, origin)
-            a, b = top[0], top[3]
-            pygame.draw.polygon(surface, self.wall_b, [a,b,(b[0],b[1]-wall_h),(a[0],a[1]-wall_h)])
-            pygame.draw.line(surface,(58,54,53),(a[0],a[1]-wall_h),(b[0],b[1]-wall_h),2)
-            pygame.draw.line(surface,(101,77,70),a,b,2)
-
-        # Chunky Habbo-like room readability: a framed rear window and dark door.
-        wx, wy = self.iso(6, 0, origin)
-        window = [(wx-34,wy-68),(wx+30,wy-51),(wx+30,wy-25),(wx-34,wy-42)]
-        pygame.draw.polygon(surface,(54,67,78),window)
-        pygame.draw.lines(surface,(34,35,37),True,window,3)
-        pygame.draw.line(surface,(185,210,218),(wx-1,wy-59),(wx-1,wy-34),2)
-        pygame.draw.line(surface,(185,210,218),(wx-31,wy-54),(wx+27,wy-39),2)
-        dx, dy = self.iso(1, 0, origin)
-        door = [(dx-22,dy-4),(dx+18,dy+6),(dx+18,dy-61),(dx-22,dy-71)]
-        pygame.draw.polygon(surface,(65,60,58),door)
-        pygame.draw.lines(surface,(31,31,32),True,door,2)
-
-        # Exit tile / doorway.
-        pygame.draw.lines(surface, (231, 199, 83), True, self.tile_poly(*self.exit_tile, origin), 3)
-
-        drawables = [(gx+gy, "f", item, gx, gy, color) for item,gx,gy,color in self.furniture]
-        if occupants:
-            for occupant in occupants:
-                gx = max(0, min(self.ROOM_W - 1, int(occupant.get("x", 0))))
-                gy = max(0, min(self.ROOM_H - 1, int(occupant.get("y", 0))))
-                drawables.append((gx+gy+.5, "p", occupant, gx, gy, (0,0,0)))
-        else:
-            drawables.append((self.player_x+self.player_y+.5, "p", {
-                "name": "Player", "appearance": appearance, "aim": self.player_aim,
-                "moving": time.monotonic() < self.player_moving_until,
-                "anim_time": time.monotonic() - self.player_anim_epoch, "local": True,
-            }, self.player_x, self.player_y, (0,0,0)))
-        drawables.sort(key=lambda x: x[0])
-        for _, kind, item, gx, gy, color in drawables:
-            if kind == "f":
-                self._draw_furniture(surface, item, gx, gy, color, origin)
+    def _draw_furniture(self, surface: pygame.Surface, kind: str, gx: int, gy: int, color: tuple[int,int,int], camera: tuple[float,float]) -> None:
+        rect = self._furniture_rect(gx, gy, camera)
+        shadow = rect.move(3, 4)
+        pygame.draw.rect(surface, (9, 11, 12), shadow, border_radius=3)
+        if kind in {"plant", "lamp"}:
+            cx, cy = rect.center
+            if kind == "plant":
+                pygame.draw.rect(surface, (84,61,45), (cx-5, cy+2, 10, max(7, rect.height//3)), border_radius=2)
+                for dx, dy in ((-8,-3),(7,-4),(0,-10),(-4,-11),(5,-10)):
+                    pygame.draw.ellipse(surface, color, (cx+dx-6, cy+dy-5, 12, 10))
             else:
-                cx, cy = self.iso(gx, gy, origin)
-                now = time.monotonic()
-                draw_character(
-                    surface, (cx, cy - 24), float(item.get("aim", 0.0)), item.get("appearance"), scale=2,
-                    moving=bool(item.get("moving", False)), anim_time=float(item.get("anim_time", now)),
-                    mode="isometric", local_ring=None,
-                )
-                name_color = (245, 218, 88) if item.get("local") else (105, 190, 245)
-                name = small_font.render(str(item.get("name", "Player"))[:18], True, name_color)
-                surface.blit(name, name.get_rect(midbottom=(cx, cy - 55)))
-                bubble = item.get("bubble")
-                if bubble:
-                    text = str(bubble.get("text", ""))[:48]
-                    label = small_font.render(text, True, (27, 28, 29))
-                    box = label.get_rect(midbottom=(cx, cy - 82)).inflate(18, 12)
-                    edge = (190, 125, 235) if bubble.get("scope") == "whisper" else (92, 99, 102)
-                    pygame.draw.rect(surface, (245, 244, 235), box, border_radius=6)
-                    pygame.draw.rect(surface, edge, box, width=2, border_radius=6)
-                    surface.blit(label, label.get_rect(center=box.center))
+                pygame.draw.circle(surface, (222,166,78), (cx,cy), max(4,min(rect.width,rect.height)//5))
+                glow = pygame.Surface((34,34), pygame.SRCALPHA)
+                pygame.draw.circle(glow, (237,174,86,34), (17,17), 16)
+                surface.blit(glow, (cx-17,cy-17))
+            return
+        pygame.draw.rect(surface, _shade(color,.72), rect, border_radius=3)
+        inner = rect.inflate(-max(3,rect.width//8), -max(3,rect.height//8))
+        pygame.draw.rect(surface, color, inner, border_radius=2)
+        pygame.draw.rect(surface, _shade(color,1.18), rect, width=1, border_radius=3)
+        if kind in {"tv", "washer", "fridge", "locker"}:
+            inset = rect.inflate(-max(5,rect.width//4), -max(5,rect.height//4))
+            if kind == "tv":
+                pygame.draw.rect(surface, (25,43,53), inset, border_radius=2)
+            elif kind == "washer":
+                pygame.draw.circle(surface, (45,53,55), inset.center, max(4,min(inset.width,inset.height)//3), width=2)
+            else:
+                pygame.draw.line(surface, (42,47,47), (rect.centerx,rect.top+3),(rect.centerx,rect.bottom-3),1)
+        elif kind in {"sofa", "bed"}:
+            pygame.draw.line(surface, _shade(color,1.25), (rect.left+4, rect.centery), (rect.right-4, rect.centery), 2)
+        elif kind in {"bookshelf", "counter", "workbench"}:
+            for off in range(rect.left+5, rect.right-3, max(6,rect.width//4)):
+                pygame.draw.line(surface, _shade(color,.55), (off,rect.top+3),(off,rect.bottom-3),1)
 
-        title = font.render(self.title, True, (244,244,239))
-        surface.blit(title, (22, 18))
-        help_text = small_font.render("WASD / arrows: move tile   E on yellow tile: exit   Esc: leave", True, (184,187,188))
-        surface.blit(help_text, (22, 54))
-        if (self.player_x,self.player_y) == self.exit_tile:
-            prompt = font.render("[E] EXIT TO STREET", True, (244,217,91))
-            surface.blit(prompt, prompt.get_rect(center=(w//2, h-34)))
+    def _draw_room(self, surface: pygame.Surface, camera: tuple[float,float]) -> None:
+        preset = ROOM_PRESETS.get(self.room_id, ROOM_PRESETS["starter_apartment"])
+        building = self._building_screen_rect(camera)
+        floor = self._floor_screen_rect(camera)
+        if building is None or floor is None:
+            return
+        pygame.draw.rect(surface, (19,18,18), building)
+        floor_tex = _material(str(preset["floor"]), 62)
+        wall_tex = _material(str(preset["wall"]), 56)
+        _tile_material(surface, floor_tex, floor, (55,52,48))
+
+        # Paint wall thickness *inside* the authoritative footprint. Door/exit
+        # opening is cut at the registered EXIT_TILE position.
+        wall = max(7, min(14, int(min(building.width, building.height) * .035)))
+        strips = [
+            pygame.Rect(building.left,building.top,building.width,wall),
+            pygame.Rect(building.left,building.bottom-wall,building.width,wall),
+            pygame.Rect(building.left,building.top,wall,building.height),
+            pygame.Rect(building.right-wall,building.top,wall,building.height),
+        ]
+        for strip in strips:
+            _tile_material(surface, wall_tex, strip, (73,55,48))
+        pygame.draw.rect(surface, (123,105,88), building, width=2)
+        pygame.draw.rect(surface, (23,25,25), floor, width=2)
+
+        # Subtle floor joints preserve world scale and provide movement feedback.
+        cw, ch = interior_cell_size(self.map_config, self.room_id)
+        floor_world = interior_floor_rect(self.map_config, self.room_id)
+        if floor_world:
+            fx,fy,fw,fh = floor_world
+            for gx in range(1,ROOM_W):
+                sx,_ = self._screen(fx+gx*cw,fy,camera)
+                pygame.draw.line(surface,(103,96,83),(sx,floor.top),(sx,floor.bottom),1)
+            for gy in range(1,ROOM_H):
+                _,sy = self._screen(fx,fy+gy*ch,camera)
+                pygame.draw.line(surface,(103,96,83),(floor.left,sy),(floor.right,sy),1)
+
+        # Exit remains a dynamic/gameplay marker, not a fake texture-only door.
+        ex, ey = interior_exit_world(self.map_config, self.room_id)
+        esx, esy = self._screen(ex,ey,camera)
+        door_w = max(18,int(cw*.55))
+        pygame.draw.rect(surface,(24,29,30),(esx-door_w//2, floor.bottom-wall-3, door_w, wall+6))
+        pygame.draw.line(surface, preset["accent"], (esx-door_w//2,esy),(esx+door_w//2,esy),2)
+
+        # Furniture is drawn from the same authoring cells used by server
+        # collision, transformed through the same building-floor registration.
+        for kind,gx,gy,color in self.furniture:
+            self._draw_furniture(surface,kind,int(gx),int(gy),tuple(color),camera)
+
+        # Warm practical pools are restrained and purely cosmetic.
+        lights = [item for item in self.furniture if item[0] == "lamp"]
+        for _,gx,gy,_ in lights:
+            lx,ly = tile_center_world(self.map_config,self.room_id,(int(gx),int(gy)))
+            sx,sy = self._screen(lx,ly,camera)
+            glow=pygame.Surface((96,96),pygame.SRCALPHA)
+            pygame.draw.circle(glow,(235,170,83,20),(48,48),46)
+            pygame.draw.circle(glow,(235,170,83,18),(48,48),27)
+            surface.blit(glow,(sx-48,sy-48))
+
+    def draw(self, surface: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font, appearance: dict | None = None, occupants: list[dict] | None = None) -> None:
+        surface.fill((7,9,11))
+        camera = self._camera(surface)
+        self._draw_room(surface,camera)
+
+        occupants = occupants or [{
+            "name":"YOU", "appearance":appearance, "x":self.player_x, "y":self.player_y,
+            "aim":self.player_aim, "moving":time.monotonic()<self.player_moving_until,
+            "anim_time":time.monotonic()-self.player_anim_epoch, "local":True, "bubble":None,
+        }]
+        # Same world-depth convention as outdoors: larger Y draws later.
+        for occ in sorted(occupants,key=lambda row:float(row.get("y",0.0))):
+            sx,sy=self._screen(float(occ.get("x",0.0)),float(occ.get("y",0.0)),camera)
+            draw_character(
+                surface,(sx,sy),float(occ.get("aim",0.0)),occ.get("appearance"),
+                scale=0.82,local_ring=None,moving=bool(occ.get("moving",False)),
+                animation="walk" if occ.get("moving") else "idle",anim_time=float(occ.get("anim_time",0.0)),mode="topdown",
+            )
+            name=small_font.render(str(occ.get("name","")),True,(232,231,224))
+            surface.blit(name,(sx-name.get_width()//2,sy-36))
+            bubble=occ.get("bubble")
+            if isinstance(bubble,dict) and bubble.get("text"):
+                text=small_font.render(str(bubble.get("text",""))[:48],True,(24,24,24))
+                box=text.get_rect(midbottom=(sx,sy-43)).inflate(12,8)
+                pygame.draw.rect(surface,(235,231,216),box,border_radius=5)
+                pygame.draw.rect(surface,(42,42,40),box,width=1,border_radius=5)
+                surface.blit(text,text.get_rect(center=box.center))
+
+        preset=ROOM_PRESETS.get(self.room_id,ROOM_PRESETS["starter_apartment"])
+        title=font.render(self.title,True,(236,232,216))
+        surface.blit(title,(24,20))
+        bid=interior_building_id(self.map_config,self.room_id)
+        sub=small_font.render(f"FIRST FLOOR · WORLD REGISTERED · {bid}",True,(150,154,151))
+        surface.blit(sub,(24,48))
+        hint="WASD move · E at exit · Esc leave"
+        h=small_font.render(hint,True,(173,174,166))
+        surface.blit(h,(24,surface.get_height()-30))

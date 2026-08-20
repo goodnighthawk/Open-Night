@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title OPEN NIGHT - Desktop Client
+title OPEN NIGHT v1.0 - Grid Client
 
 if not exist ".venv\Scripts\python.exe" (
   echo Preparing the Open Night Python environment...
@@ -20,12 +20,12 @@ set "CLIENT_LOG=%~dp0client_crash.log"
 set "PYTHONFAULTHANDLER=1"
 set "PYTHONUNBUFFERED=1"
 
-echo Open Night desktop client starting...
-echo If it fails, this window will remain open and show the traceback.
+echo Open Night v1.0 grid-authoritative desktop client starting...
+echo Ground, minimap, and M map use GridWorld; legacy place names may remain as labels only.
 echo Crash log: %CLIENT_LOG%
 echo.
 
-".venv\Scripts\python.exe" -u portrait_head_client.py >"%CLIENT_LOG%" 2>&1
+".venv\Scripts\python.exe" -u v100_client.py >"%CLIENT_LOG%" 2>&1
 set "CLIENT_RC=%ERRORLEVEL%"
 
 if "%CLIENT_RC%"=="0" (

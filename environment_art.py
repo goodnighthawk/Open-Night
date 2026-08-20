@@ -278,7 +278,7 @@ class EnvironmentRenderer:
         self.chunked = False
         self.chunk_size = CHUNK_SIZE
         self.chunk_cache_limit = CHUNK_CACHE_LIMIT
-        self.chunk_cache: OrderedDict[tuple[int, int, int], pygame.Surface] = OrderedDict()
+        self.chunk_cache: OrderedDict[tuple[int, int, int, int], pygame.Surface] = OrderedDict()
         self._road_index = {}
         self._water_index = {}
         self._green_index = {}
@@ -287,7 +287,8 @@ class EnvironmentRenderer:
         self._junction_exclusions: dict[str, list[tuple[float, float, float]]] = {}
         self._portable_image_cache: dict[tuple[str,int], pygame.Surface] = {}
         self._hidden_street_props: set[str] = set()
-        self._composition_tile_cache: OrderedDict[tuple[str, int, int], pygame.Surface] = OrderedDict()
+        self.active_level = 0
+        self._composition_tile_cache: OrderedDict[tuple[int, str, int, int], pygame.Surface] = OrderedDict()
         self._composition_zip: zipfile.ZipFile | None = None
         self._composition_zip_path = ""
         self.set_map(map_config)
@@ -684,8 +685,37 @@ class EnvironmentRenderer:
         path=str((self.map_config.get("portable_materials",{}) or {}).get(key,""))
         return self._portable_image(path) if path else fallback
 
+    def _uses_underground_composition(self) -> bool:
+        try:
+            underground_level = int(float(self.map_config.get("underground_level_id", -1)))
+        except (TypeError, ValueError):
+            underground_level = -1
+        wired = self.map_config.get("underground_runtime_wired", False)
+        if isinstance(wired, str):
+            wired = wired.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(wired) and int(self.active_level) == underground_level
+
+    def set_active_level(self, level: int) -> None:
+        """Select the visual composition for the local player's authoritative level."""
+        try:
+            level = int(float(level))
+        except (TypeError, ValueError):
+            level = 0
+        if level == int(self.active_level):
+            return
+        self.active_level = level
+        # Composition tiles from different levels share x/y names, so both the
+        # rendered-chunk and decoded-tile caches must be level-aware/invalidated.
+        self.chunk_cache.clear()
+        self._composition_tile_cache.clear()
+        if self._composition_zip is not None:
+            self._composition_zip.close()
+        self._composition_zip = None
+        self._composition_zip_path = ""
+
     def _composition_archive_path(self) -> Path | None:
-        raw = str(self.map_config.get("baked_composition_archive", "")).strip()
+        archive_key = "underground_composition_archive" if self._uses_underground_composition() else "baked_composition_archive"
+        raw = str(self.map_config.get(archive_key, "")).strip()
         if not raw:
             return None
         requested = Path(raw)
@@ -695,8 +725,17 @@ class EnvironmentRenderer:
             candidates.append(shared_assets_root().joinpath(*parts))
         return next((path for path in candidates if path.is_file()), None)
 
+    def _composition_source_settings(self) -> tuple[float, float]:
+        if self._uses_underground_composition():
+            scale = max(0.01, float(self.map_config.get("underground_composition_source_scale", 1.0)))
+            world_y0 = float(self.map_config.get("underground_composition_world_y", 0.0))
+            return scale, world_y0
+        scale = max(0.01, float(self.map_config.get("baked_composition_source_scale", 0.5)))
+        world_y0 = float(self.map_config.get("baked_composition_world_y", 2048.0))
+        return scale, world_y0
+
     def _composition_tile(self, mode: str, tile_x: int, tile_y: int) -> pygame.Surface | None:
-        key = (mode, int(tile_x), int(tile_y))
+        key = (int(self.active_level), mode, int(tile_x), int(tile_y))
         cached = self._composition_tile_cache.get(key)
         if cached is not None:
             self._composition_tile_cache.move_to_end(key)
@@ -725,8 +764,7 @@ class EnvironmentRenderer:
         """Draw the reviewed master art without reinterpreting its geometry."""
         if not bool(self.map_config.get("baked_composition", False)):
             return False
-        scale = max(0.01, float(self.map_config.get("baked_composition_source_scale", 0.5)))
-        world_y0 = float(self.map_config.get("baked_composition_world_y", 2048.0))
+        scale, world_y0 = self._composition_source_settings()
         source_x = cx * self.chunk_size * scale
         source_y = (cy * self.chunk_size - world_y0) * scale
         source_span = int(round(self.chunk_size * scale))
@@ -1373,7 +1411,7 @@ class EnvironmentRenderer:
         surface.blit(glow,(0,0),special_flags=pygame.BLEND_RGBA_ADD)
 
     def _render_chunk(self, cx: int, cy: int) -> pygame.Surface:
-        key = (cx, cy, int(round(self.view_rotation_degrees)) % 360)
+        key = (cx, cy, int(round(self.view_rotation_degrees)) % 360, int(self.active_level))
         cached = self.chunk_cache.get(key)
         if cached is not None:
             self.chunk_cache.move_to_end(key)

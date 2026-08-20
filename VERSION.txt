@@ -1,1 +1,1 @@
-Open Night v0.9.0 - consolidation release candidate
+Open Night v1.0.0 - playable GridWorld baseline

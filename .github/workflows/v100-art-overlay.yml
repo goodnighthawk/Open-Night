@@ -1,0 +1,10 @@
+name: Hold legacy v1.0 eight-layer overlay
+
+on:
+  workflow_dispatch:
+
+jobs:
+  held:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Legacy eight-layer overlay generation is held. Current v1.0 scope is grid-native Ground + Roof only.'

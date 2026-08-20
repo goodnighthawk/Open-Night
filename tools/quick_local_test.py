@@ -42,7 +42,7 @@ async def websocket_probe(timeout: float = 1.5) -> tuple[bool, str]:
                     kind = str(msg.get("type", ""))
                     if kind == "welcome":
                         return True, f"welcome from server v{msg.get('server_version', '?')} / {msg.get('map', {}).get('id', 'map')}"
-                    if kind in {"fatal", "error"}:
+                    if kind in {"fatal", "error", "login_error"}:
                         return False, str(msg.get("text") or msg)
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
@@ -56,7 +56,6 @@ def launch_visible(cmd: list[str], *, label: str) -> subprocess.Popen:
     """Launch a child so Windows keeps its console open if Python exits with an error."""
     if sys.platform.startswith("win"):
         command = subprocess.list2cmdline(cmd)
-        # /v:on lets us report the *child* exit code inside the failure block.
         wrapped = (
             f'{command} || ('
             f'set "ERR=!ERRORLEVEL!" & echo. & '
@@ -81,10 +80,10 @@ def main() -> int:
         return 2
 
     server_cmd = [
-        python, str(ROOT / "server.py"), "--memory-db", "--no-discovery",
+        python, str(ROOT / "v100_server.py"), "--memory-db", "--no-discovery",
         "--port", str(PORT), "--map", "map_001_gwb_corridor", "--traffic", "8",
     ]
-    print("[1/3] Starting memory-DB server...")
+    print("[1/3] Starting canonical v1.0 grid-authoritative memory-DB server...")
     server = launch_visible(server_cmd, label="SERVER")
 
     deadline = time.monotonic() + 15.0
@@ -108,10 +107,12 @@ def main() -> int:
         return 5
     print(f"[OK] {detail}")
 
-    print("[3/3] Launching desktop client...")
-    client_cmd = [python, str(ROOT / "client.py"), "--server", URI]
+    print("[3/3] Launching canonical v1.0 desktop client...")
+    client_cmd = [python, str(ROOT / "v100_client.py"), "--server", URI]
     launch_visible(client_cmd, label="CLIENT")
-    print("[OK] Client launched only after server readiness was proven.")
+    print("[OK] Client launched only after grid server readiness was proven.")
+    print("[OK] Ground, minimap and M map use GridWorld geometry only.")
+    print("[OK] Existing portrait/head selector remains installed in the canonical client.")
     print("If the client crashes, its console will stay open and show the Python traceback.")
     return 0
 

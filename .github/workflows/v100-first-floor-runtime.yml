@@ -1,0 +1,10 @@
+name: Hold v1.0 First Floor runtime
+
+on:
+  workflow_dispatch:
+
+jobs:
+  held:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'First Floor runtime promotion is intentionally held. Current v1.0 generation scope is Ground + Roof only.'

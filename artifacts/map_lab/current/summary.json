@@ -1,0 +1,18 @@
+{
+  "rendered_at": "2026-08-18 18:03:37",
+  "elapsed_seconds": 6.829,
+  "changed_percent": 0.0,
+  "largest_building_rect": [
+    1,
+    12,
+    8,
+    21
+  ],
+  "intersection_center_world": [
+    7808.0,
+    6272.0
+  ],
+  "ground_objects": 382,
+  "roof_objects": 149,
+  "roof_registration": "exact_ground_building_footprint"
+}

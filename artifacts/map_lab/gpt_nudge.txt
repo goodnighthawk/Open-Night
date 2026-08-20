@@ -1,0 +1,8 @@
+Open Night watcher manual nudge — 2026-08-18 18:22:15
+
+Continue the Open Night Ground pass on branch v1.0-art-overlay from the current repository state.
+Current local HEAD: 74c7bba3e7a3 — new free source packs
+
+Stay focused on the next meaningful Ground visual improvement and commit/push it when ready for Map Lab validation. Use the city_block reference example_small.png for building/sidewalk/road proportions and detail density. The sidewalk alignment and the four straight curb directions are already considered correct and should stay locked; only curb outer corners should be changed if visual proof shows they are wrong. Keep the building-scale Map Lab preview as the visual authority, keep Ground/Roof footprint registration exact, and do not divert effort into unrelated layers or launcher cosmetics until the Ground pass is materially improved.
+
+Check the current repo/PR state first so you continue from the newest work rather than repeating an older step. Then make the next concrete implementation update.

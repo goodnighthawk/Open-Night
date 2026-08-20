@@ -1,0 +1,10 @@
+name: Hold v1.0 First Floor diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  held:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'First Floor is intentionally blank/held while v1.0 generates Ground + Roof only.'

@@ -1,3 +1,6 @@
-﻿connector_id,kind,from_level,to_level,x0,y0,x1,y1,width
+connector_id,kind,from_level,to_level,x0,y0,x1,y1,width
 gwb_fort_lee_ramp,ramp,0,1,4384,6144,4608,6144,160
 gwb_washington_heights_ramp,ramp,0,1,10976,6144,10752,6144,160
+ug_broadway_181_stairs,stairs,0,-1,12064,4576,12160,4672,64
+ug_amsterdam_181_stairs,stairs,0,-1,13920,4512,13824,4608,64
+ug_riverside_gwb_stairs,stairs,0,-1,11040,6048,11136,6144,64
