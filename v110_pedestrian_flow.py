@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-"""Deadlock-safe GridWorld pedestrian loops for Open Night v1.1.
+"""Deadlock-safe connected GridWorld pedestrian routes for Open Night v1.1.
 
-The first GridWorld population pass used a depth-first tree walk for each connected
-sidewalk component.  A tree walk necessarily traverses most physical edges in both
-directions, so two pedestrians at different route phases can meet head-on and both
-enter the mature personal-space wait state indefinitely.  This module replaces
-those out-and-back walks with deterministic one-way cycles extracted from the
-sidewalk graph's 2-core.
+Local one-way pavement cycles fixed the first head-on pedestrian deadlock, but they
+left each block as an island. v1.1 now prefers the shared sidewalk/zebra network:
+clockwise multi-block cycles can cross major roads only at registered zebra
+crossings. The older 2-core cycle extractor remains as a conservative fallback for
+maps that do not expose the connected street-grid pattern.
 """
 
 from collections import deque
 from typing import Iterable
+
+import v110_pedestrian_connectivity
 
 
 def _sort_cells(cells: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -19,12 +20,9 @@ def _sort_cells(cells: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
 
 
 def _two_core(population_module, component: list[tuple[int, int]]) -> set[tuple[int, int]]:
-    """Return the maximal subgraph in which every cell has degree >= 2."""
+    """Return the maximal subgraph in which every pavement cell has degree >= 2."""
     core = set(component)
-    degree = {
-        node: len(population_module._neighbors(node, core))
-        for node in core
-    }
+    degree = {node: len(population_module._neighbors(node, core)) for node in core}
     pending = deque(_sort_cells(node for node, value in degree.items() if value < 2))
     while pending:
         node = pending.popleft()
@@ -93,13 +91,8 @@ def _cycle_basis(population_module, core: set[tuple[int, int]]) -> list[list[tup
                 parent[neighbor] = node
                 depth[neighbor] = depth[node] + 1
                 seen.add(neighbor)
-                stack.append((
-                    neighbor,
-                    iter(_sort_cells(population_module._neighbors(neighbor, core))),
-                ))
+                stack.append((neighbor, iter(_sort_cells(population_module._neighbors(neighbor, core)))))
                 continue
-            # In an undirected DFS, only handle the edge from a deeper node back
-            # to an ancestor.  The tree path plus this edge is one simple cycle.
             if depth.get(neighbor, 0) >= depth.get(node, 0):
                 continue
             path = [node]
@@ -112,8 +105,7 @@ def _cycle_basis(population_module, core: set[tuple[int, int]]) -> list[list[tup
                 path.append(current)
             cycle = _normalize_cycle(path)
             if cycle:
-                key = tuple(cycle)
-                cycles[key] = cycle
+                cycles[tuple(cycle)] = cycle
 
     return sorted(
         cycles.values(),
@@ -133,8 +125,7 @@ def _segment_is_pavement(population_module, world, a: tuple[float, float], b: tu
     return True
 
 
-def build_pedestrian_routes(population_module, world) -> list[dict]:
-    """Return one large one-way cycle per useful pavement component."""
+def _fallback_local_cycles(population_module, world) -> list[dict]:
     pavement = {
         (gx, gy)
         for gy in range(world.height)
@@ -148,9 +139,6 @@ def build_pedestrian_routes(population_module, world) -> list[dict]:
         core = _two_core(population_module, component)
         candidates = _cycle_basis(population_module, core)
         if not candidates:
-            # Tree-only sidewalk fragments are intentionally not used for ambient
-            # loops; putting many NPCs on an out-and-back centerline recreates the
-            # exact head-on deadlock this patch is designed to remove.
             continue
         cells = candidates[0]
         points = [world.cell_center(gx, gy) for gx, gy in cells]
@@ -166,10 +154,23 @@ def build_pedestrian_routes(population_module, world) -> list[dict]:
             "turn_radius": 0.0,
             "grid_native": True,
             "one_way_cycle": True,
+            "crosswalk_connected": False,
+            "block_span_rows": 1,
+            "block_span_cols": 1,
         })
         if len(routes) >= population_module.PEDESTRIAN_ROUTE_LIMIT:
             break
     return routes
+
+
+def build_pedestrian_routes(population_module, world) -> list[dict]:
+    """Prefer one connected multi-block zebra network; retain a safe fallback."""
+    connected = v110_pedestrian_connectivity.build_routes(
+        population_module,
+        world,
+        max_routes=population_module.PEDESTRIAN_ROUTE_LIMIT,
+    )
+    return connected or _fallback_local_cycles(population_module, world)
 
 
 def reciprocal_edge_count(routes: list[dict]) -> int:
@@ -193,7 +194,7 @@ def reciprocal_edge_count(routes: list[dict]) -> int:
 
 
 def install(population_module) -> None:
-    """Install the cycle builder and expose its invariant in the population audit."""
+    """Install connected routes and expose their release invariants in the audit."""
     if bool(getattr(population_module, "_v110_pedestrian_flow_installed", False)):
         return
     original_prepare = population_module.prepare_and_initialize
@@ -208,10 +209,20 @@ def install(population_module) -> None:
         cycle_routes = sum(bool(route.get("one_way_cycle")) for route in routes)
         audit["pedestrian_one_way_cycle_routes"] = cycle_routes
         audit["pedestrian_reciprocal_edge_count"] = reciprocal
+        audit.update(v110_pedestrian_connectivity.audit(world))
+
         if not routes or cycle_routes != len(routes):
             raise RuntimeError("v1.1 pedestrian flow requires one-way cycle routes only")
         if reciprocal:
             raise RuntimeError(f"v1.1 pedestrian routes contain {reciprocal} reciprocal physical edge(s)")
+        if int(audit.get("pedestrian_crosswalk_count", 0)) < v110_pedestrian_connectivity.MIN_CROSSWALKS:
+            raise RuntimeError("v1.1 pedestrian flow requires a dense zebra-crossing network")
+        if int(audit.get("pedestrian_route_network_components", 99)) != 1:
+            raise RuntimeError("v1.1 pedestrian routes are not one interconnected network")
+        if int(audit.get("pedestrian_multiblock_route_count", 0)) < 6:
+            raise RuntimeError("v1.1 pedestrian flow does not span enough city blocks")
+        if int(audit.get("pedestrian_crosswalk_route_count", 0)) < 6:
+            raise RuntimeError("v1.1 pedestrian flow does not use enough zebra crossings")
         return audit
 
     population_module._build_pedestrian_routes = build_routes_v110
