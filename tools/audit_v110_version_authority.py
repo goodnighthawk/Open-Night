@@ -71,6 +71,11 @@ def main() -> None:
             "repo-local server default is not v1.1")
     require("OPEN NIGHT v1.1" in read("RUN_CLIENT.bat"),
             "desktop client launcher label is stale")
+    run_server = read("RUN_SERVER.bat")
+    require("OPEN NIGHT v1.1" in run_server,
+            "local server launcher label is stale")
+    require("v100_server.py" in run_server,
+            "local server launcher bypasses canonical v1.1 server entry")
     require("GAME_VERSION" in read("tools/quick_local_test.py"),
             "quick local test does not derive its version from the wire authority")
 
@@ -79,6 +84,7 @@ def main() -> None:
         "version_label": version_label(),
         "canonical_server_entry": "v100_server.py",
         "canonical_client_entry": "v100_client.py",
+        "local_server_launcher": "RUN_SERVER.bat -> v100_server.py",
         "server_launcher_child_entry": "v100_server.py",
         "railway_entry": "railway_entry.py -> v100_server.py",
         "railway_patch_id": "open-night-v1.1",
