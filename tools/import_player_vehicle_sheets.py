@@ -120,7 +120,14 @@ def detect_crops(path: Path) -> list[Crop]:
     return unique
 
 
-def infer_category(crop: Crop) -> str:
+def infer_category(crop: Crop, source_name: str = "") -> str:
+    normalized_source = source_name.lower().replace("-", "").replace("_", "")
+    sports_markers = (
+        "mclaren", "lotuselise", "porsche911", "audir8",
+        "lamborghini", "ferrari458",
+    )
+    if any(marker in normalized_source for marker in sports_markers):
+        return "sports"
     length = max(crop.w, crop.h)
     width = min(crop.w, crop.h)
     ratio = length / max(1, width)
@@ -162,7 +169,7 @@ def build_manifest(inputs: Iterable[Path], replaced_categories: set[str]) -> lis
             raise RuntimeError(f"No vehicle sprites detected in {src}")
         sheet_file = encode_sheet(src, sheet_no)
         for slot, crop in enumerate(crops):
-            category = infer_category(crop)
+            category = infer_category(crop, src.name)
             new_categories.add(category)
             render_length, render_width, collision_length, collision_width, speed_factor, spawn_weight = base_dimensions(category)
             rows.append({

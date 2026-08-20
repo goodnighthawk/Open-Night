@@ -1,0 +1,32 @@
+{
+  "blocked_car_ids": [],
+  "grid_cell_px": 128,
+  "lane_offsets_px": [
+    64.0
+  ],
+  "max_stationary_allowed_seconds": 5.0,
+  "max_stationary_observed_seconds": 3.483,
+  "min_distance_observed_px": 5476.598,
+  "min_distance_required_px": 550.0,
+  "overlap_pairs": [],
+  "proof": "v110_sustained_traffic_recovery",
+  "recovery_stats": {
+    "attempts": 150,
+    "backoff_successes": 107,
+    "blocked_repairs": 2,
+    "courtesy_overlap_clamps": 0,
+    "deflection_successes": 28,
+    "overlap_repair_failures": 0,
+    "overlaps_detected": 87,
+    "overlaps_repaired": 87,
+    "route_reseats": 17,
+    "successes": 150
+  },
+  "simulation_seconds": 75.0,
+  "stalled_car_ids": [],
+  "traffic_requested": 28,
+  "traffic_route_count": 4,
+  "traffic_spawned": 28,
+  "undertravel_car_ids": [],
+  "warmup_seconds": 5.0
+}

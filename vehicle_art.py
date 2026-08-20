@@ -80,14 +80,36 @@ def _sprite_from_sheet(meta: dict) -> pygame.Surface | None:
         return None
     source = sheet.subsurface(rect).copy().convert_alpha()
 
-    # The submitted pixel-car sheets use a white/near-white presentation
-    # background.  Preserve true transparent sheets as-is; otherwise make the
-    # corner/background colour transparent while leaving vehicle highlights.
+    # The submitted pixel-car sheets use white/near-white presentation
+    # backgrounds, including JPEG compression gradients. Remove only neutral
+    # background pixels connected to the crop border so enclosed pale vehicle
+    # highlights remain intact.
     if source.get_width() and source.get_height():
         corner = source.get_at((0, 0))
-        if corner.a > 240 and min(corner.r, corner.g, corner.b) >= 235:
-            source.set_colorkey((corner.r, corner.g, corner.b))
-            source = source.convert_alpha()
+        if corner.a > 240:
+            width, height = source.get_size()
+            pending = [(x, 0) for x in range(width)] + [(x, height - 1) for x in range(width)]
+            pending += [(0, y) for y in range(1, height - 1)] + [(width - 1, y) for y in range(1, height - 1)]
+            visited: set[tuple[int, int]] = set()
+            while pending:
+                x, y = pending.pop()
+                if (x, y) in visited:
+                    continue
+                visited.add((x, y))
+                pixel = source.get_at((x, y))
+                close_to_corner = max(
+                    abs(pixel.r - corner.r), abs(pixel.g - corner.g), abs(pixel.b - corner.b)
+                ) <= 28
+                if pixel.a < 24 or close_to_corner:
+                    source.set_at((x, y), (pixel.r, pixel.g, pixel.b, 0))
+                    if x:
+                        pending.append((x - 1, y))
+                    if x + 1 < width:
+                        pending.append((x + 1, y))
+                    if y:
+                        pending.append((x, y - 1))
+                    if y + 1 < height:
+                        pending.append((x, y + 1))
     return source
 
 

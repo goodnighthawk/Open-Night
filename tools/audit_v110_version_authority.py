@@ -64,7 +64,8 @@ def exercise_client_version_gate() -> None:
 def main() -> None:
     require(GAME_VERSION == EXPECTED, f"wire version is {GAME_VERSION!r}, expected {EXPECTED!r}")
     require(version_label() == "Open Night v1.1", version_label())
-    require(read("VERSION.txt").startswith("Open Night v1.1"), "VERSION.txt is not v1.1")
+    require(read("VERSION.txt").strip() == EXPECTED,
+            "VERSION.txt does not exactly match the canonical wire version")
 
     canonical_server = read("v100_server.py")
     require("server.SERVER_NAME = version_label()" in canonical_server,

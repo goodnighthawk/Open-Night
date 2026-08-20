@@ -21,7 +21,9 @@ import v110_traffic_recovery
 RENDER_META_SCALE = 3.00
 # Keep at least ~78% of the visible longitudinal body authoritative. The previous
 # 2.65 value fell to 66% after the visual enlargement and failed the runtime gate.
-COLLISION_LENGTH_META_SCALE = 3.15
+# The player fleet's shortest compact body is 38/44 of its authored render
+# length, so 3.75 keeps even that worst case above the 78% runtime contract.
+COLLISION_LENGTH_META_SCALE = 3.75
 COLLISION_WIDTH_META_SCALE = 2.90
 CLIENT_RENDER_MULTIPLIER = 1.38
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
