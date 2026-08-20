@@ -19,6 +19,7 @@ import v110_bug_delivery_client
 import v110_bug_delivery_server
 import v110_bug_railway_relay_client
 import v110_bug_railway_relay_server
+from versioning import GAME_VERSION
 
 
 def require(condition: bool, message: str) -> None:
@@ -269,7 +270,7 @@ def exercise_railway_client_route() -> dict:
             local_id, payload = game._railway_bug_relay.sent[0]
             require(local_id == row["report_id"], "Railway relay lost local correlation ID")
             require(payload["type"] == "bug_relay_submit", "Railway relay protocol type missing")
-            require(payload["client_version"] == "1.1", "Railway relay version authority missing")
+            require(payload["client_version"] == GAME_VERSION, "Railway relay version authority missing")
             require(payload["reporter_phone"] == FakeGameplayNetwork.phone, "Railway relay reporter identity missing")
             require(float(payload["world_x"]) == 1234.5, "Railway relay lost gameplay coordinates")
 
@@ -329,7 +330,7 @@ async def _exercise_railway_server_route_async() -> dict:
         return digits if 7 <= len(digits) <= 15 else None
 
     server = SimpleNamespace(
-        SERVER_VERSION="1.1",
+        SERVER_VERSION=GAME_VERSION,
         USE_MYSQL=True,
         DB=FakeDB(),
         normalize_phone=normalize_phone,
@@ -345,7 +346,7 @@ async def _exercise_railway_server_route_async() -> dict:
     websocket = FakeWebSocket()
     message = {
         "type": "bug_relay_submit",
-        "client_version": "1.1",
+        "client_version": GAME_VERSION,
         "reporter_phone": "+1 555 000 0023",
         "reporter_name": "LocalPlayer",
         "source": "chat_/bug",
