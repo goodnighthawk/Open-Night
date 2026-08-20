@@ -1,0 +1,37 @@
+name: Audit v1.1 Bug Delivery
+
+on:
+  push:
+    branches: [v1.1-bug-review]
+    paths:
+      - 'gameplay/issue_reporter.py'
+      - 'v110_bug_delivery_client.py'
+      - 'v110_bug_delivery_server.py'
+      - 'v100_client.py'
+      - 'v100_server.py'
+      - 'tools/audit_v110_bug_delivery.py'
+      - '.github/workflows/v110-bug-delivery.yml'
+  pull_request:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'gameplay/issue_reporter.py'
+      - 'v110_bug_delivery_client.py'
+      - 'v110_bug_delivery_server.py'
+      - 'v100_client.py'
+      - 'v100_server.py'
+      - 'tools/audit_v110_bug_delivery.py'
+      - '.github/workflows/v110-bug-delivery.yml'
+  workflow_dispatch:
+
+jobs:
+  bug-delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile bug delivery runtime
+        run: python -m py_compile gameplay/issue_reporter.py v110_bug_delivery_client.py v110_bug_delivery_server.py v100_client.py v100_server.py tools/audit_v110_bug_delivery.py
+      - name: Audit migration, acknowledgement state, and idempotent retry
+        run: python tools/audit_v110_bug_delivery.py
