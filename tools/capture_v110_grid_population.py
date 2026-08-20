@@ -25,16 +25,40 @@ v100_scale_normalization.install()
 import server
 import v100_client
 import v110_grid_population
+import v110_pedestrian_flow
+v110_pedestrian_flow.install(v110_grid_population)
 
 OUT = ROOT / "assets" / "grid_v100" / "V110_POPULATION_RUNTIME_PROOF_1280x720.png"
 REVIEW = ROOT / "assets" / "grid_v100" / "V110_FULL_STACK_RUNTIME_REVIEW_2560x1440.png"
 AUDIT = ROOT / "assets" / "grid_v100" / "V110_GRID_POPULATION_RUNTIME_AUDIT.json"
 PROOF_ZOOM = 0.72
 PROOF_TRAFFIC = 24
+FLOW_WARMUP_TICKS = 300
+FLOW_MEASURE_TICKS = 300
+MIN_FLOW_DISTANCE_5S = 20.0
 
 
 def _distance(a, b) -> float:
     return math.hypot(float(a.x) - float(b.x), float(a.y) - float(b.y))
+
+
+def _advance_population(dt: float, tick_start: int, tick_stop: int, *, track_pedestrians: bool = False) -> dict[str, float]:
+    travelled: dict[str, float] = {}
+    for tick in range(tick_start, tick_stop):
+        before = {
+            npc.npc_id: (float(npc.x), float(npc.y))
+            for npc in server.npc_pedestrians
+            if npc.kind == "pedestrian"
+        } if track_pedestrians else {}
+        server.update_traffic(dt, [], tick * dt)
+        server.update_npcs(dt, [], tick)
+        if track_pedestrians:
+            for npc in server.npc_pedestrians:
+                if npc.kind != "pedestrian" or npc.npc_id not in before:
+                    continue
+                px, py = before[npc.npc_id]
+                travelled[npc.npc_id] = travelled.get(npc.npc_id, 0.0) + math.hypot(npc.x - px, npc.y - py)
+    return travelled
 
 
 def main() -> None:
@@ -52,12 +76,15 @@ def main() -> None:
     server.TRAFFIC_COUNT = PROOF_TRAFFIC
     audit = v110_grid_population.prepare_and_initialize(server, server.ACTIVE_MAP, server.GRID_WORLD)
 
+    if int(audit.get("pedestrian_reciprocal_edge_count", -1)) != 0:
+        raise RuntimeError(f"pedestrian routes still contain reciprocal edges: {audit.get('pedestrian_reciprocal_edge_count')}")
+    if int(audit.get("pedestrian_one_way_cycle_routes", 0)) != int(audit.get("pedestrian_route_count", -1)):
+        raise RuntimeError("not every v1.1 pedestrian route is a one-way cycle")
+
     initial_car_positions = {car.vehicle_id: (car.x, car.y) for car in server.traffic_vehicles}
     initial_npc_positions = {npc.npc_id: (npc.x, npc.y) for npc in server.npc_pedestrians}
     dt = 1.0 / 60.0
-    for tick in range(150):
-        server.update_traffic(dt, [], tick * dt)
-        server.update_npcs(dt, [], tick)
+    _advance_population(dt, 0, 150)
 
     moved_cars = sum(
         math.hypot(car.x - initial_car_positions[car.vehicle_id][0], car.y - initial_car_positions[car.vehicle_id][1]) > 8.0
@@ -69,18 +96,52 @@ def main() -> None:
         for npc in server.npc_pedestrians
         if npc.npc_id in initial_npc_positions
     )
+
+    # The old reciprocal tree-walk routes could pass the first 2.5 seconds and
+    # then deadlock once pedestrians met head-on.  Warm the city for five seconds,
+    # then measure actual path length during a separate five-second window.
+    _advance_population(dt, 150, FLOW_WARMUP_TICKS)
+    pedestrian_travel = _advance_population(
+        dt,
+        FLOW_WARMUP_TICKS,
+        FLOW_WARMUP_TICKS + FLOW_MEASURE_TICKS,
+        track_pedestrians=True,
+    )
+    pedestrians = [npc for npc in server.npc_pedestrians if npc.kind == "pedestrian"]
+    stalled_pedestrians = sorted(
+        npc.npc_id
+        for npc in pedestrians
+        if pedestrian_travel.get(npc.npc_id, 0.0) < MIN_FLOW_DISTANCE_5S
+    )
+    off_pavement_pedestrians = sorted(
+        npc.npc_id
+        for npc in pedestrians
+        if not v110_grid_population._is_pavement(
+            game.grid_world,
+            *game.grid_world.world_to_cell(npc.x, npc.y),
+        )
+    )
+
     blocked_cars = [
         car.vehicle_id for car in server.traffic_vehicles
         if v110_grid_population._grid_vehicle_blocked(game.grid_world, car, car.x, car.y, car.angle)
     ]
     if len(server.traffic_vehicles) < 6:
         raise RuntimeError(f"v1.1 proof expected at least six safe traffic cars, got {len(server.traffic_vehicles)}")
-    if sum(1 for npc in server.npc_pedestrians if npc.kind == "pedestrian") < 12:
+    if len(pedestrians) < 12:
         raise RuntimeError("v1.1 proof expected at least twelve pedestrians")
     if moved_cars < max(3, len(server.traffic_vehicles) // 3):
         raise RuntimeError(f"too few traffic cars moved during proof: {moved_cars}/{len(server.traffic_vehicles)}")
     if moved_npcs < 8:
         raise RuntimeError(f"too few NPCs moved during proof: {moved_npcs}")
+    allowed_stalled = max(2, len(pedestrians) // 20)
+    if len(stalled_pedestrians) > allowed_stalled:
+        raise RuntimeError(
+            f"pedestrian flow deadlocked after warmup: {len(stalled_pedestrians)}/{len(pedestrians)} "
+            f"under {MIN_FLOW_DISTANCE_5S:.0f}px in five seconds; examples={stalled_pedestrians[:8]}"
+        )
+    if off_pavement_pedestrians:
+        raise RuntimeError(f"pedestrians left GridWorld pavement: {off_pavement_pedestrians[:8]}")
     if blocked_cars:
         raise RuntimeError(f"traffic left GridWorld road collision: {blocked_cars[:8]}")
 
@@ -93,11 +154,10 @@ def main() -> None:
         for npc in server.npc_pedestrians
     }
 
-    # Choose the actual densest gameplay window after the simulation has run.
+    # Choose the actual densest gameplay window after the extended simulation.
     # The proof must make several cars and pedestrians visually obvious rather
     # than relying on counts that happen to be elsewhere in the world.
     cars = list(server.traffic_vehicles)
-    pedestrians = [npc for npc in server.npc_pedestrians if npc.kind == "pedestrian"]
     game.camera_zoom = PROOF_ZOOM
     view_size = game.logical_view_size()
     half_w = view_size[0] * 0.46
@@ -135,8 +195,8 @@ def main() -> None:
     game.players = {local.id: local}
     game.map_players = {local.id: {"id": local.id, "name": local.name, "x": x, "y": y, "level": 0}}
     game.notice = (
-        f"v1.1 GridWorld population proof — {visible_cars} cars + "
-        f"{visible_pedestrians} pedestrians in this gameplay window"
+        f"v1.1 pedestrian-flow proof — {visible_cars} cars + "
+        f"{visible_pedestrians} pedestrians here; stalled {len(stalled_pedestrians)}/{len(pedestrians)}"
     )
     game.notice_until = 10**12
 
@@ -197,7 +257,14 @@ def main() -> None:
         "camera_zoom": PROOF_ZOOM,
         "traffic_moved_after_2_5s": moved_cars,
         "npcs_moved_after_2_5s": moved_npcs,
-        "blocked_traffic_after_2_5s": blocked_cars,
+        "pedestrian_flow_measure_seconds": FLOW_MEASURE_TICKS * dt,
+        "pedestrian_flow_min_distance_px": MIN_FLOW_DISTANCE_5S,
+        "pedestrians_stalled_after_warmup": stalled_pedestrians,
+        "pedestrians_stalled_after_warmup_count": len(stalled_pedestrians),
+        "pedestrians_off_pavement": off_pavement_pedestrians,
+        "pedestrian_distance_min_px": round(min(pedestrian_travel.values(), default=0.0), 3),
+        "pedestrian_distance_median_px": round(sorted(pedestrian_travel.values())[len(pedestrian_travel) // 2], 3) if pedestrian_travel else 0.0,
+        "blocked_traffic_after_10s": blocked_cars,
         "focus_car": focus_car.vehicle_id,
         "focus_npc": focus_npc.npc_id,
         "visible_cars_in_proof_window": visible_cars,
