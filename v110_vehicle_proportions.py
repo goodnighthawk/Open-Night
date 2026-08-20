@@ -4,14 +4,13 @@ from __future__ import annotations
 
 The earlier v1.1 correction was still visually too conservative in actual gameplay:
 vehicles were technically larger than legacy traffic but continued to read as toys
-against the broad GridWorld roads and buildings.  This pass makes an ordinary sedan
+against the broad GridWorld roads and buildings. This pass makes an ordinary sedan
 roughly 3.4 player-heights long on screen, while preserving the authored relative
 sizes of vans, buses, limos and trucks.
 
-Collision growth is intentionally smaller than visual growth.  The traffic solver
-therefore keeps enough intersection clearance while the sprite finally has the
-visual mass expected of a car.  The recovery watchdog remains installed from the
-same authoritative metadata hook.
+The authoritative collision body is kept close to the visible sprite so the larger
+art cannot clip deeply through other cars before avoidance engages. Traffic lane
+separation and the recovery watchdog absorb the extra physical footprint.
 """
 
 import v110_traffic_recovery
@@ -20,10 +19,10 @@ import v110_traffic_recovery
 # the client after draw_vehicle's retained 1.38 multiplier. Against the ~58 px
 # GridWorld player this is ~3.43:1, giving cars readable real-world visual mass.
 RENDER_META_SCALE = 3.00
-# Collision envelopes remain smaller than the visible sprite so the larger visual
-# treatment does not consume the full three-cell road/intersection clearance.
-COLLISION_LENGTH_META_SCALE = 2.65
-COLLISION_WIDTH_META_SCALE = 2.75
+# Keep at least ~78% of the visible longitudinal body authoritative. The previous
+# 2.65 value fell to 66% after the visual enlargement and failed the runtime gate.
+COLLISION_LENGTH_META_SCALE = 3.15
+COLLISION_WIDTH_META_SCALE = 2.90
 CLIENT_RENDER_MULTIPLIER = 1.38
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
 MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 3.25
