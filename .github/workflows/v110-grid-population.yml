@@ -9,6 +9,7 @@ on:
       - 'v100_server.py'
       - 'v100_client.py'
       - 'v110_grid_population.py'
+      - 'v110_pedestrian_flow.py'
       - 'v100_runtime_refinement.py'
       - 'v100_safe_layout.py'
       - 'v100_scale_normalization.py'
@@ -26,6 +27,7 @@ on:
       - 'v100_server.py'
       - 'v100_client.py'
       - 'v110_grid_population.py'
+      - 'v110_pedestrian_flow.py'
       - 'v100_runtime_refinement.py'
       - 'v100_safe_layout.py'
       - 'v100_scale_normalization.py'
@@ -48,7 +50,7 @@ jobs:
       - name: Install runtime dependencies
         run: python -m pip install --upgrade 'pygame-ce==2.5.8' 'websockets>=16,<18' 'mysql-connector-python>=9,<10' 'Pillow>=10,<13'
       - name: Compile v1.1 population runtime
-        run: python -m py_compile v100_server.py v100_client.py v110_grid_population.py server.py client.py grid_world.py grid_runtime.py tools/capture_v110_grid_population.py
+        run: python -m py_compile v100_server.py v100_client.py v110_grid_population.py v110_pedestrian_flow.py server.py client.py grid_world.py grid_runtime.py tools/capture_v110_grid_population.py
       - name: Render and exercise GridWorld-native traffic + pedestrians
         env:
           SDL_VIDEODRIVER: dummy
@@ -67,7 +69,11 @@ jobs:
           assert audit['pedestrians_spawned'] >= 12, audit
           assert audit['traffic_moved_after_2_5s'] >= 3, audit
           assert audit['npcs_moved_after_2_5s'] >= 8, audit
-          assert not audit['blocked_traffic_after_2_5s'], audit
+          assert audit['pedestrian_reciprocal_edge_count'] == 0, audit
+          assert audit['pedestrian_one_way_cycle_routes'] == audit['pedestrian_route_count'], audit
+          assert audit['pedestrians_stalled_after_warmup_count'] <= max(2, audit['pedestrians_spawned'] // 20), audit
+          assert not audit['pedestrians_off_pavement'], audit
+          assert not audit['blocked_traffic_after_10s'], audit
           assert audit['grid_cell_px'] == 128, audit
           print(json.dumps(audit, indent=2, sort_keys=True))
           PY
