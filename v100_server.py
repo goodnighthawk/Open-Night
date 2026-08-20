@@ -19,6 +19,7 @@ v100_scale_normalization.install()
 
 import server
 import v110_bug_delivery_server
+import v110_bug_railway_relay_server
 import v110_grid_population
 from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
@@ -83,6 +84,9 @@ def install_v100_server() -> None:
     # duplicate DB row / duplicate GitHub issue. Passing the mature server also
     # adds an early duplicate receipt before its normal 45 s rate-limit checks.
     v110_bug_delivery_server.install(server)
+    # Accept a narrow first-frame bug relay command so desktop clients can send
+    # reports to Railway even while their gameplay session is local/LAN.
+    v110_bug_railway_relay_server.install(server)
 
 
 def main() -> None:
