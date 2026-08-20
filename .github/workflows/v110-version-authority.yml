@@ -1,0 +1,51 @@
+name: Audit v1.1 Version Authority
+
+on:
+  push:
+    branches: [v1.1-bug-review]
+    paths:
+      - 'versioning.py'
+      - 'VERSION.txt'
+      - 'v100_server.py'
+      - 'v100_client.py'
+      - 'v110_server_launcher_patch.py'
+      - 'v110_version_client.py'
+      - 'server_config.csv'
+      - 'railway.toml'
+      - 'railway_entry.py'
+      - 'DEPLOY_OPEN_NIGHT_SERVER.bat'
+      - 'RUN_CLIENT.bat'
+      - 'tools/quick_local_test.py'
+      - 'tools/audit_v110_version_authority.py'
+      - '.github/workflows/v110-version-authority.yml'
+  pull_request:
+    branches: [v1.0-art-overlay]
+    paths:
+      - 'versioning.py'
+      - 'VERSION.txt'
+      - 'v100_server.py'
+      - 'v100_client.py'
+      - 'v110_server_launcher_patch.py'
+      - 'v110_version_client.py'
+      - 'server_config.csv'
+      - 'railway.toml'
+      - 'railway_entry.py'
+      - 'DEPLOY_OPEN_NIGHT_SERVER.bat'
+      - 'RUN_CLIENT.bat'
+      - 'tools/quick_local_test.py'
+      - 'tools/audit_v110_version_authority.py'
+      - '.github/workflows/v110-version-authority.yml'
+  workflow_dispatch:
+
+jobs:
+  version-authority:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile v1.1 version/entrypoint patches
+        run: python -m py_compile versioning.py v100_server.py v100_client.py v110_server_launcher_patch.py v110_version_client.py tools/quick_local_test.py tools/audit_v110_version_authority.py
+      - name: Audit exact v1.1 authority and deployment paths
+        run: python tools/audit_v110_version_authority.py
