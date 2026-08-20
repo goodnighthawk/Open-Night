@@ -7,6 +7,8 @@ on:
       - 'grid_client_entry.py'
       - 'v100_client.py'
       - 'v100_server.py'
+      - 'versioning.py'
+      - 'server_config.csv'
       - 'grid_runtime.py'
       - 'grid_world.py'
       - 'tools/grid_local_server.py'
@@ -24,6 +26,8 @@ on:
       - 'grid_client_entry.py'
       - 'v100_client.py'
       - 'v100_server.py'
+      - 'versioning.py'
+      - 'server_config.csv'
       - 'grid_runtime.py'
       - 'grid_world.py'
       - 'tools/grid_local_server.py'
@@ -47,12 +51,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile grid cutover entry points
-        run: python -m py_compile grid_client_entry.py v100_client.py v100_server.py grid_runtime.py grid_world.py tools/grid_local_server.py tools/quick_local_test.py gameplay/jump_contract.py main.py railway_entry.py
+        run: python -m py_compile versioning.py grid_client_entry.py v100_client.py v100_server.py grid_runtime.py grid_world.py tools/grid_local_server.py tools/quick_local_test.py gameplay/jump_contract.py main.py railway_entry.py
       - name: Audit single GridWorld authority and preserved entry features
         run: |
           python - <<'PY'
           from pathlib import Path
+          import csv
           from gameplay.jump_contract import directional_jump_velocity
+          from versioning import GAME_VERSION, version_label
 
           client = Path('grid_client_entry.py').read_text(encoding='utf-8')
           vclient = Path('v100_client.py').read_text(encoding='utf-8')
@@ -64,6 +70,13 @@ jobs:
           web = Path('main.py').read_text(encoding='utf-8')
           railway = Path('railway_entry.py').read_text(encoding='utf-8')
           doc = Path('docs/V100_LEGACY_MAP_CUTOVER.md').read_text(encoding='utf-8')
+
+          assert GAME_VERSION == '1.0.0'
+          assert version_label() == 'Open Night v1.0.0'
+          assert 'Open Night v1.0.0' in Path('VERSION.txt').read_text(encoding='utf-8')
+          with Path('server_config.csv').open(encoding='utf-8-sig', newline='') as handle:
+              server_config = {row['key']: row['value'] for row in csv.DictReader(handle)}
+          assert server_config['server_name'] == 'Open Night v1.0.0'
 
           # Exterior framebuffer, minimap and large M-map share GridWorld authority.
           assert 'grid_renderer.draw_view' in client

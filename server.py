@@ -76,12 +76,12 @@ from gameplay.settings import load_settings
 from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
-from versioning import GAME_VERSION
+from versioning import GAME_VERSION, version_label
 from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v0.9.0 / consolidation"
+SERVER_NAME = f"{version_label()} / playable GridWorld"
 MAX_PLAYERS = 128
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 SERVER_VERSION = GAME_VERSION
