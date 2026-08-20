@@ -80,8 +80,9 @@ def install_v100_server() -> None:
     server.request_player_jump = request_player_jump_v100
     # Must be installed after Railway's optional GitHub mirror wrapper so a
     # reconnect retry returns the existing DB report instead of creating a
-    # duplicate DB row / duplicate GitHub issue.
-    v110_bug_delivery_server.install()
+    # duplicate DB row / duplicate GitHub issue. Passing the mature server also
+    # adds an early duplicate receipt before its normal 45 s rate-limit checks.
+    v110_bug_delivery_server.install(server)
 
 
 def main() -> None:
