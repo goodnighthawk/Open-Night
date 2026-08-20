@@ -6,18 +6,13 @@ The mature traffic solver already gives one car right-of-way when proposed
 footprints conflict, but a queue can still freeze when the winner's proposal is
 blocked by the loser's *current* body. The old visible-stall recovery only ran
 for reservation-cancelled cars and nudged 10 px without checking nearby cars.
-That left ordinary following queues able to accumulate ``stuck_time`` forever
-and could recover one jam by creating another overlap.
 
-This module keeps the existing authoritative solver and adds bounded GridWorld
-fixes: wider deterministic lane separation and turn radii sized for the full-size
-v1.1 cars, a strict full-body collision envelope, a post-tick overlap repair for
-legacy retreat collisions, and a watchdog for every AI car whose ``stuck_time``
-keeps growing outside the reservation-cancel path.
-
-Recovery scales with each vehicle body, preferring a lane-aligned back-off before
-a lateral deflection. Every candidate is checked against authoritative road
-collision and every other vehicle body before it is committed.
+This module keeps the mature authoritative solver and adds bounded GridWorld
+fixes for full-size v1.1 cars: wider deterministic lane separation and turn radii,
+a strict body envelope, post-tick overlap/road repair, and a watchdog for every AI
+car. Normal recovery uses short backoff/deflection. Only when those candidates
+cannot clear a junction does the car reseat to the nearest verified pose on its
+own route, before the server publishes the tick.
 """
 
 import math
@@ -28,6 +23,7 @@ STALL_RECOVERY_SECONDS = 1.70
 RECOVERY_ATTEMPT_INTERVAL_SECONDS = 0.40
 RECOVERY_CLEARANCE_SCALE = 1.04
 OVERLAP_REPAIR_PASSES = 4
+ROUTE_RESEAT_LOCAL_LIMIT_SCALE = 2.8
 
 _LAST_ATTEMPT: dict[str, float] = {}
 
@@ -40,7 +36,7 @@ def _stats(server_module) -> dict:
     for key in (
         "attempts", "successes", "backoff_successes", "deflection_successes",
         "courtesy_overlap_clamps", "overlaps_detected", "overlaps_repaired",
-        "overlap_repair_failures",
+        "overlap_repair_failures", "route_reseats", "blocked_repairs",
     ):
         value.setdefault(key, 0)
     return value
@@ -73,6 +69,61 @@ def _candidate_clear(server_module, car, x: float, y: float, heading: float) -> 
     return True
 
 
+def _apply_recovery_pose(server_module, car, route: dict, x: float, y: float, heading: float) -> None:
+    car.x = float(x)
+    car.y = float(y)
+    car.angle = float(heading)
+    route_speed = max(1.0, float(route.get("speed_limit", 120.0)))
+    car.speed = max(20.0, min(48.0, route_speed * 0.32 * float(car.speed_factor)))
+    car.wait_age = 0.0
+    car.stuck_time = 0.0
+    car.last_progress_x = car.x
+    car.last_progress_y = car.y
+
+
+def _reseat_to_nearest_clear_route_pose(server_module, car, route: dict) -> bool:
+    """Find the closest non-overlapping road pose on this car's own route."""
+    points = server_module._route_points(route)
+    if len(points) < 2:
+        return False
+
+    body_length = max(48.0, float(car.collision_length))
+    local_limit = max(180.0, body_length * ROUTE_RESEAT_LOCAL_LIMIT_SCALE)
+    candidates: list[tuple[float, float, float, float, int]] = []
+    n = len(points)
+    # Sample all runtime segments so the fallback is deterministic; distance sort
+    # keeps the normal case local even though a whole-route escape remains possible.
+    for i in range(n):
+        a = points[i]
+        b = points[(i + 1) % n]
+        ax, ay = float(a[0]), float(a[1])
+        bx, by = float(b[0]), float(b[1])
+        dx, dy = bx - ax, by - ay
+        if math.hypot(dx, dy) < 1e-6:
+            continue
+        heading = math.atan2(dy, dx)
+        for t in (0.0, 0.25, 0.50, 0.75):
+            x = ax + dx * t
+            y = ay + dy * t
+            distance = math.hypot(x - float(car.x), y - float(car.y))
+            candidates.append((distance, x, y, heading, (i + 1) % n))
+
+    candidates.sort(key=lambda row: (row[0], row[4], row[1], row[2]))
+    # Prefer a visually local correction first, then allow the nearest whole-route
+    # clear slot as a last-resort deadlock escape.
+    for local_only in (True, False):
+        for distance, x, y, heading, next_wp in candidates:
+            if local_only and distance > local_limit:
+                continue
+            if not _candidate_clear(server_module, car, x, y, heading):
+                continue
+            _apply_recovery_pose(server_module, car, route, x, y, heading)
+            car.next_waypoint = next_wp
+            _stats(server_module)["route_reseats"] += 1
+            return True
+    return False
+
+
 def recover_visible_stall(server_module, car, route: dict) -> bool:
     """Move a stalled/overlapping AI car to the nearest verified free road spot."""
     stats = _stats(server_module)
@@ -84,9 +135,6 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
     body_length = max(40.0, float(car.collision_length))
     body_width = max(24.0, float(car.collision_width))
     side = max(24.0, body_width * 0.72 + 10.0)
-
-    # Distances scale with the body. The former fixed 16/28/42 px retreat was
-    # appropriate for toy-sized cars but too short to separate a full-size sedan.
     back1 = max(24.0, body_length * 0.24)
     back2 = max(42.0, body_length * 0.42)
     back3 = max(62.0, body_length * 0.62)
@@ -109,18 +157,14 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
         y = float(car.y) + hy * forward + sy * lateral
         if not _candidate_clear(server_module, car, x, y, heading):
             continue
-        car.x = x
-        car.y = y
-        car.angle = heading
-        route_speed = max(1.0, float(route.get("speed_limit", 120.0)))
-        car.speed = max(20.0, min(48.0, route_speed * 0.32 * float(car.speed_factor)))
-        car.wait_age = 0.0
-        car.stuck_time = 0.0
-        car.last_progress_x = x
-        car.last_progress_y = y
+        _apply_recovery_pose(server_module, car, route, x, y, heading)
         stats["successes"] += 1
         key = "backoff_successes" if kind == "backoff" else "deflection_successes"
         stats[key] += 1
+        return True
+
+    if _reseat_to_nearest_clear_route_pose(server_module, car, route):
+        stats["successes"] += 1
         return True
     return False
 
@@ -138,8 +182,19 @@ def _overlap_pairs(server_module) -> list[tuple[object, object]]:
     return pairs
 
 
+def _repair_blocked_cars(server_module, routes: list[dict]) -> None:
+    stats = _stats(server_module)
+    for car in list(server_module.traffic_vehicles):
+        if car.controlled_by or car.parked or int(car.route_index) < 0:
+            continue
+        if not server_module._vehicle_map_blocked(car, car.x, car.y, car.angle):
+            continue
+        route = routes[int(car.route_index) % len(routes)]
+        if _reseat_to_nearest_clear_route_pose(server_module, car, route):
+            stats["blocked_repairs"] += 1
+
+
 def _repair_current_overlaps(server_module, routes: list[dict]) -> None:
-    """Repair the mature solver's unchecked cancelled-car retreat collisions."""
     stats = _stats(server_module)
     for _ in range(OVERLAP_REPAIR_PASSES):
         pairs = _overlap_pairs(server_module)
@@ -229,11 +284,7 @@ def install(server_module) -> None:
         )
 
     server_module._traffic_footprints_conflict = traffic_footprints_conflict_v110
-
-    def safe_visible_recovery(car, route: dict) -> bool:
-        return recover_visible_stall(server_module, car, route)
-
-    server_module._recover_visible_stall = safe_visible_recovery
+    server_module._recover_visible_stall = lambda car, route: recover_visible_stall(server_module, car, route)
 
     def update_traffic_v110(dt: float, sessions, server_time: float) -> None:
         original_update(dt, sessions, server_time)
@@ -243,7 +294,12 @@ def install(server_module) -> None:
         if not routes:
             return
 
+        # Enforce a valid published state every tick. A repair candidate must be
+        # on road and clear of all current bodies, so these passes cannot trade
+        # one collision for another.
+        _repair_blocked_cars(server_module, routes)
         _repair_current_overlaps(server_module, routes)
+        _repair_blocked_cars(server_module, routes)
 
         configured = float(server_module.TRAFFIC_AI.get("visible_stall_recovery_seconds", STALL_RECOVERY_SECONDS))
         threshold = min(STALL_RECOVERY_SECONDS, max(0.75, configured))
@@ -262,6 +318,11 @@ def install(server_module) -> None:
             _LAST_ATTEMPT[str(car.vehicle_id)] = float(server_time)
             route = routes[int(car.route_index) % len(routes)]
             recover_visible_stall(server_module, car, route)
+
+        # A watchdog recovery can move a car near another body; make the returned
+        # state clean before networking/next audit sample observes it.
+        _repair_blocked_cars(server_module, routes)
+        _repair_current_overlaps(server_module, routes)
 
     server_module.update_traffic = update_traffic_v110
     server_module._v110_traffic_recovery_installed = True
