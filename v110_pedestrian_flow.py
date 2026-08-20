@@ -198,6 +198,15 @@ def install(population_module) -> None:
     if bool(getattr(population_module, "_v110_pedestrian_flow_installed", False)):
         return
     original_prepare = population_module.prepare_and_initialize
+    original_is_pavement = population_module._is_pavement
+
+    def is_pedestrian_surface_v110(world, gx: int, gy: int) -> bool:
+        # Preserve every authored sidewalk cell and additionally admit only the
+        # road cells explicitly registered as zebra-crossing corridors. This
+        # keeps existing flow/runtime audits meaningful while NPCs cross streets.
+        return bool(original_is_pavement(world, gx, gy)) or v110_pedestrian_connectivity.is_pedestrian_surface_cell(
+            world, gx, gy
+        )
 
     def build_routes_v110(world):
         return build_pedestrian_routes(population_module, world)
@@ -225,6 +234,7 @@ def install(population_module) -> None:
             raise RuntimeError("v1.1 pedestrian flow does not use enough zebra crossings")
         return audit
 
+    population_module._is_pavement = is_pedestrian_surface_v110
     population_module._build_pedestrian_routes = build_routes_v110
     population_module.prepare_and_initialize = prepare_and_initialize_v110
     population_module._v110_pedestrian_flow_installed = True
