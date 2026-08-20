@@ -21,6 +21,7 @@ import server
 import v110_bug_delivery_server
 import v110_bug_railway_relay_server
 import v110_grid_population
+import v110_job_locations
 import v110_pedestrian_flow
 import v110_vehicle_proportions
 v110_pedestrian_flow.install(v110_grid_population)
@@ -57,6 +58,10 @@ def validate_active_authority(map_config: dict) -> list[str]:
 
     if not errors:
         try:
+            # Supplier/buyer coordinates are legacy source-world pixels. Scale
+            # them onto this exact GridWorld before interaction or map UI uses
+            # the shared ACTIVE_MAP object.
+            v110_job_locations.normalize(map_config, world, player_radius=server.PLAYER_RADIUS)
             audit = v110_grid_population.prepare_and_initialize(server, map_config, world)
         except Exception as exc:
             errors.append(f"grid population: {exc}")
