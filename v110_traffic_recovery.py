@@ -10,18 +10,20 @@ That left ordinary following queues able to accumulate ``stuck_time`` forever
 and could recover one jam by creating another overlap.
 
 This module keeps the existing authoritative solver and adds bounded GridWorld
-fixes: wider deterministic lane separation, a strict full-body collision envelope,
-a post-tick overlap repair for legacy retreat collisions, and a watchdog for every
-AI car whose ``stuck_time`` keeps growing outside the reservation-cancel path.
+fixes: wider deterministic lane separation and turn radii sized for the full-size
+v1.1 cars, a strict full-body collision envelope, a post-tick overlap repair for
+legacy retreat collisions, and a watchdog for every AI car whose ``stuck_time``
+keeps growing outside the reservation-cancel path.
 
-Recovery prefers a short lane-aligned back-off, then a small lateral deflection.
-Every candidate is checked against authoritative road collision and every other
-vehicle body before it is committed.
+Recovery scales with each vehicle body, preferring a lane-aligned back-off before
+a lateral deflection. Every candidate is checked against authoritative road
+collision and every other vehicle body before it is committed.
 """
 
 import math
 
-LANE_OFFSET_RATIO = 0.30
+LANE_OFFSET_RATIO = 0.36
+TURN_RADIUS_RATIO = 0.50
 STALL_RECOVERY_SECONDS = 1.70
 RECOVERY_ATTEMPT_INTERVAL_SECONDS = 0.40
 RECOVERY_CLEARANCE_SCALE = 1.04
@@ -79,23 +81,27 @@ def recover_visible_stall(server_module, car, route: dict) -> bool:
     heading = _route_heading(server_module, car, route)
     hx, hy = math.cos(heading), math.sin(heading)
     sx, sy = -hy, hx
-    side = max(18.0, float(car.collision_width) * 0.78 + 10.0)
+    body_length = max(40.0, float(car.collision_length))
+    body_width = max(24.0, float(car.collision_width))
+    side = max(24.0, body_width * 0.72 + 10.0)
 
-    # Back-off preserves route ordering. The lateral candidates are the requested
-    # GTA-like collision deflection fallback when a queue prevents straight retreat.
+    # Distances scale with the body. The former fixed 16/28/42 px retreat was
+    # appropriate for toy-sized cars but too short to separate a ~130 px sedan.
+    back1 = max(24.0, body_length * 0.24)
+    back2 = max(42.0, body_length * 0.42)
+    back3 = max(62.0, body_length * 0.62)
     candidates = [
-        ("backoff", -16.0, 0.0),
-        ("backoff", -28.0, 0.0),
-        ("backoff", -42.0, 0.0),
-        ("backoff", -58.0, 0.0),
-        ("deflection", -12.0, side),
-        ("deflection", -12.0, -side),
-        ("deflection", -26.0, side),
-        ("deflection", -26.0, -side),
-        ("deflection", -42.0, side),
-        ("deflection", -42.0, -side),
-        ("deflection", 4.0, side),
-        ("deflection", 4.0, -side),
+        ("backoff", -back1, 0.0),
+        ("backoff", -back2, 0.0),
+        ("backoff", -back3, 0.0),
+        ("deflection", -back1 * 0.70, side),
+        ("deflection", -back1 * 0.70, -side),
+        ("deflection", -back2 * 0.70, side),
+        ("deflection", -back2 * 0.70, -side),
+        ("deflection", -back3 * 0.55, side),
+        ("deflection", -back3 * 0.55, -side),
+        ("deflection", body_length * 0.06, side),
+        ("deflection", body_length * 0.06, -side),
     ]
 
     for kind, forward, lateral in candidates:
@@ -133,14 +139,7 @@ def _overlap_pairs(server_module) -> list[tuple[object, object]]:
 
 
 def _repair_current_overlaps(server_module, routes: list[dict]) -> None:
-    """Repair the mature solver's unchecked cancelled-car retreat collisions.
-
-    The legacy Phase 2b verifies moving proposals against retreat positions but
-    skips cars already in the cancelled set. Two retreating losers can therefore
-    finish the same tick overlapping even though neither proposal overlapped.
-    Repair after commit, moving only AI traffic and checking the final candidate
-    against every current body.
-    """
+    """Repair the mature solver's unchecked cancelled-car retreat collisions."""
     stats = _stats(server_module)
     for _ in range(OVERLAP_REPAIR_PASSES):
         pairs = _overlap_pairs(server_module)
@@ -169,7 +168,7 @@ def _repair_current_overlaps(server_module, routes: list[dict]) -> None:
 
 
 def _install_grid_lane_separation() -> None:
-    """Widen the generated one-way lane offset before routes are initialized."""
+    """Size generated one-way lanes and corner fillets for full-size v1.1 cars."""
     try:
         import v110_grid_population as grid_population
     except ImportError:
@@ -180,15 +179,22 @@ def _install_grid_lane_separation() -> None:
 
     def build_traffic_routes_v110(world):
         routes = original(world)
-        minimum = max(28.0, float(world.cell_px) * LANE_OFFSET_RATIO)
+        minimum_offset = max(34.0, float(world.cell_px) * LANE_OFFSET_RATIO)
+        minimum_turn = max(48.0, float(world.cell_px) * TURN_RADIUS_RATIO)
         for route in routes:
             try:
                 current = float(route.get("lane_offset", 0.0))
             except (TypeError, ValueError):
                 current = 0.0
             sign = -1.0 if current < 0.0 else 1.0
-            route["lane_offset"] = sign * max(abs(current), minimum)
+            route["lane_offset"] = sign * max(abs(current), minimum_offset)
+            try:
+                turn = float(route.get("turn_radius", 0.0))
+            except (TypeError, ValueError):
+                turn = 0.0
+            route["turn_radius"] = max(turn, minimum_turn)
             route["v110_lane_separation"] = True
+            route["v110_fullsize_turn_radius"] = True
         return routes
 
     grid_population._v110_original_build_traffic_routes = original
@@ -237,8 +243,6 @@ def install(server_module) -> None:
         if not routes:
             return
 
-        # First remove any overlap produced by simultaneous legacy retreat moves;
-        # the sustained audit checks the post-tick authoritative state.
         _repair_current_overlaps(server_module, routes)
 
         configured = float(server_module.TRAFFIC_AI.get("visible_stall_recovery_seconds", STALL_RECOVERY_SECONDS))
