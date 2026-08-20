@@ -18,6 +18,7 @@ import v100_scale_normalization
 v100_scale_normalization.install()
 
 import server
+import v110_bug_delivery_server
 import v110_grid_population
 from gameplay.jump_contract import directional_jump_velocity
 from grid_runtime import ground_grid_enabled, load_ground_grid
@@ -77,6 +78,10 @@ def request_player_jump_v100(session, now: float | None = None) -> str:
 def install_v100_server() -> None:
     server.validate_map = validate_active_authority
     server.request_player_jump = request_player_jump_v100
+    # Must be installed after Railway's optional GitHub mirror wrapper so a
+    # reconnect retry returns the existing DB report instead of creating a
+    # duplicate DB row / duplicate GitHub issue.
+    v110_bug_delivery_server.install()
 
 
 def main() -> None:
