@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title OPEN NIGHT - Launcher
 
-call UPDATE_OPEN_NIGHT.bat
+call UPDATE_OPEN_NIGHT.bat --launcher
 
 if not exist ".venv\Scripts\python.exe" (
   echo ============================================================
