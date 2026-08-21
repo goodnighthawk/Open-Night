@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 GRID_CELL_PX = 256
-GRID_W = 64
+BASE_GRID_W = 64
+GRID_W = 128
 GRID_H = 48
 GRID_WORLD_W = GRID_W * GRID_CELL_PX
 GRID_WORLD_H = GRID_H * GRID_CELL_PX

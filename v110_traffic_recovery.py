@@ -258,7 +258,11 @@ def _install_grid_lane_separation() -> None:
             except (TypeError, ValueError):
                 current = 0.0
             sign = -1.0 if current < 0.0 else 1.0
-            route["lane_offset"] = sign * max(abs(current), minimum_offset)
+            if route.get("six_lane_network"):
+                route["lane_offset"] = current
+                route["v120_six_lane_usable"] = True
+            else:
+                route["lane_offset"] = sign * max(abs(current), minimum_offset)
             try:
                 turn = float(route.get("turn_radius", 0.0))
             except (TypeError, ValueError):

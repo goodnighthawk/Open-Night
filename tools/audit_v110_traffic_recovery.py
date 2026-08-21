@@ -87,8 +87,22 @@ def _audit_bounded_collision_recovery() -> dict:
     }
 
 
+def _audit_player_collision_deflection() -> dict:
+    old = 1.25
+    samples = [
+        server._player_collision_deflection_angle(old, offset, direction)
+        for offset in (0.04, -0.04, 0.16, -0.30, 4.0)
+        for direction in (-1.0, 1.0)
+    ]
+    maximum = max(abs((angle - old + math.pi) % (2.0 * math.pi) - math.pi) for angle in samples)
+    if maximum > math.radians(4.0) + 1e-9:
+        raise RuntimeError(f"player collision deflection can spin: {math.degrees(maximum):.3f} degrees")
+    return {"max_heading_change_degrees": round(math.degrees(maximum), 3), "cooldown_seconds": 0.25}
+
+
 def main() -> None:
     bounded_recovery = _audit_bounded_collision_recovery()
+    player_deflection = _audit_player_collision_deflection()
     game_client = v100_client.game_client
     game_client.NetworkClient.start = lambda self: None
     v100_client.install_v100_client()
@@ -171,6 +185,7 @@ def main() -> None:
         "overlap_pairs": [list(pair) for pair in sorted(overlap_seen)],
         "recovery_stats": recovery,
         "bounded_collision_recovery": bounded_recovery,
+        "bounded_player_collision_deflection": player_deflection,
         "grid_cell_px": int(game.grid_world.cell_px),
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -185,8 +200,9 @@ def main() -> None:
         raise RuntimeError(f"cars left authoritative road collision: {sorted(blocked_seen)[:8]}")
     if overlap_seen:
         raise RuntimeError(f"vehicle bodies overlapped during sustained run: {sorted(overlap_seen)[:8]}")
-    if not route_offsets or min(route_offsets) < game.grid_world.cell_px * v110_traffic_recovery.LANE_OFFSET_RATIO - 0.01:
-        raise RuntimeError(f"v1.1 lane separation not active: offsets={route_offsets}")
+    expected_offsets = [game.grid_world.cell_px * ratio for ratio in (0.25, 0.70, 1.10)]
+    if len(route_offsets) != 3 or any(abs(actual - expected) > 0.01 for actual, expected in zip(route_offsets, expected_offsets)):
+        raise RuntimeError(f"six-lane separation is not exact: offsets={route_offsets}, expected={expected_offsets}")
 
 
 if __name__ == "__main__":

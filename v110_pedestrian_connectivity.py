@@ -23,7 +23,7 @@ from typing import Iterable
 
 from grid_world import ObjectDef
 
-SIDEWALK_APRON_FRACTION = 0.18
+SIDEWALK_APRON_FRACTION = 0.36
 MAX_ROUTE_COUNT = 18
 MIN_CROSSWALKS = 24
 

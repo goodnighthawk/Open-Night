@@ -30,6 +30,49 @@ ROOF_PROP_DRAW_SIZES = {
     "rooflayer_white_box_02": (130, 170), "rooflayer_white_box_03": (97, 124),
 }
 ROOF_ARCHETYPE_NAMES = ("mechanical", "waterworks", "mixed_service", "low_profile")
+BASE_GRID_WIDTH = 64
+PLAYABLE_AREA_MULTIPLIER = 2
+
+
+def _east_district_copy(item: dict, x_offset: int) -> dict:
+    copy = dict(item)
+    if "gx" in copy:
+        copy["gx"] = int(copy["gx"]) + x_offset
+    for key in ("id", "object_id", "lighting_id", "crosswalk_id", "building_id"):
+        if key in copy:
+            copy[key] = f"{copy[key]}_east"
+    return copy
+
+
+def _double_playable_area(data: dict, rows: list[list[str]], buildings: list[dict]) -> tuple[list[list[str]], list[dict]]:
+    """Build a connected eastern district while preserving the approved grid grammar."""
+    if not rows or len(rows[0]) != BASE_GRID_WIDTH:
+        return rows, buildings
+    doubled_rows = [list(row) + list(row) for row in rows]
+    east_buildings = []
+    for building in buildings:
+        copy = dict(building)
+        copy["building_id"] = f"{building['building_id']}_east"
+        copy["rect"] = [int(value) + (BASE_GRID_WIDTH if index % 2 == 0 else 0)
+                        for index, value in enumerate(building["rect"])]
+        east_buildings.append(copy)
+    doubled_buildings = buildings + east_buildings
+    synthesis = data.setdefault("building_synthesis", {})
+    synthesis["buildings"] = doubled_buildings
+    synthesis["building_count"] = len(doubled_buildings)
+    synthesis["playable_area_multiplier"] = PLAYABLE_AREA_MULTIPLIER
+    base_objects = list(data.get("objects", []))
+    data["objects"] = base_objects + [_east_district_copy(obj, BASE_GRID_WIDTH) for obj in base_objects]
+    base_spawns = [list(spawn) for spawn in data.get("login_spawns", [])]
+    data["login_spawns"] = base_spawns + [
+        [float(spawn[0]) + BASE_GRID_WIDTH * int(data.get("cell_px", 256)), float(spawn[1])]
+        for spawn in base_spawns
+    ]
+    data["width"] = BASE_GRID_WIDTH * PLAYABLE_AREA_MULTIPLIER
+    data["world_w"] = data["width"] * int(data.get("cell_px", 256))
+    data["playable_area_multiplier"] = PLAYABLE_AREA_MULTIPLIER
+    data["procedural_districts"] = ["approved_west", "connected_east"]
+    return doubled_rows, doubled_buildings
 
 
 def _decode_ground(data: dict) -> list[list[str]]:
@@ -333,10 +376,12 @@ def _load_roof_data(data: dict, rows: list[list[str]], buildings: list[dict]) ->
 def load_ground_grid() -> GridWorld:
     data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
     ground_rows, buildings = _synthesize_ground_runtime(data)
+    ground_rows, buildings = _double_playable_area(data, ground_rows, buildings)
 
     if GRID_GENERATED_OBJECTS_PATH.is_file():
         generated = json.loads(GRID_GENERATED_OBJECTS_PATH.read_text(encoding="utf-8"))
         ground_generated = list(generated.get("objects", []))
+        ground_generated += [_east_district_copy(obj, BASE_GRID_WIDTH) for obj in ground_generated]
     else:
         ground_generated = _generated_ground_objects(ground_rows, buildings)
     data.setdefault("objects", []).extend(ground_generated)
@@ -364,6 +409,7 @@ def load_ground_grid() -> GridWorld:
 def load_roof_grid() -> GridWorld:
     ground_data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
     ground_rows, buildings = _synthesize_ground_runtime(ground_data)
+    ground_rows, buildings = _double_playable_area(ground_data, ground_rows, buildings)
     roof_data = _load_roof_data(ground_data, ground_rows, buildings)
     _assert_exact_roof_registration(ground_rows, roof_data["layers"]["roof"])
     return GridWorld(roof_data, TileCatalog.load(GRID_CATALOG_PATH))

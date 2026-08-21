@@ -231,6 +231,8 @@ def apply_world_refinement(world):
         building["layout_refinement"] = "road_bounded_lot_center_v1"
         building["center_shift_cells"] = [dx, dy]
 
+    refined_footprints = {str(building["building_id"]): _footprint(building) for building in buildings}
+    roof_assignment_counts: dict[str, int] = defaultdict(int)
     for item in world.objects:
         building_id = str(item.get("building_id", ""))
         if building_id in shifts:
@@ -241,14 +243,61 @@ def apply_world_refinement(world):
         if item.get("composition_pass") == "roof_palette_v1":
             # Keep equipment visibly legible while fully inside its authoritative
             # inboard roof cell. Recenter after scaling so no decal clips a wall.
-            inset = max(16, int(round(world.cell_px * 0.125)))
+            inset = max(24, int(round(world.cell_px * 0.1875)))
             minimum = max(64, int(round(world.cell_px * 0.50)))
-            width = min(world.cell_px - inset, max(minimum, int(round(float(item.get("width_px", minimum)) * 1.18))))
-            height = min(world.cell_px - inset, max(minimum, int(round(float(item.get("height_px", minimum)) * 1.18))))
+            width = min(world.cell_px - inset * 2, max(minimum, int(round(float(item.get("width_px", minimum)) * 1.10))))
+            height = min(world.cell_px - inset * 2, max(minimum, int(round(float(item.get("height_px", minimum)) * 1.10))))
+            footprint = refined_footprints.get(building_id, set())
+            core = sorted(
+                ((gx, gy) for gx, gy in footprint
+                 if all((gx + dx, gy + dy) in footprint for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))),
+                key=lambda point: (point[1], point[0]),
+            )
+            if core:
+                slot = roof_assignment_counts[building_id] % len(core)
+                item["gx"], item["gy"] = core[slot]
+                roof_assignment_counts[building_id] += 1
             item["width_px"], item["height_px"] = width, height
             item["offset_x_px"] = (world.cell_px - width) // 2
             item["offset_y_px"] = (world.cell_px - height) // 2
-            item["placement_policy"] = "centered_inboard_roof_cell_v12"
+            item["placement_policy"] = "centered_core_roof_cell_v12" if core else "centered_safe_small_roof_v12"
+
+        marking = str(item.get("street_marking", ""))
+        if marking == "dashed_center_line_vertical":
+            width = int(item.get("width_px", world.cell_px // 4))
+            height = int(item.get("height_px", world.cell_px * 3 // 4))
+            item["offset_x_px"] = (world.cell_px - width) // 2
+            item["offset_y_px"] = (world.cell_px - height) // 2
+            item["registration_policy"] = "road_cell_center_v12"
+        elif marking == "dashed_center_line_horizontal":
+            width = int(item.get("width_px", world.cell_px // 4))
+            height = int(item.get("height_px", world.cell_px * 3 // 4))
+            item["offset_x_px"] = (world.cell_px - height) // 2
+            item["offset_y_px"] = (world.cell_px - width) // 2
+            item["registration_policy"] = "road_cell_center_v12"
+
+    # Each three-cell primary road is 384 px before normalization: six 64 px
+    # lanes. Four white dividers plus the yellow median make all six lanes
+    # visible; the traffic route builder supplies three usable lanes each way.
+    lane_dividers = []
+    for item in list(world.objects):
+        marking = str(item.get("street_marking", ""))
+        if marking not in {"dashed_center_line_vertical", "dashed_center_line_horizontal"}:
+            continue
+        for divider_index, displacement in enumerate((-128, -64, 64, 128), start=1):
+            divider = dict(item)
+            divider["asset"] = "mark_white_crossing_piece"
+            divider["width_px"] = 10
+            divider["street_marking"] = f"six_lane_divider_{'vertical' if marking.endswith('vertical') else 'horizontal'}"
+            divider["lane_divider_index"] = divider_index
+            divider["six_lane_network"] = True
+            if marking.endswith("vertical"):
+                divider["offset_x_px"] = world.cell_px // 2 + displacement - 5
+            else:
+                divider["offset_y_px"] = world.cell_px // 2 + displacement - 5
+            lane_dividers.append(divider)
+    world.objects.extend(lane_dividers)
+    world.data.setdefault("runtime_refinement", {})["six_lane_divider_count"] = len(lane_dividers)
 
     fire_escape_count = _move_fire_escapes(world, rows, buildings)
     lamp_count = 0
@@ -296,11 +345,12 @@ def _install_outline_refinement() -> None:
         if color.a <= 150:
             return False
         maximum = max(color.r, color.g, color.b)
+        minimum = min(color.r, color.g, color.b)
         luminance = (54 * color.r + 183 * color.g + 19 * color.b) // 256
         # Only near-black perimeter ink is a frame. The former broad threshold
         # classified legitimate dark-blue/brown roof fills as outlines and made
         # whole building tiles bleed into their neighbours.
-        return maximum < 108 and luminance < 92
+        return maximum < 165 and luminance < 135 and maximum - minimum < 28
 
     # GridRenderer removes only exterior-connected frame ink while preserving
     # source alpha and isolated rooftop detail. Keep the classifier narrow.

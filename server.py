@@ -424,6 +424,7 @@ class NPCPedestrian:
     aim: float
     appearance: dict
     pause_timer: float = 0.0
+    route_direction: int = 1
     step_counter: int = 0
     kind: str = "pedestrian"
 
@@ -998,6 +999,13 @@ def _front_axle_rotated_center(car: TrafficVehicle, proposed_angle: float) -> tu
     )
 
 
+def _player_collision_deflection_angle(old_angle: float, requested_offset: float, direction: float) -> float:
+    """Apply a small collision glance without allowing a visible heading spin."""
+    limit = math.radians(4.0)
+    bounded = max(-limit, min(limit, float(requested_offset) * float(direction)))
+    return float(old_angle) + bounded
+
+
 def _traffic_footprints_conflict(
     car: TrafficVehicle, x: float, y: float, heading: float,
     other: TrafficVehicle, ox: float, oy: float, other_heading: float,
@@ -1228,10 +1236,9 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             winner = other if loser is car else car
             yield_to[loser.vehicle_id] = winner.vehicle_id
 
-    # Cars that repeatedly lose a crossing reservation actively back off along
-    # their own lane. This creates physical room for the winner instead of the old
-    # deadlock where both cars remained exactly one safety radius apart forever.
-    retreat_positions: dict[str, tuple[float, float]] = {}
+    # A yielding car keeps positive progress toward its route while making a small
+    # lane-width sidestep. It never reverses or spins away from its desired heading.
+    avoidance_positions: dict[str, tuple[float, float]] = {}
     for loser_id, winner_id in yield_to.items():
         loser = by_id.get(loser_id)
         winner = by_id.get(winner_id)
@@ -1240,16 +1247,32 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             continue
         if loser.parked or loser.controlled_by or loser.route_index < 0:
             continue
-        # Start backing off quickly enough to resolve a junction in under a second.
-        retreat = min(22.0, 6.0 + loser.wait_age * 3.0)
-        rx = loser.x - math.cos(loser.angle) * retreat
-        ry = loser.y - math.sin(loser.angle) * retreat
-        before = math.hypot(loser.x - winner_prop[0], loser.y - winner_prop[1])
-        after = math.hypot(rx - winner_prop[0], ry - winner_prop[1])
-        if after <= before + 0.5:
+        prop = proposals.get(loser_id)
+        if prop is None:
             continue
-        if _vehicle_map_blocked(loser, rx, ry, loser.angle):
+        heading = prop[2]
+        hx, hy = math.cos(heading), math.sin(heading)
+        sx, sy = -hy, hx
+        winner_side = (winner_prop[0] - loser.x) * sx + (winner_prop[1] - loser.y) * sy
+        preferred = -1.0 if winner_side >= 0.0 else 1.0
+        candidate = None
+        for side_sign in (preferred, -preferred):
+            for lateral in (18.0, 12.0, 7.0):
+                rx = loser.x + hx * 4.0 + sx * lateral * side_sign
+                ry = loser.y + hy * 4.0 + sy * lateral * side_sign
+                if _vehicle_map_blocked(loser, rx, ry, heading):
+                    continue
+                if _traffic_footprints_conflict(loser, rx, ry, heading, winner,
+                                                winner_prop[0], winner_prop[1], winner_prop[2],
+                                                courtesy_scale=0.92):
+                    continue
+                candidate = (rx, ry)
+                break
+            if candidate is not None:
+                break
+        if candidate is None:
             continue
+        rx, ry = candidate
         # Local clearance only; do not use the all-car helper here because the
         # winner is exactly the object we are intentionally moving away from.
         clear = True
@@ -1261,7 +1284,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
                 clear = False
                 break
         if clear:
-            retreat_positions[loser_id] = (rx, ry)
+            avoidance_positions[loser_id] = (rx, ry)
 
     # Phase 2b: hard safety using a spatial hash as well. This replaces the old
     # O(N^2) all-car scan, which became expensive exactly when traffic density rose.
@@ -1274,7 +1297,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             if prop is None:
                 pos = (car.x, car.y)
             elif car.vehicle_id in cancelled:
-                pos = retreat_positions.get(car.vehicle_id, (car.x, car.y))
+                pos = avoidance_positions.get(car.vehicle_id, (car.x, car.y))
             else:
                 pos = (prop[0], prop[1])
             effective[car.vehicle_id] = pos
@@ -1313,8 +1336,10 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             continue
         moved = math.hypot(nx - car.x, ny - car.y)
         if car.vehicle_id in cancelled:
-            if car.vehicle_id in retreat_positions:
-                car.x, car.y = retreat_positions[car.vehicle_id]
+            if car.vehicle_id in avoidance_positions:
+                car.x, car.y = avoidance_positions[car.vehicle_id]
+                car.angle = heading
+                car.speed = max(12.0, min(speed, car.speed))
             car.speed = max(0.0, car.speed - TRAFFIC_BRAKE_DECEL * dt)
             car.wait_age = min(float(TRAFFIC_AI.get("max_wait_priority", 15.0)), car.wait_age + dt)
             car.stuck_time += dt
@@ -1486,7 +1511,7 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
         dx, dy = float(tx) - npc.x, float(ty) - npc.y
         dist = math.hypot(dx, dy)
         if dist < 1e-6:
-            npc.next_waypoint = (npc.next_waypoint + 1) % len(points)
+            npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
             continue
         ux, uy = dx / dist, dy / dist
 
@@ -1511,8 +1536,15 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
         npc.y += uy * step
         npc.aim = math.atan2(uy, ux)
         if dist <= max(6.0, npc.speed * step_dt * 1.25):
-            npc.next_waypoint = (npc.next_waypoint + 1) % len(points)
+            npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
             npc.step_counter += 1
+            # A small deterministic subset occasionally changes its mind at a
+            # waypoint. Personal-space yielding keeps the reversal collision-safe.
+            identity = sum(ord(c) for c in npc.npc_id)
+            if npc.kind == "pedestrian" and identity % 27 == 0 and (identity + npc.step_counter) % 31 == 0:
+                npc.route_direction *= -1
+                npc.next_waypoint = (npc.next_waypoint + npc.route_direction * 2) % len(points)
+                npc.pause_timer = 0.35
             # Fixed cadence: no probability rolls. Most waypoints are continuous;
             # every 12th completed segment gets a brief deterministic pause.
             if (sum(ord(c) for c in npc.npc_id) + npc.step_counter) % 12 == 0:
@@ -2975,8 +3007,10 @@ async def simulation_loop() -> None:
                         impact_speed = car.speed
                         deflected = False
                         direction = 1.0 if impact_speed >= 0.0 else -1.0
-                        for deflect_angle in (0.16, -0.16, 0.30, -0.30):
-                            candidate_angle = old_angle + deflect_angle * direction
+                        last_deflection = float(getattr(car, "last_player_collision_deflection_at", -1e9))
+                        can_deflect = current - last_deflection >= 0.25
+                        for deflect_angle in ((0.04, -0.04, 0.07, -0.07) if can_deflect else ()):
+                            candidate_angle = _player_collision_deflection_angle(old_angle, deflect_angle, direction)
                             slide = impact_speed * dt * 0.45
                             sx = car.x + math.cos(candidate_angle) * slide
                             sy = car.y + math.sin(candidate_angle) * slide
@@ -2986,6 +3020,7 @@ async def simulation_loop() -> None:
                                 continue
                             car.x, car.y, car.angle = sx, sy, candidate_angle
                             car.speed = impact_speed * 0.42
+                            car.last_player_collision_deflection_at = current
                             deflected = True
                             break
                         if not deflected:

@@ -33,8 +33,9 @@ def main() -> None:
         1 for row in world.layers.get("ground", []) for tile_id in row
         if tile_id.startswith("bld_")
     )
-    if building_cells != 1029:
-        raise SystemExit(f"building morphology v1 expected 1029 blocked building cells, got {building_cells}")
+    expected_building_cells = 1029 * int(world.data.get("playable_area_multiplier", 1))
+    if building_cells != expected_building_cells:
+        raise SystemExit(f"building morphology v1 expected {expected_building_cells} blocked building cells, got {building_cells}")
 
     synth = world.data.get("building_synthesis") or {}
     if synth.get("orientation_authority") != "filename_semantics":
@@ -182,9 +183,10 @@ def main() -> None:
     markings = [obj for obj in world.objects if obj.get("street_marking")]
     zebras = [obj for obj in markings if str(obj["street_marking"]).startswith("zebra_")]
     dashes = [obj for obj in markings if str(obj["street_marking"]).startswith("dashed_")]
-    if (len(markings), len(zebras), len(dashes)) != (500, 384, 116):
+    lane_dividers = [obj for obj in markings if str(obj["street_marking"]).startswith("six_lane_divider_")]
+    if (len(markings), len(zebras), len(dashes), len(lane_dividers)) != (964, 384, 116, 464):
         raise SystemExit(
-            f"road morphology v1 marking counts mismatch: {len(markings)}/{len(zebras)}/{len(dashes)}"
+            f"road morphology v1 marking counts mismatch: {len(markings)}/{len(zebras)}/{len(dashes)}/{len(lane_dividers)}"
         )
     if any(world.tile_id("ground", int(obj["gx"]), int(obj["gy"])) != "road_fill" for obj in markings):
         raise SystemExit("road morphology v1 left a phantom marking outside road cells")

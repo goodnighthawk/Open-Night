@@ -50,10 +50,14 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
         source_points[key] = [parsed[0], parsed[1]]
         x = max(0.0, min(float(world.world_w), parsed[0] * sx))
         y = max(0.0, min(float(world.world_h), parsed[1] * sy))
-        try:
-            x, y = world.nearest_walkable("ground", x, y, float(player_radius))
-        except Exception:
-            pass
+        # Job NPCs must stand on pavement, never as floating areas in traffic.
+        sidewalk_cells = [
+            world.cell_center(gx, gy)
+            for gy in range(world.height) for gx in range(world.width)
+            if world.collision_at("ground", *world.cell_center(gx, gy)) in {"walk", "sidewalk"}
+        ]
+        if sidewalk_cells:
+            x, y = min(sidewalk_cells, key=lambda point: (point[0] - x) ** 2 + (point[1] - y) ** 2)
         map_config[key] = [round(float(x), 3), round(float(y), 3)]
         normalized[key] = list(map_config[key])
 
