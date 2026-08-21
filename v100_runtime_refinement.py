@@ -317,6 +317,7 @@ def apply_world_refinement(world):
     fire_escape_count = _move_fire_escapes(world, rows, buildings)
     lamp_count = 0
     seen_lights: set[str] = set()
+    occupied_lamp_cells: set[tuple[int, int]] = set()
     for item in world.objects:
         if item.get("lighting_kind") != "sidewalk_lamp" and not item.get("emits_light"):
             continue
@@ -324,6 +325,33 @@ def apply_world_refinement(world):
         if not lighting_id or lighting_id in seen_lights:
             raise RuntimeError(f"streetlamp emitter record is missing/duplicated: {lighting_id!r}")
         seen_lights.add(lighting_id)
+        # The v1.2 road expansion replaced the old road bands, so the authored
+        # lamp grid coordinates can no longer be trusted. Move the fixture and
+        # its emitter together to the nearest free sidewalk cell.
+        source_x, source_y = int(item.get("gx", 0)), int(item.get("gy", 0))
+        candidates = []
+        for radius in range(0, 13):
+            for dx in range(-radius, radius + 1):
+                dy = radius - abs(dx)
+                for sign in ({1} if dy == 0 else {-1, 1}):
+                    gx, gy = source_x + dx, source_y + dy * sign
+                    if not (0 <= gx < world.width and 0 <= gy < world.height):
+                        continue
+                    if (gx, gy) in occupied_lamp_cells:
+                        continue
+                    cx, cy = world.cell_center(gx, gy)
+                    if world.collision_at("ground", cx, cy) == "sidewalk":
+                        candidates.append((radius, gy, gx))
+            if candidates:
+                break
+        if not candidates:
+            raise RuntimeError(f"streetlamp has no nearby sidewalk placement: {lighting_id}")
+        _, gy, gx = min(candidates)
+        item["gx"], item["gy"] = gx, gy
+        item["offset_x_px"] = 0
+        item["offset_y_px"] = 0
+        item["placement_policy"] = "nearest_free_sidewalk_cell_v12"
+        occupied_lamp_cells.add((gx, gy))
         item["asset"] = "street_lamp_10_night"
         item["emits_light"] = True
         item["fixture_light_sync"] = "same_grid_object_record"

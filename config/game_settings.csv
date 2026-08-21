@@ -20,7 +20,7 @@ traffic,recycle_player_clearance_px,900,float,Do not recycle cars near players
 traffic,max_wait_priority,15.0,float,Cap right-of-way wait credit
 traffic,follow_time_seconds,0.14,float,Extra time headway for following
 npc,pedestrians_per_route,5,int,Target pedestrians per sidewalk route for the v0.9.0 population pass
-npc,personal_space_px,22,float,Pedestrian separation radius
+npc,personal_space_px,36,float,Pedestrian separation radius after the v1.2 world-scale increase
 npc,active_radius_px,1800,float,Full NPC update radius around players
 npc,far_update_hz,5,float,Update rate for distant NPCs
 npc,runover_min_speed_mph,30,float,Minimum measured vehicle impact speed before a pedestrian NPC can be run over
@@ -55,13 +55,13 @@ vehicle,player_reverse_px_s,112,float,Player reverse speed cap
 vehicle,player_reverse_accel_px_s2,145,float,Player reverse acceleration
 vehicle,player_brake_px_s2,390,float,Player braking
 vehicle,player_drag_px_s2,92,float,Player coasting drag
-render,player_scale,1,int,Walking player sprite scale
+render,player_scale,2,int,Walking player sprite scale
 render,jump_scale_multiplier,1.35,float,Enlarge local and remote player sprites during the jump pose
 render,jump_lift_px,10,int,Lift jumping player sprites upward in screen pixels before camera zoom
 render,double_jump_scale_multiplier,1.50,float,Make a double jump slightly larger than a single jump for every client
 render,double_jump_lift_px,14,int,Lift double-jumping player sprites slightly higher than a single jump
-render,npc_scale,1,int,Pedestrian NPC sprite scale
-render,cyclist_rider_scale,1,int,Cyclist rider sprite scale
+render,npc_scale,2,int,Pedestrian NPC sprite scale
+render,cyclist_rider_scale,2,int,Cyclist rider sprite scale
 render,fractional_zoom_filter,smooth,str,Use filtered one-pass downscale below 1x to suppress fractional-zoom aliasing
 render,camera_pixel_snap,true,bool,Snap render camera to integer world pixels to reduce shimmer
 render,filtered_rotation,true,bool,Use filtered whole-scene camera rotation to reduce jagged edges

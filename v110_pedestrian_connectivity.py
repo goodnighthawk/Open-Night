@@ -270,6 +270,11 @@ def _add_midblock_zebra_art(world, crossings: list[Crosswalk]) -> int:
     near = int(round(40 * scale))
     added = 0
     for crossing in crossings:
+        # Keep every crossing available to pedestrian routing, but reserve
+        # painted zebras for mid-block crossings. Painting all four approaches
+        # at every intersection overwhelmed the widened-road presentation.
+        if crossing.kind != "midblock":
+            continue
         road_cells = crossing.road_end - crossing.road_start + 1
         stripe_count = max(8, road_cells * 2)
         span = road_cells * world.cell_px

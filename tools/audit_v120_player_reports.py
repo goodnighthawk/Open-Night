@@ -42,6 +42,18 @@ def main() -> None:
                                and str(row.get("placement_policy", "")).startswith("centered_")
                                and int(row.get("offset_x_px", 0)) >= 12 and int(row.get("offset_y_px", 0)) >= 12
                                for row in roof_decals), "roof decals are not large, centered, and inboard"
+    lamps = [row for row in world.objects if row.get("lighting_kind") == "sidewalk_lamp"]
+    assert len(lamps) == 90
+    lamp_cells = {(int(row["gx"]), int(row["gy"])) for row in lamps}
+    assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
+    assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
+               and row.get("placement_policy") == "nearest_free_sidewalk_cell_v12" for row in lamps), \
+        "streetlamps were not relocated from the expanded road onto sidewalks"
+    connectivity = v110_pedestrian_connectivity.apply(world)
+    zebra_art = [row for row in world.objects if str(row.get("street_marking", "")).startswith("zebra_")]
+    assert zebra_art and len(zebra_art) < 600, "zebra-crossing art is still visually overpopulated"
+    assert all(row.get("street_marking") == "zebra_midblock" for row in zebra_art)
+    assert connectivity["pedestrian_crosswalk_count"] >= 100, "routing crossings were removed with visual art"
     centerlines = [row for row in world.objects if str(row.get("street_marking", "")).startswith("dashed_center_line_")]
     assert centerlines and all(row.get("registration_policy") == "road_cell_center_v12" for row in centerlines)
     for row in centerlines:
