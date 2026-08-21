@@ -398,7 +398,23 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
 
     # Largest/multi-block loops first so all six central blocks participate before
     # small local cycles consume the route budget.
-    candidates.sort(key=lambda item: (-item[0], -item[1], item[2], item[4], item[3], item[5]))
+    candidates.sort(key=lambda item: (
+        0 if item[0] > 1 else 1,
+        0 if item[2] == 0 and item[4] == 0 else 1,
+        -item[0], -item[1], item[2], item[4], item[3], item[5],
+    ))
+    if candidates:
+        connected = [candidates.pop(0)]
+        connected_cells = set(connected[0][-1])
+        while candidates and len(connected) < limit:
+            match = next((index for index, item in enumerate(candidates)
+                          if connected_cells & set(item[-1])), None)
+            if match is None:
+                break
+            item = candidates.pop(match)
+            connected.append(item)
+            connected_cells.update(item[-1])
+        candidates = connected
     routes: list[dict] = []
     multi_block = 0
     crosswalk_routes = 0
@@ -424,6 +440,24 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
         route_cells.append(set(cells))
         if len(routes) >= limit:
             break
+
+    # Wide corridors reduce the number of distinct rectangle perimeters. Add a
+    # parallel traversal of a safe multi-block route; individual pedestrians can
+    # still reverse through the server's bounded change-of-mind behaviour.
+    if routes and multi_block < 6 and len(routes) < limit:
+        source_index = next((index for index, route in enumerate(routes)
+                             if int(route.get("block_span_rows", 0)) * int(route.get("block_span_cols", 0)) > 1), None)
+        if source_index is not None:
+            source = routes[source_index]
+            parallel = dict(source)
+            parallel["id"] = f"grid_ped_connected_{len(routes):02d}_parallel"
+            parallel["waypoints"] = list(source["waypoints"])
+            parallel["parallel_flow_pair"] = source["id"]
+            routes.append(parallel)
+            route_cells.append(set(route_cells[source_index]))
+            multi_block += 1
+            if source.get("crosswalk_connected"):
+                crosswalk_routes += 1
 
     if not routes:
         return []

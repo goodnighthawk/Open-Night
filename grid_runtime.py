@@ -154,8 +154,20 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
     """Rebuild the exact shared rectangle/notch grammar in memory."""
     original = _decode_ground(data)
     prior = list((data.get("building_synthesis") or {}).get("buildings") or [])
-    envelopes = ([tuple(map(int, building["rect"])) for building in prior]
-                 if prior else [_largest_axis_aligned_rect(group) for group in _building_components(original)])
+    # v1.2 fixed-release city grammar: real wide-road geometry, not extra lanes
+    # painted into the former narrow streets. The central east/west corridor is
+    # a still-wider highway and blocks are rebuilt at lower density around it.
+    x_blocks = ((0, 7), (15, 25), (33, 40), (48, 54))
+    y_blocks = ((0, 5), (13, 18), (30, 35), (43, 47))
+    envelopes = []
+    for row_index, (y0, y1) in enumerate(y_blocks):
+        for col_index, (x0, x1) in enumerate(x_blocks):
+            # Leave several deterministic open lots/plazas for density variation.
+            if (row_index * 5 + col_index) % 7 == 5:
+                continue
+            inset_x = 1 if x1 - x0 >= 5 else 0
+            inset_y = 1 if y1 - y0 >= 5 else 0
+            envelopes.append((x0 + inset_x, y0 + inset_y, x1 - inset_x, y1 - inset_y))
     rows = [list(row) for row in original]
     for y, row in enumerate(rows):
         for x, tile_id in enumerate(row):
@@ -164,7 +176,7 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
 
     buildings = []
     for index, rect in enumerate(envelopes, 1):
-        theme = _theme_for_rect(index, rect)
+        theme = THEMES[(index - 1) % len(THEMES)]
         x0, y0, x1, y1 = rect
         buildings.append({
             "building_id": f"grid_building_{index:02d}",
@@ -172,7 +184,14 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
             "footprint_type": "rectangle",
             "orientation_policy": "filename_semantics_no_rotation",
         })
-    assign_notches(buildings, THEMES)
+    try:
+        assign_notches(buildings, THEMES)
+    except RuntimeError:
+        # Wide-road blocks intentionally include smaller footprints; rectangles
+        # remain authoritative when a balanced notch set cannot be formed.
+        for building in buildings:
+            building["notch"] = None
+            building["footprint_type"] = "rectangle"
     for building in buildings:
         rect = tuple(map(int, building["rect"]))
         footprint = footprint_for(rect, building.get("notch"))
@@ -181,7 +200,15 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
         building["generated_cells"] = len(footprint)
         building["envelope_cells"] = (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1)
 
-    rows, road_morphology = apply_road_morphology(rows)
+    road_morphology = {"version": 3, "composition_pass": "wide_road_morphology_v120"}
+    vertical_centers = (11, 29, 44, 58)
+    horizontal_bands = ((9, 3), (24, 5), (39, 3))
+    for y in range(len(rows)):
+        for x in range(len(rows[y])):
+            if any(abs(x - center) <= 3 for center in vertical_centers) or any(
+                abs(y - center) <= radius for center, radius in horizontal_bands
+            ):
+                rows[y][x] = "road_fill"
     if any(not rows[y][x].startswith("bld_") for building in buildings
            for x, y in footprint_for(tuple(map(int, building["rect"])), building.get("notch"))):
         raise ValueError("road morphology pass overlapped an authoritative building footprint")
@@ -201,6 +228,12 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
         "runtime_synthesized": True,
     }
     data["road_morphology"] = road_morphology
+    data["road_morphology"].update({
+        "physical_primary_road_width_cells": 7,
+        "physical_central_highway_width_cells": 11,
+        "lower_density_block_count": len(buildings),
+        "geometry_authority": "v120_wide_roads_and_central_highway",
+    })
     return rows, buildings
 
 
@@ -296,6 +329,34 @@ def _generated_ground_objects(rows: list[list[str]], buildings: list[dict]) -> l
     return objects
 
 
+def _wide_road_markings() -> list[dict]:
+    """Sparse city-block markings registered to the new physical road centers."""
+    objects: list[dict] = []
+    for center in (11, 29, 44, 58):
+        for gy in range(1, 48, 2):
+            objects.append({
+                "asset": "mark_yellow_repeating_single", "gx": center, "gy": gy,
+                "width_px": 18, "height_px": 150, "rotation": 0,
+                "street_marking": "dashed_center_line_vertical",
+            })
+    for center in (9, 24, 39):
+        for gx in range(1, 64, 2):
+            objects.append({
+                "asset": "mark_yellow_repeating_single", "gx": gx, "gy": center,
+                "width_px": 18, "height_px": 150, "rotation": 90,
+                "street_marking": "dashed_center_line_horizontal",
+            })
+    for cx in (11, 29, 44, 58):
+        for cy in (9, 24, 39):
+            for stripe in range(-2, 3):
+                objects.append({
+                    "asset": "mark_white_crossing_piece", "gx": cx + stripe, "gy": cy,
+                    "width_px": 38, "height_px": 150, "rotation": 0,
+                    "street_marking": "zebra_highway_crossing",
+                })
+    return objects
+
+
 def _fallback_roof_data(ground_data: dict, rows: list[list[str]], buildings: list[dict]) -> dict:
     roof = [[tile_id if tile_id.startswith("bld_") else "void" for tile_id in row] for row in rows]
     roof_objects = []
@@ -380,7 +441,13 @@ def load_ground_grid() -> GridWorld:
 
     if GRID_GENERATED_OBJECTS_PATH.is_file():
         generated = json.loads(GRID_GENERATED_OBJECTS_PATH.read_text(encoding="utf-8"))
-        ground_generated = list(generated.get("objects", []))
+        valid_building_ids = {str(building["building_id"]) for building in buildings}
+        ground_generated = [
+            obj for obj in generated.get("objects", [])
+            if not obj.get("street_marking")
+            and (not obj.get("building_id") or str(obj.get("building_id")) in valid_building_ids)
+        ]
+        ground_generated.extend(_wide_road_markings())
         ground_generated += [_east_district_copy(obj, BASE_GRID_WIDTH) for obj in ground_generated]
     else:
         ground_generated = _generated_ground_objects(ground_rows, buildings)

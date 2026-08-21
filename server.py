@@ -388,6 +388,7 @@ class TrafficVehicle:
     last_progress_x: float = 0.0
     last_progress_y: float = 0.0
     home_fraction: float = 0.0
+    horn_until: float = 0.0
 
     def public_dict(self) -> dict:
         return {
@@ -407,6 +408,7 @@ class TrafficVehicle:
             "passengers": len(self.passenger_ids),
             "passenger_capacity": PASSENGER_CAPACITY,
             "parked": bool(self.parked),
+            "horn": time.monotonic() < self.horn_until,
         }
 
 
@@ -901,6 +903,18 @@ def _traffic_should_yield_to_player(car: TrafficVehicle, target: tuple[float, fl
     return False
 
 
+def _traffic_should_yield_to_pedestrian(car: TrafficVehicle, heading: float) -> bool:
+    """Brake for a pedestrian ahead and expose a short horn signal."""
+    hx, hy = math.cos(heading), math.sin(heading)
+    for npc in npc_pedestrians:
+        rx, ry = npc.x - car.x, npc.y - car.y
+        forward = rx * hx + ry * hy
+        lateral = abs(rx * hy - ry * hx)
+        if 0.0 < forward < 145.0 and lateral < car.collision_width * 0.5 + 24.0:
+            return True
+    return False
+
+
 def _traffic_grid(vehicles: list[TrafficVehicle]) -> dict[tuple[int, int], list[TrafficVehicle]]:
     """Cheap spatial hash used for car following and collision avoidance."""
     grid: dict[tuple[int, int], list[TrafficVehicle]] = {}
@@ -1157,6 +1171,9 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
 
         if _traffic_should_yield_to_player(car, target, sessions):
             desired = 0.0
+        if _traffic_should_yield_to_pedestrian(car, heading):
+            desired = 0.0
+            car.horn_until = max(car.horn_until, time.monotonic() + 0.35)
 
         accel = 95.0 if desired > car.speed else TRAFFIC_BRAKE_DECEL
         speed = min(desired, car.speed + accel * dt) if car.speed < desired else max(desired, car.speed - accel * dt)
@@ -1528,7 +1545,26 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
                 blocked_ahead = True
                 break
         if blocked_ahead:
-            npc.pause_timer = 0.18 + (sum(ord(c) for c in npc.npc_id) % 7) * 0.025
+            identity = sum(ord(c) for c in npc.npc_id)
+            sx, sy = -uy, ux
+            allow_road = npc.kind == "pedestrian" and identity % 7 == 0
+            moved_aside = False
+            neighbours = nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1)
+            for direction in ((1.0, -1.0) if identity % 2 == 0 else (-1.0, 1.0)):
+                nx = npc.x + ux * min(8.0, npc.speed * step_dt) + sx * personal_space * 0.9 * direction
+                ny = npc.y + uy * min(8.0, npc.speed * step_dt) + sy * personal_space * 0.9 * direction
+                surface = GRID_WORLD.collision_at("ground", nx, ny) if GRID_WORLD is not None else "sidewalk"
+                allowed = {"walk", "sidewalk", "road"} if allow_road else {"walk", "sidewalk"}
+                if surface not in allowed:
+                    continue
+                if any(other is not npc and (other.x - nx) ** 2 + (other.y - ny) ** 2 < personal_space ** 2
+                       for other in neighbours):
+                    continue
+                npc.x, npc.y, npc.aim = nx, ny, math.atan2(uy, ux)
+                moved_aside = True
+                break
+            if not moved_aside:
+                npc.pause_timer = 0.10 + (identity % 5) * 0.02
             continue
 
         step = min(dist, npc.speed * step_dt)

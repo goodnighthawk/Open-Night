@@ -1,6 +1,6 @@
 {
   "building_adjacent_pair_count": 0,
-  "building_count": 50,
+  "building_count": 28,
   "building_overlap_cell_count": 0,
   "edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
   "edge_alpha_rows": [
@@ -11,18 +11,8 @@
     },
     {
       "area_px": 65536,
-      "tile_id": "bld_blue_bottom_left_inner",
-      "transparent_or_translucent_px": 10971
-    },
-    {
-      "area_px": 65536,
       "tile_id": "bld_blue_bottom_left_outer",
       "transparent_or_translucent_px": 37246
-    },
-    {
-      "area_px": 65536,
-      "tile_id": "bld_blue_bottom_right_inner",
-      "transparent_or_translucent_px": 10969
     },
     {
       "area_px": 65536,
@@ -86,18 +76,8 @@
     },
     {
       "area_px": 65536,
-      "tile_id": "bld_dark_green_top_left_inner",
-      "transparent_or_translucent_px": 10650
-    },
-    {
-      "area_px": 65536,
       "tile_id": "bld_dark_green_top_left_outer",
       "transparent_or_translucent_px": 37113
-    },
-    {
-      "area_px": 65536,
-      "tile_id": "bld_dark_green_top_right_inner",
-      "transparent_or_translucent_px": 10636
     },
     {
       "area_px": 65536,
@@ -111,18 +91,8 @@
     },
     {
       "area_px": 65536,
-      "tile_id": "bld_green_bottom_left_inner",
-      "transparent_or_translucent_px": 10351
-    },
-    {
-      "area_px": 65536,
       "tile_id": "bld_green_bottom_left_outer",
       "transparent_or_translucent_px": 36955
-    },
-    {
-      "area_px": 65536,
-      "tile_id": "bld_green_bottom_right_inner",
-      "transparent_or_translucent_px": 10351
     },
     {
       "area_px": 65536,
@@ -186,18 +156,8 @@
     },
     {
       "area_px": 65536,
-      "tile_id": "bld_red_top_left_inner",
-      "transparent_or_translucent_px": 10896
-    },
-    {
-      "area_px": 65536,
       "tile_id": "bld_red_top_left_outer",
       "transparent_or_translucent_px": 37287
-    },
-    {
-      "area_px": 65536,
-      "tile_id": "bld_red_top_right_inner",
-      "transparent_or_translucent_px": 10895
     },
     {
       "area_px": 65536,
@@ -211,18 +171,8 @@
     },
     {
       "area_px": 65536,
-      "tile_id": "bld_yellow_bottom_left_inner",
-      "transparent_or_translucent_px": 10431
-    },
-    {
-      "area_px": 65536,
       "tile_id": "bld_yellow_bottom_left_outer",
       "transparent_or_translucent_px": 36952
-    },
-    {
-      "area_px": 65536,
-      "tile_id": "bld_yellow_bottom_right_inner",
-      "transparent_or_translucent_px": 10351
     },
     {
       "area_px": 65536,
@@ -255,13 +205,13 @@
       "transparent_or_translucent_px": 37076
     }
   ],
-  "edge_tile_count": 50,
-  "edge_tiles_with_preserved_alpha": 50,
+  "edge_tile_count": 40,
+  "edge_tiles_with_preserved_alpha": 40,
   "errors": [],
   "ground_roof_registration_mismatch_count": 0,
   "minimum_building_setback_cells": 1,
-  "minimum_edge_transparent_or_translucent_px": 10351,
+  "minimum_edge_transparent_or_translucent_px": 23658,
   "proof": "canonical_v100_joint_building_setback_and_alpha",
-  "shifted_building_count": 13,
+  "shifted_building_count": 3,
   "theme_ownership_mismatch_count": 0
 }

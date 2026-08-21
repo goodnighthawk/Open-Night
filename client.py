@@ -1072,6 +1072,7 @@ class RemoteVehicle:
         self.passengers = int(data.get("passengers", 0))
         self.passenger_capacity = int(data.get("passenger_capacity", 3))
         self.parked = bool(data.get("parked", False))
+        self.horn = bool(data.get("horn", False))
 
     def update(self, data: dict) -> None:
         old_x, old_y = self.target_x, self.target_y
@@ -1103,6 +1104,7 @@ class RemoteVehicle:
         self.passengers = int(data.get("passengers", self.passengers))
         self.passenger_capacity = int(data.get("passenger_capacity", self.passenger_capacity))
         self.parked = bool(data.get("parked", self.parked))
+        self.horn = bool(data.get("horn", self.horn))
 
     def smooth(self, dt: float) -> None:
         t = 1.0 - math.exp(-12.0 * dt)
@@ -2659,6 +2661,9 @@ class Game:
         sx, sy = self.world_to_screen(car.render_x, car.render_y)
         target_len = int(max(62, car.render_length * 1.38))
         if draw_car(self.screen, (sx, sy), car.angle, car.sprite_index, target_length=target_len, speed=car.speed):
+            if car.horn:
+                beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
+                self.screen.blit(beep, beep.get_rect(midbottom=(sx, sy - 38)))
             return
         length = max(24, int(car.collision_length))
         width = max(14, int(car.collision_width))
@@ -2828,6 +2833,9 @@ class Game:
                 continue
             if sx < -90 or sy < -90 or sx > w + 90 or sy > h + 90:
                 continue
+            appearance = normalize_character({"preset": 2 if label == "SUPPLIER" else 4})
+            pygame.draw.circle(self.screen, color, (sx, sy), 28, width=3)
+            draw_character(self.screen, (sx, sy), 0.0, appearance, scale=2, moving=False, anim_time=0.0)
             title = self.small_font.render(label, True, color)
             sub = self.tiny_font.render(sublabel, True, TEXT_COLOR)
             title_rect = title.get_rect(center=(sx, sy - 52))

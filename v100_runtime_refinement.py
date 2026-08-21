@@ -294,15 +294,19 @@ def apply_world_refinement(world):
             continue
         for divider_index, displacement in enumerate((-128, -64, 64, 128), start=1):
             divider = dict(item)
-            divider["asset"] = "mark_white_crossing_piece"
-            divider["width_px"] = 10
+            divider["asset"] = "mark_white_repeating_single"
+            divider["width_px"] = 7
+            divider["height_px"] = 64
             divider["street_marking"] = f"six_lane_divider_{'vertical' if marking.endswith('vertical') else 'horizontal'}"
             divider["lane_divider_index"] = divider_index
             divider["six_lane_network"] = True
             if marking.endswith("vertical"):
-                divider["offset_x_px"] = world.cell_px // 2 + displacement - 5
+                divider["offset_x_px"] = world.cell_px // 2 + displacement - 3
+                divider["offset_y_px"] = (world.cell_px - divider["height_px"]) // 2
             else:
-                divider["offset_y_px"] = world.cell_px // 2 + displacement - 5
+                divider["rotation"] = 90
+                divider["offset_x_px"] = (world.cell_px - divider["height_px"]) // 2
+                divider["offset_y_px"] = world.cell_px // 2 + displacement - 3
             lane_dividers.append(divider)
     world.objects.extend(lane_dividers)
     world.data.setdefault("runtime_refinement", {})["six_lane_divider_count"] = len(lane_dividers)
