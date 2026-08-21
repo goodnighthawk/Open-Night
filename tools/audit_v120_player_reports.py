@@ -52,13 +52,19 @@ def main() -> None:
         cy = int(row.get("offset_y_px", 0)) + height / 2.0
         assert abs(cx - world.cell_px / 2.0) <= 1.0 and abs(cy - world.cell_px / 2.0) <= 1.0, row
     lane_dividers = [row for row in world.objects if str(row.get("street_marking", "")).startswith("six_lane_divider_")]
-    assert len(lane_dividers) == len(centerlines) * 4, "primary roads do not expose four dividers / six lanes"
-    assert len(centerlines) == 384 and len(lane_dividers) == 1536, "doubled wide-road markings are incomplete"
+    normal_dividers = [row for row in lane_dividers if not row.get("highway_lane_network")]
+    highway_dividers = [row for row in lane_dividers if row.get("highway_lane_network")]
+    normal_centerlines = [row for row in centerlines if not (str(row.get("street_marking", "")).endswith("horizontal") and int(row.get("gy", -1)) == 24)]
+    highway_centerlines = [row for row in centerlines if str(row.get("street_marking", "")).endswith("horizontal") and int(row.get("gy", -1)) == 24]
+    assert len(normal_dividers) == len(normal_centerlines) * 4, "primary six-lane dividers are incomplete"
+    assert len(highway_dividers) == len(highway_centerlines) * 6, "eight-lane highway dividers are incomplete"
+    assert len(centerlines) == 384 and len(lane_dividers) == 1664, "scaled wide-road markings are incomplete"
     morphology = world.data.get("road_morphology", {})
     assert morphology.get("physical_primary_road_width_cells") == 7, "primary roads are not physically wide"
     assert morphology.get("physical_central_highway_width_cells") == 11, "central highway is not physically wider"
     assert len(world.data.get("building_synthesis", {}).get("buildings", [])) == 28, "building density was not reduced"
     assert all(row.get("asset") == "mark_white_repeating_single" for row in lane_dividers), "lane lines do not use city-block art"
+    assert sum(bool(row.get("highway_lane_network")) for row in lane_dividers) == 384, "highway dividers were not rescaled"
     assert world.width * world.height == 6144 and world.data.get("playable_area_multiplier") == 2, "playable map area is not exact 2x"
     routes = v110_grid_population._build_traffic_routes(world)
     lane_pairs = {(row.get("lane_direction"), int(row.get("lane_index", 0))) for row in routes}
@@ -87,6 +93,7 @@ def main() -> None:
     assert 'self.pause_page == "controls"' in client_source
     assert 'draw_character(self.screen, (sx, sy)' in client_source
     assert 'pygame.draw.circle(self.screen, color, (sx, sy), 28' in client_source, "supplier NPC lacks final-space visibility halo"
+    assert 'car.render_length * 1.65' in client_source and 'npc_scale = max(2' in client_source
     server_source = (ROOT / "server.py").read_text(encoding="utf-8")
     assert "_traffic_should_yield_to_pedestrian" in server_source and '"horn": time.monotonic() < self.horn_until' in server_source
     assert "moved_aside" in server_source and 'allow_road = npc.kind == "pedestrian"' in server_source

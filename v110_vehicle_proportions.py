@@ -23,9 +23,9 @@ RENDER_META_SCALE = 3.00
 # 2.65 value fell to 66% after the visual enlargement and failed the runtime gate.
 # The player fleet's shortest compact body is 38/44 of its authored render
 # length, so 3.75 keeps even that worst case above the 78% runtime contract.
-COLLISION_LENGTH_META_SCALE = 3.75
-COLLISION_WIDTH_META_SCALE = 2.90
-CLIENT_RENDER_MULTIPLIER = 1.38
+COLLISION_LENGTH_META_SCALE = 4.00
+COLLISION_WIDTH_META_SCALE = 3.35
+CLIENT_RENDER_MULTIPLIER = 1.65
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
 MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 3.25
 MIN_EXPECTED_SEDAN_LENGTH_PX = GROUND_PLAYER_TARGET_HEIGHT_PX * MIN_SEDAN_TO_PLAYER_LENGTH_RATIO
@@ -42,7 +42,7 @@ def scaled_meta(meta: dict) -> dict:
 
 def expected_client_render_length(server_render_length: float) -> float:
     """Mirror client.draw_vehicle's current target-length contract for audits."""
-    return max(62.0, float(server_render_length) * CLIENT_RENDER_MULTIPLIER)
+    return max(74.0, float(server_render_length) * CLIENT_RENDER_MULTIPLIER)
 
 
 def expected_sedan_to_player_ratio(server_render_length: float, player_height_px: float = GROUND_PLAYER_TARGET_HEIGHT_PX) -> float:

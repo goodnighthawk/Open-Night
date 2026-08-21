@@ -346,14 +346,6 @@ def _wide_road_markings() -> list[dict]:
                 "width_px": 18, "height_px": 150, "rotation": 90,
                 "street_marking": "dashed_center_line_horizontal",
             })
-    for cx in (11, 29, 44, 58):
-        for cy in (9, 24, 39):
-            for stripe in range(-2, 3):
-                objects.append({
-                    "asset": "mark_white_crossing_piece", "gx": cx + stripe, "gy": cy,
-                    "width_px": 38, "height_px": 150, "rotation": 0,
-                    "street_marking": "zebra_highway_crossing",
-                })
     return objects
 
 

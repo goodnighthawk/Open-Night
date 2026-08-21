@@ -79,7 +79,7 @@ def _segment_surface(world, a: tuple[float, float], b: tuple[float, float], coll
 def _build_traffic_routes(world) -> list[dict]:
     rows, cols = _major_road_centers(world)
     routes: list[dict] = []
-    lane_offsets = (world.cell_px * 0.25, world.cell_px * 0.70, world.cell_px * 1.10)
+    lane_offsets = (world.cell_px * 0.58, world.cell_px * 1.75, world.cell_px * 2.92)
     turn_radius = max(16.0, world.cell_px * 0.17)
     speed_limit = max(80.0, world.cell_px * 0.86)
     for row_index in range(len(rows) - 1):

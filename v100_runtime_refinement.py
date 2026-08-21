@@ -292,7 +292,9 @@ def apply_world_refinement(world):
         marking = str(item.get("street_marking", ""))
         if marking not in {"dashed_center_line_vertical", "dashed_center_line_horizontal"}:
             continue
-        for divider_index, displacement in enumerate((-128, -64, 64, 128), start=1):
+        highway = marking.endswith("horizontal") and int(item.get("gy", -1)) == 24
+        displacements = (-528, -352, -176, 176, 352, 528) if highway else (-299, -149, 149, 299)
+        for divider_index, displacement in enumerate(displacements, start=1):
             divider = dict(item)
             divider["asset"] = "mark_white_repeating_single"
             divider["width_px"] = 7
@@ -300,6 +302,7 @@ def apply_world_refinement(world):
             divider["street_marking"] = f"six_lane_divider_{'vertical' if marking.endswith('vertical') else 'horizontal'}"
             divider["lane_divider_index"] = divider_index
             divider["six_lane_network"] = True
+            divider["highway_lane_network"] = highway
             if marking.endswith("vertical"):
                 divider["offset_x_px"] = world.cell_px // 2 + displacement - 3
                 divider["offset_y_px"] = (world.cell_px - divider["height_px"]) // 2

@@ -261,48 +261,48 @@ def _add_sidewalk_aprons(world, horizontal: list[RoadBand], vertical: list[RoadB
 
 
 def _add_midblock_zebra_art(world, crossings: list[Crosswalk]) -> int:
-    """Render new mid-block zebras with the existing white crossing-piece sprite."""
+    """Render full-width zebras for every widened-road crossing."""
     if "mark_white_crossing_piece" not in world.catalog.objects:
         return 0
     scale = float(world.cell_px) / 256.0
-    stripe_width = max(8, int(round(44 * scale)))
-    stripe_length = max(24, int(round(176 * scale)))
+    stripe_width = max(10, int(round(world.cell_px * 0.20)))
+    stripe_length = max(34, int(round(176 * scale)))
     near = int(round(40 * scale))
-    first = int(round(75 * scale))
-    spacing = max(stripe_width + 3, int(round(82 * scale)))
     added = 0
     for crossing in crossings:
-        if crossing.kind != "midblock":
-            continue
+        road_cells = crossing.road_end - crossing.road_start + 1
+        stripe_count = max(8, road_cells * 2)
+        span = road_cells * world.cell_px
+        spacing = span / stripe_count
         if crossing.axis == "x":
-            for stripe in range(8):
+            for stripe in range(stripe_count):
                 world.objects.append({
                     "asset": "mark_white_crossing_piece",
                     "gx": crossing.road_start,
                     "gy": crossing.fixed_cell,
-                    "offset_x_px": first + stripe * spacing,
+                    "offset_x_px": int(round((stripe + 0.5) * spacing - stripe_width * 0.5)),
                     "offset_y_px": near,
                     "width_px": stripe_width,
                     "height_px": stripe_length,
                     "rotation": 0,
-                    "street_marking": "zebra_midblock",
+                    "street_marking": f"zebra_{crossing.kind}",
                     "zebra_stripe_index": stripe,
                     "crosswalk_id": crossing.crosswalk_id,
                     "composition_pass": "v110_pedestrian_connectivity",
                 })
                 added += 1
         else:
-            for stripe in range(8):
+            for stripe in range(stripe_count):
                 world.objects.append({
                     "asset": "mark_white_crossing_piece",
                     "gx": crossing.fixed_cell,
                     "gy": crossing.road_start,
                     "offset_x_px": near,
-                    "offset_y_px": first + stripe * spacing,
+                    "offset_y_px": int(round((stripe + 0.5) * spacing - stripe_width * 0.5)),
                     "width_px": stripe_width,
                     "height_px": stripe_length,
                     "rotation": 90,
-                    "street_marking": "zebra_midblock",
+                    "street_marking": f"zebra_{crossing.kind}",
                     "zebra_stripe_index": stripe,
                     "crosswalk_id": crossing.crosswalk_id,
                     "composition_pass": "v110_pedestrian_connectivity",

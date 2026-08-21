@@ -84,14 +84,18 @@ def _install_grid_traffic_signals(map_config: dict, world) -> None:
     except Exception:
         return
     signals = []
-    margin = max(18.0, world.cell_px * 0.22)
     for row_index, row in enumerate(horizontal):
         for col_index, col in enumerate(vertical):
-            cx, cy = world.cell_center((col.start + col.end) // 2, (row.start + row.end) // 2)
-            for arm, dx, dy, phase in (("nw", -margin, -margin, 0), ("se", margin, margin, 0),
-                                       ("ne", margin, -margin, 1), ("sw", -margin, margin, 1)):
+            corners = (
+                ("nw", col.start - 1, row.start - 1, 0),
+                ("se", col.end + 1, row.end + 1, 0),
+                ("ne", col.end + 1, row.start - 1, 1),
+                ("sw", col.start - 1, row.end + 1, 1),
+            )
+            for arm, gx, gy, phase in corners:
+                cx, cy = world.cell_center(gx, gy)
                 signals.append({"id": f"grid_signal_{row_index:02d}_{col_index:02d}_{arm}",
-                                "pos": [round(cx + dx, 3), round(cy + dy, 3)],
+                                "pos": [round(cx, 3), round(cy, 3)],
                                 "phase": phase, "orientation": arm, "grid_native": True})
     map_config["traffic_signals"] = signals
     map_config.setdefault("runtime", {})["grid_traffic_signal_count"] = len(signals)

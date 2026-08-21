@@ -2154,8 +2154,8 @@ class Game:
         # `signal["pos"]` is the authored fixture anchor.  Keep the live
         # synchronized lamp on that exact anchor; the old (+22, -22) offset
         # visually detached the red/green state from its traffic-signal fixture.
-        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 8)
-        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 5)
+        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 16)
+        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 10)
 
     def nearest_interior(self, max_distance: float = 105.0) -> dict | None:
         local = self.players.get(self.local_id or "")
@@ -2659,7 +2659,7 @@ class Game:
 
     def draw_vehicle(self, car: RemoteVehicle) -> None:
         sx, sy = self.world_to_screen(car.render_x, car.render_y)
-        target_len = int(max(62, car.render_length * 1.38))
+        target_len = int(max(74, car.render_length * 1.65))
         if draw_car(self.screen, (sx, sy), car.angle, car.sprite_index, target_length=target_len, speed=car.speed):
             if car.horn:
                 beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
@@ -2721,10 +2721,10 @@ class Game:
             gait = 2 if moving and int((time.monotonic()-npc.anim_epoch)*8) % 2 else 0
             for lx in (10, 22):
                 pygame.draw.line(sprite, (65, 47, 34), (lx,15), (lx-gait,20), 2)
-            rotated = pygame.transform.rotozoom(sprite, -math.degrees(npc.aim), 1.0)
+            rotated = pygame.transform.rotozoom(sprite, -math.degrees(npc.aim), 1.65)
             self.screen.blit(rotated, rotated.get_rect(center=(sx, sy)))
             return
-        npc_scale = max(1, int(self.settings.get("render", {}).get("npc_scale", 2)))
+        npc_scale = max(2, int(self.settings.get("render", {}).get("npc_scale", 2)))
         draw_character(
             self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,
             moving=time.monotonic() < npc.moving_until,
@@ -2835,7 +2835,7 @@ class Game:
                 continue
             appearance = normalize_character({"preset": 2 if label == "SUPPLIER" else 4})
             pygame.draw.circle(self.screen, color, (sx, sy), 28, width=3)
-            draw_character(self.screen, (sx, sy), 0.0, appearance, scale=2, moving=False, anim_time=0.0)
+            draw_character(self.screen, (sx, sy), 0.0, appearance, scale=3, moving=False, anim_time=0.0)
             title = self.small_font.render(label, True, color)
             sub = self.tiny_font.render(sublabel, True, TEXT_COLOR)
             title_rect = title.get_rect(center=(sx, sy - 52))
@@ -2848,7 +2848,7 @@ class Game:
         sx, sy = self.world_to_screen(player.render_x, player.render_y)
         if getattr(player, "in_vehicle", False) or getattr(player, "interior_id", ""):
             return
-        player_scale = max(1, int(self.settings.get("render", {}).get("player_scale", 2)))
+        player_scale = max(2, int(self.settings.get("render", {}).get("player_scale", 2)))
         moving = time.monotonic() < player.moving_until
 
         # Body orientation is independent of mouse aim. While moving it follows
@@ -2945,7 +2945,7 @@ class Game:
             else:
                 px, py, row = player.render_x, player.render_y, 0
             sx, sy = self._world_point_to_display(px, py)
-            player_scale = max(1, int(self.settings.get("render", {}).get("player_scale", 2)))
+            player_scale = max(2, int(self.settings.get("render", {}).get("player_scale", 2)))
             yoff = int((19 + 15 * player_scale) * max(0.75, float(self.camera_zoom)))
             if in_vehicle:
                 yoff += row * max(15, self.small_font.get_linesize())
