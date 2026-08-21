@@ -266,9 +266,18 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
                 continue
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": cx, "gy": y,
+                "offset_x_px": 96, "offset_y_px": 33,
                 "width_px": 64, "height_px": 190, "rotation": 0,
                 "street_marking": "dashed_center_line_vertical",
             })
+            for divider_index, displacement in enumerate((-128, -64, 64, 128), start=1):
+                objects.append({
+                    "asset": "mark_white_crossing_piece", "gx": cx, "gy": y,
+                    "offset_x_px": 128 + displacement - 5, "offset_y_px": 33,
+                    "width_px": 10, "height_px": 190, "rotation": 0,
+                    "street_marking": "six_lane_divider_vertical",
+                    "lane_divider_index": divider_index, "six_lane_network": True,
+                })
 
     for y0, y1 in horizontal:
         cy = (y0 + y1) // 2
@@ -280,9 +289,18 @@ def _street_markings(rows: list[list[str]]) -> list[dict]:
                 continue
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": x, "gy": cy,
+                "offset_x_px": 33, "offset_y_px": 96,
                 "width_px": 64, "height_px": 190, "rotation": 90,
                 "street_marking": "dashed_center_line_horizontal",
             })
+            for divider_index, displacement in enumerate((-128, -64, 64, 128), start=1):
+                objects.append({
+                    "asset": "mark_white_crossing_piece", "gx": x, "gy": cy,
+                    "offset_x_px": 33, "offset_y_px": 128 + displacement - 5,
+                    "width_px": 10, "height_px": 190, "rotation": 90,
+                    "street_marking": "six_lane_divider_horizontal",
+                    "lane_divider_index": divider_index, "six_lane_network": True,
+                })
 
     def stripe_offsets(span_px: int) -> list[int]:
         """Return centered stripe starts across a road-width span."""

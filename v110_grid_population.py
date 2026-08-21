@@ -12,9 +12,9 @@ from collections import deque
 import math
 from typing import Iterable
 
-TRAFFIC_ROUTE_LIMIT = 24
+TRAFFIC_ROUTE_LIMIT = 84
 PEDESTRIAN_ROUTE_LIMIT = 18
-PEDESTRIAN_TARGET = 108
+PEDESTRIAN_TARGET = 216
 
 
 def _group_runs(values: Iterable[int]) -> list[list[int]]:
@@ -79,7 +79,7 @@ def _segment_surface(world, a: tuple[float, float], b: tuple[float, float], coll
 def _build_traffic_routes(world) -> list[dict]:
     rows, cols = _major_road_centers(world)
     routes: list[dict] = []
-    lane_offset = max(14.0, world.cell_px * 0.18)
+    lane_offsets = (world.cell_px * 0.25, world.cell_px * 0.70, world.cell_px * 1.10)
     turn_radius = max(16.0, world.cell_px * 0.17)
     speed_limit = max(80.0, world.cell_px * 0.86)
     for row_index in range(len(rows) - 1):
@@ -90,16 +90,21 @@ def _build_traffic_routes(world) -> list[dict]:
             points = [world.cell_center(gx, gy) for gx, gy in cells]
             if not all(_segment_surface(world, points[i], points[(i + 1) % 4], "road") for i in range(4)):
                 continue
-            routes.append({
-                "id": f"grid_traffic_{row_index:02d}_{col_index:02d}",
-                "waypoints": [[round(x, 3), round(y, 3)] for x, y in points],
-                "speed_limit": speed_limit,
-                "lane_offset": lane_offset,
-                "turn_radius": turn_radius,
-                "grid_native": True,
-            })
-            if len(routes) >= TRAFFIC_ROUTE_LIMIT:
-                return routes
+            for direction_name, directed_points in (("cw", points), ("ccw", list(reversed(points)))):
+                for lane_index, lane_offset in enumerate(lane_offsets, start=1):
+                    routes.append({
+                        "id": f"grid_traffic_{row_index:02d}_{col_index:02d}_{direction_name}_lane{lane_index}",
+                        "waypoints": [[round(x, 3), round(y, 3)] for x, y in directed_points],
+                        "speed_limit": speed_limit,
+                        "lane_offset": lane_offset,
+                        "turn_radius": turn_radius,
+                        "grid_native": True,
+                        "six_lane_network": True,
+                        "lane_index": lane_index,
+                        "lane_direction": direction_name,
+                    })
+                    if len(routes) >= TRAFFIC_ROUTE_LIMIT:
+                        return routes
     return routes
 
 

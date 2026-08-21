@@ -2808,8 +2808,9 @@ class Game:
         sx, sy = self.world_to_screen(*pos)
         appearance = normalize_character({"preset": 2 if label == "SUPPLIER" else 4})
         draw_character(self.screen, (sx, sy), 0.0, appearance, scale=2, moving=False, anim_time=0.0)
-        pygame.draw.circle(self.screen, color, (sx, sy), 34, width=4)
-        pygame.draw.circle(self.screen, color, (sx, sy + 25), 5)
+        # A compact highlight identifies the stationary person without creating
+        # a floating gameplay area across the road surface.
+        pygame.draw.ellipse(self.screen, color, pygame.Rect(sx - 17, sy + 20, 34, 12), width=3)
 
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""

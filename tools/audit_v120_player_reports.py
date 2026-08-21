@@ -23,6 +23,7 @@ from grid_renderer import GridRenderer
 from grid_runtime import load_ground_grid
 import v110_grid_population
 import v110_job_locations
+import v110_pedestrian_connectivity
 
 
 def main() -> None:
@@ -34,10 +35,30 @@ def main() -> None:
     signals = config.get("traffic_signals", [])
     assert len(signals) >= 24, "GridWorld traffic signals were not restored"
     assert {int(row["phase"]) for row in signals} == {0, 1}
+    for key in v110_job_locations.JOB_KEYS:
+        assert world.collision_at("ground", *config[key]) in {"walk", "sidewalk"}, f"{key} is still on the road"
     roof_decals = [row for row in world.objects if row.get("composition_pass") == "roof_palette_v1"]
     assert roof_decals and all(int(row.get("width_px", 0)) >= 64 and int(row.get("height_px", 0)) >= 64
-                               and row.get("placement_policy") == "centered_inboard_roof_cell_v12"
+                               and str(row.get("placement_policy", "")).startswith("centered_")
+                               and int(row.get("offset_x_px", 0)) >= 12 and int(row.get("offset_y_px", 0)) >= 12
                                for row in roof_decals), "roof decals are not large, centered, and inboard"
+    centerlines = [row for row in world.objects if str(row.get("street_marking", "")).startswith("dashed_center_line_")]
+    assert centerlines and all(row.get("registration_policy") == "road_cell_center_v12" for row in centerlines)
+    for row in centerlines:
+        width, height = int(row["width_px"]), int(row["height_px"])
+        if int(row.get("rotation", 0)) == 90:
+            width, height = height, width
+        cx = int(row.get("offset_x_px", 0)) + width / 2.0
+        cy = int(row.get("offset_y_px", 0)) + height / 2.0
+        assert abs(cx - world.cell_px / 2.0) <= 1.0 and abs(cy - world.cell_px / 2.0) <= 1.0, row
+    lane_dividers = [row for row in world.objects if str(row.get("street_marking", "")).startswith("six_lane_divider_")]
+    assert len(lane_dividers) == len(centerlines) * 4, "primary roads do not expose four dividers / six lanes"
+    assert len(centerlines) == 232 and len(lane_dividers) == 928, "doubled district road markings are incomplete"
+    assert world.width * world.height == 6144 and world.data.get("playable_area_multiplier") == 2, "playable map area is not exact 2x"
+    routes = v110_grid_population._build_traffic_routes(world)
+    lane_pairs = {(row.get("lane_direction"), int(row.get("lane_index", 0))) for row in routes}
+    assert lane_pairs == {(direction, lane) for direction in ("cw", "ccw") for lane in (1, 2, 3)}
+    assert v110_pedestrian_connectivity.SIDEWALK_APRON_FRACTION >= 0.36, "sidewalk apron area was not doubled"
 
     pavement = next((gx, gy) for gy in range(world.height) for gx in range(world.width)
                     if world.collision_at("ground", *world.cell_center(gx, gy)) in {"walk", "sidewalk"})
@@ -61,7 +82,7 @@ def main() -> None:
     assert 'self.pause_page == "controls"' in client_source
     assert 'draw_character(self.screen, (sx, sy)' in client_source
     assert "Install: %CD%" in updater_source and "Commit: !LOCAL_SHA!" in updater_source
-    print(f"V120_PLAYER_REPORTS_OK signals={len(signals)} roof_decals={len(roof_decals)} sidewalk_drive=yes job_npcs=yes controls_tab=yes frames_removed=yes")
+    print(f"V120_PLAYER_REPORTS_OK signals={len(signals)} roof_decals={len(roof_decals)} centerlines={len(centerlines)} lane_dividers={len(lane_dividers)} sidewalk_apron={v110_pedestrian_connectivity.SIDEWALK_APRON_FRACTION:.2f} sidewalk_drive=yes job_npcs=yes controls_tab=yes frames_removed=yes")
 
 
 if __name__ == "__main__":
