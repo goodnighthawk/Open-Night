@@ -69,6 +69,7 @@ from gameplay.settings import load_settings, set_setting_value, CONFIG_PATH as G
 from gameplay.camera_controller import LookAheadCamera
 from gameplay.input_controller import movement_vector
 from gameplay.issue_reporter import save_issue_report
+from gameplay.audio import GameAudio
 from portable_paths import describe as shared_data_description
 from portable_map_runtime import cached_map_hashes, install_transfer_bundle, load_cached_map
 from mapfiles.grid import chunk_label
@@ -1246,6 +1247,7 @@ class Game:
         self.drag_source: int | None = None
         self.account_masked = ""
         self.settings = load_settings()
+        self.audio = GameAudio()
         self.camera_controller = LookAheadCamera(self.settings.get("camera", {}))
         self.pause_menu_open = False
         self.pause_page = "main"
@@ -3665,6 +3667,7 @@ class Game:
                     if event.type == pygame.QUIT:
                         running = False
                     elif event.type == pygame.KEYDOWN:
+                        self.audio.ui_key(event.key)
                         if self.handle_issue_report_key(event):
                             continue
                         if self.handle_chat_key(event):
@@ -3830,6 +3833,7 @@ class Game:
                     bike.smooth(dt)
                 for npc in self.npcs.values():
                     npc.smooth(dt)
+                self.audio.update(self)
                 self.update_camera(dt)
                 self.send_input()
                 if self.interior.active:
