@@ -200,7 +200,7 @@ def main() -> None:
         raise RuntimeError(f"cars left authoritative road collision: {sorted(blocked_seen)[:8]}")
     if overlap_seen:
         raise RuntimeError(f"vehicle bodies overlapped during sustained run: {sorted(overlap_seen)[:8]}")
-    expected_offsets = [game.grid_world.cell_px * ratio for ratio in (0.58, 1.75, 2.92)]
+    expected_offsets = [game.grid_world.cell_px * ratio for ratio in (0.25, 0.75, 1.25)]
     if len(route_offsets) != 3 or any(abs(actual - expected) > 0.01 for actual, expected in zip(route_offsets, expected_offsets)):
         raise RuntimeError(f"six-lane separation is not exact: offsets={route_offsets}, expected={expected_offsets}")
 

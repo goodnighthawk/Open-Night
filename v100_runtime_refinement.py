@@ -170,6 +170,85 @@ def _move_fire_escapes(world, rows: list[list[str]], buildings: list[dict]) -> i
     return moved
 
 
+def _install_city_block_street_item_defs(world) -> None:
+    """Register the three transparent exports repacked from street_items.svg."""
+    from grid_world import ObjectDef
+
+    definitions = {
+        "street_item_lamp": ("street_lamp.png", 112, 423, 155),
+        "street_item_telephone_box": ("telephone_box.png", 231, 173, 150),
+        "street_item_traffic_cone": ("traffic_cone.png", 206, 292, 145),
+    }
+    for object_id, (filename, width, height, z) in definitions.items():
+        world.catalog.objects[object_id] = ObjectDef(
+            object_id=object_id,
+            image=f"city_block://street_decorations/{filename}",
+            kind="street_furniture",
+            layer="ground",
+            z=z,
+            native_width_px=width,
+            native_height_px=height,
+        )
+
+
+def _spaced_cells(candidates, occupied: set[tuple[int, int]], count: int, spacing: int) -> list[tuple[int, int]]:
+    selected: list[tuple[int, int]] = []
+    for gx, gy in candidates:
+        if (gx, gy) in occupied:
+            continue
+        if any(abs(gx - ox) + abs(gy - oy) < spacing for ox, oy in occupied | set(selected)):
+            continue
+        selected.append((gx, gy))
+        if len(selected) >= count:
+            break
+    return selected
+
+
+def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]]) -> dict[str, int]:
+    _install_city_block_street_item_defs(world)
+    sidewalks = [
+        (gx, gy) for gy in range(world.height) for gx in range(world.width)
+        if world.collision_at("ground", *world.cell_center(gx, gy)) == "sidewalk"
+    ]
+    # Spread telephone points over both procedural districts. The modular score
+    # avoids a visible scan-line pattern while remaining deterministic.
+    sidewalks.sort(key=lambda cell: ((cell[0] * 37 + cell[1] * 61) % 997, cell[1], cell[0]))
+    telephone_cells = _spaced_cells(sidewalks, occupied_lamp_cells, 16, 6)
+    occupied = occupied_lamp_cells | set(telephone_cells)
+
+    road_edges = []
+    for gy in range(world.height):
+        for gx in range(world.width):
+            if world.collision_at("ground", *world.cell_center(gx, gy)) != "road":
+                continue
+            if any(
+                0 <= gx + dx < world.width and 0 <= gy + dy < world.height
+                and world.collision_at("ground", *world.cell_center(gx + dx, gy + dy)) == "sidewalk"
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            ):
+                road_edges.append((gx, gy))
+    road_edges.sort(key=lambda cell: ((cell[0] * 53 + cell[1] * 29) % 991, cell[1], cell[0]))
+    cone_cells = _spaced_cells(road_edges, occupied, 24, 5)
+
+    for index, (gx, gy) in enumerate(telephone_cells, 1):
+        world.objects.append({
+            "asset": "street_item_telephone_box", "gx": gx, "gy": gy,
+            "offset_x_px": 64, "offset_y_px": 80, "width_px": 128, "height_px": 96,
+            "street_item_kind": "telephone_box", "street_item_index": index,
+            "composition_pass": "city_block_street_items_svg_v1", "decorative_only": True,
+            "placement_policy": "spaced_sidewalk_cell_report44",
+        })
+    for index, (gx, gy) in enumerate(cone_cells, 1):
+        world.objects.append({
+            "asset": "street_item_traffic_cone", "gx": gx, "gy": gy,
+            "offset_x_px": 100, "offset_y_px": 88, "width_px": 56, "height_px": 80,
+            "street_item_kind": "traffic_cone", "street_item_index": index,
+            "composition_pass": "city_block_street_items_svg_v1", "decorative_only": True,
+            "placement_policy": "spaced_road_edge_cell_report44",
+        })
+    return {"telephone_box_count": len(telephone_cells), "traffic_cone_count": len(cone_cells)}
+
+
 def apply_world_refinement(world):
     if getattr(world, "_v100_layout_refined", False):
         return world
@@ -190,6 +269,13 @@ def apply_world_refinement(world):
     roof_rows = world.layers.get("roof")
     old_footprints = {str(b["building_id"]): _footprint(b) for b in buildings}
     shifts = _building_shifts(rows, buildings)
+    # The report-46 road contraction creates larger pavement buffers. Retain an
+    # already-safe authored footprint when a block-centering delta would move it
+    # back into the smaller road band.
+    for building_id, cells in old_footprints.items():
+        dx, dy = shifts[building_id]
+        if any(rows[y + dy][x + dx] == "road_fill" for x, y in cells):
+            shifts[building_id] = (0, 0)
 
     shifted_footprints = {
         building_id: {(x + shifts[building_id][0], y + shifts[building_id][1]) for x, y in cells}
@@ -284,8 +370,8 @@ def apply_world_refinement(world):
             item["offset_y_px"] = (world.cell_px - width) // 2
             item["registration_policy"] = "road_cell_center_v12"
 
-    # Each three-cell primary road is 384 px before normalization: six 64 px
-    # lanes. Four white dividers plus the yellow median make all six lanes
+    # Each three-cell primary road is 768 px: six 128 px lanes. Four white
+    # dividers plus the yellow median make all six lanes
     # visible; the traffic route builder supplies three usable lanes each way.
     lane_dividers = []
     for item in list(world.objects):
@@ -293,7 +379,7 @@ def apply_world_refinement(world):
         if marking not in {"dashed_center_line_vertical", "dashed_center_line_horizontal"}:
             continue
         highway = marking.endswith("horizontal") and int(item.get("gy", -1)) == 24
-        displacements = (-528, -352, -176, 176, 352, 528) if highway else (-299, -149, 149, 299)
+        displacements = (-480, -320, -160, 160, 320, 480) if highway else (-256, -128, 128, 256)
         for divider_index, displacement in enumerate(displacements, start=1):
             divider = dict(item)
             divider["asset"] = "mark_white_repeating_single"
@@ -348,14 +434,30 @@ def apply_world_refinement(world):
             raise RuntimeError(f"streetlamp has no nearby sidewalk placement: {lighting_id}")
         _, gy, gx = min(candidates)
         item["gx"], item["gy"] = gx, gy
-        item["offset_x_px"] = 0
-        item["offset_y_px"] = 0
+        rotation = int(item.get("rotation", 0)) % 360
+        if rotation == 0:
+            offset_x, offset_y, light_x, light_y = 94, 0, 34, 36
+        elif rotation == 90:
+            offset_x, offset_y, light_x, light_y = 0, 94, 219, 34
+        elif rotation == 180:
+            offset_x, offset_y, light_x, light_y = 94, 0, 33, 219
+        else:
+            offset_x, offset_y, light_x, light_y = 0, 94, 36, 33
+        item["offset_x_px"] = offset_x
+        item["offset_y_px"] = offset_y
+        item["width_px"] = 68
+        item["height_px"] = 256
         item["placement_policy"] = "nearest_free_sidewalk_cell_v12"
         occupied_lamp_cells.add((gx, gy))
-        item["asset"] = "street_lamp_10_night"
+        _install_city_block_street_item_defs(world)
+        item["asset"] = "street_item_lamp"
         item["emits_light"] = True
+        item["light_offset_x_px"] = light_x
+        item["light_offset_y_px"] = light_y
         item["fixture_light_sync"] = "same_grid_object_record"
         lamp_count += 1
+
+    street_item_counts = _add_city_block_street_items(world, occupied_lamp_cells)
 
     if roof_rows is not None:
         ground_mask = {(x, y) for y, row in enumerate(rows) for x, tile in enumerate(row) if tile.startswith("bld_")}
@@ -373,6 +475,7 @@ def apply_world_refinement(world):
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
         "fixture_and_emitter_authority": "same_grid_object_record",
+        **street_item_counts,
     })
     world._v100_layout_refined = True
     return world

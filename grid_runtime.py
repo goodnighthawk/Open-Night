@@ -202,10 +202,13 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
 
     road_morphology = {"version": 3, "composition_pass": "wide_road_morphology_v120"}
     vertical_centers = (11, 29, 44, 58)
-    horizontal_bands = ((9, 3), (24, 5), (39, 3))
+    # Player report #46: the first v1.2 widening pass made ordinary streets
+    # seven cells across. Three 256 px cells still provide six 128 px lanes,
+    # while the five-cell centre corridor remains a visibly larger highway.
+    horizontal_bands = ((9, 1), (24, 2), (39, 1))
     for y in range(len(rows)):
         for x in range(len(rows[y])):
-            if any(abs(x - center) <= 3 for center in vertical_centers) or any(
+            if any(abs(x - center) <= 1 for center in vertical_centers) or any(
                 abs(y - center) <= radius for center, radius in horizontal_bands
             ):
                 rows[y][x] = "road_fill"
@@ -229,10 +232,10 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
     }
     data["road_morphology"] = road_morphology
     data["road_morphology"].update({
-        "physical_primary_road_width_cells": 7,
-        "physical_central_highway_width_cells": 11,
+        "physical_primary_road_width_cells": 3,
+        "physical_central_highway_width_cells": 5,
         "lower_density_block_count": len(buildings),
-        "geometry_authority": "v120_wide_roads_and_central_highway",
+        "geometry_authority": "v120_six_lane_roads_and_central_highway_report46",
     })
     return rows, buildings
 

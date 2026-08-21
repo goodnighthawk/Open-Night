@@ -1,0 +1,25 @@
+{
+  "source": "assets/source_packs/city_block/street_items.svg",
+  "source_sha256": "959ffbb84c1a1f269a9d5e3223fc5d095ddaf5d3c36d651bed86f0b509e4ee6c",
+  "extraction": "top-level SVG group isolation, transparent trim, lossless PNG",
+  "assets": [
+    {
+      "group_id": "g12580",
+      "filename": "traffic_cone.png",
+      "width": 206,
+      "height": 292
+    },
+    {
+      "group_id": "g12894",
+      "filename": "street_lamp.png",
+      "width": 112,
+      "height": 423
+    },
+    {
+      "group_id": "g41404",
+      "filename": "telephone_box.png",
+      "width": 231,
+      "height": 173
+    }
+  ]
+}

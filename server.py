@@ -429,6 +429,9 @@ class NPCPedestrian:
     route_direction: int = 1
     step_counter: int = 0
     kind: str = "pedestrian"
+    stuck_time: float = 0.0
+    last_progress_x: float = 0.0
+    last_progress_y: float = 0.0
 
     def public_dict(self) -> dict:
         return {
@@ -1470,6 +1473,7 @@ def initialize_npcs() -> None:
             npc_id=str(start.get("id", f"npc{i+1:03d}")), route_index=route_index, next_waypoint=next_wp,
             x=x, y=y, speed=float(route.get("speed", 54.0)) * float(start.get("speed_scale", 1.0)),
             aim=heading, appearance=appearance, pause_timer=0.0,
+            last_progress_x=x, last_progress_y=y,
         ))
 
     # v0.9: dogs are lightweight server-authoritative ambient NPCs. They reuse
@@ -1488,6 +1492,7 @@ def initialize_npcs() -> None:
             npc_id=f"dog{dog_i+1:02d}", route_index=route_index, next_waypoint=next_wp,
             x=x, y=y, speed=max(36.0, float(route.get("speed", 54.0)) * 0.82),
             aim=heading, appearance={}, pause_timer=0.0, kind="dog",
+            last_progress_x=x, last_progress_y=y,
         ))
 
 
@@ -1533,7 +1538,8 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
         ux, uy = dx / dist, dy / dist
 
         # Personal-space AI: only inspect the local spatial cell neighborhood.
-        # NPCs pause briefly rather than stacking into a single sprite.
+        # Pedestrians actively sidestep or reverse on the route network rather
+        # than creating the stationary single-file walls seen in reports 43/45.
         blocked_ahead = False
         for other in nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1):
             if other is npc:
@@ -1544,33 +1550,64 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
             if 0.0 < forward < personal_space * 1.55 and lateral < personal_space * 0.75:
                 blocked_ahead = True
                 break
-        if blocked_ahead:
+        horn_car = None
+        horn_distance = 220.0 if npc.kind == "pedestrian" else 150.0
+        for car in traffic_vehicles:
+            if time.monotonic() >= float(car.horn_until):
+                continue
+            distance = math.hypot(npc.x - car.x, npc.y - car.y)
+            if distance <= horn_distance and (horn_car is None or distance < horn_distance):
+                horn_car = car
+                horn_distance = distance
+
+        if blocked_ahead or horn_car is not None:
             identity = sum(ord(c) for c in npc.npc_id)
             sx, sy = -uy, ux
-            allow_road = npc.kind == "pedestrian" and identity % 7 == 0
+            npc.stuck_time = npc.stuck_time + step_dt if blocked_ahead else max(0.0, npc.stuck_time - step_dt)
+            fleeing_horn = horn_car is not None
             moved_aside = False
             neighbours = nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1)
-            for direction in ((1.0, -1.0) if identity % 2 == 0 else (-1.0, 1.0)):
-                nx = npc.x + ux * min(8.0, npc.speed * step_dt) + sx * personal_space * 0.9 * direction
-                ny = npc.y + uy * min(8.0, npc.speed * step_dt) + sy * personal_space * 0.9 * direction
+            if fleeing_horn:
+                away_x, away_y = npc.x - horn_car.x, npc.y - horn_car.y
+                away_mag = max(1.0, math.hypot(away_x, away_y))
+                forward_x, forward_y = away_x / away_mag, away_y / away_mag
+            else:
+                forward_x, forward_y = ux, uy
+            directions = ((1.0, -1.0) if identity % 2 == 0 else (-1.0, 1.0))
+            for direction in (*directions, 0.0):
+                escape_step = min(personal_space * (1.35 if fleeing_horn else 1.0), max(10.0, npc.speed * step_dt * 1.5))
+                lateral_step = personal_space * (1.25 if npc.stuck_time >= 0.7 else 0.9) * direction
+                nx = npc.x + forward_x * escape_step + sx * lateral_step
+                ny = npc.y + forward_y * escape_step + sy * lateral_step
                 surface = GRID_WORLD.collision_at("ground", nx, ny) if GRID_WORLD is not None else "sidewalk"
-                allowed = {"walk", "sidewalk", "road"} if allow_road else {"walk", "sidewalk"}
+                # Escape steering stays on pavement. Authored route movement is
+                # the sole authority for road entry and already uses registered
+                # zebra corridors, so a sidestep cannot strand an NPC in a lane.
+                allowed = {"walk", "sidewalk"}
                 if surface not in allowed:
                     continue
                 if any(other is not npc and (other.x - nx) ** 2 + (other.y - ny) ** 2 < personal_space ** 2
                        for other in neighbours):
                     continue
-                npc.x, npc.y, npc.aim = nx, ny, math.atan2(uy, ux)
+                npc.x, npc.y, npc.aim = nx, ny, math.atan2(forward_y, forward_x)
+                npc.last_progress_x, npc.last_progress_y = nx, ny
                 moved_aside = True
                 break
             if not moved_aside:
-                npc.pause_timer = 0.10 + (identity % 5) * 0.02
+                # Change route intent instead of waiting forever behind the same
+                # body. The next tick immediately searches in the new direction.
+                npc.route_direction *= -1
+                npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
+                npc.pause_timer = 0.0
             continue
 
         step = min(dist, npc.speed * step_dt)
         npc.x += ux * step
         npc.y += uy * step
         npc.aim = math.atan2(uy, ux)
+        if math.hypot(npc.x - npc.last_progress_x, npc.y - npc.last_progress_y) >= personal_space * 0.5:
+            npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
+            npc.stuck_time = 0.0
         if dist <= max(6.0, npc.speed * step_dt * 1.25):
             npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
             npc.step_counter += 1

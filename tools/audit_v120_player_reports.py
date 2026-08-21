@@ -47,11 +47,25 @@ def main() -> None:
     lamp_cells = {(int(row["gx"]), int(row["gy"])) for row in lamps}
     assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
     assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
-               and row.get("placement_policy") == "nearest_free_sidewalk_cell_v12" for row in lamps), \
+               and row.get("placement_policy") == "nearest_free_sidewalk_cell_v12"
+               and row.get("asset") == "street_item_lamp" for row in lamps), \
         "streetlamps were not relocated from the expanded road onto sidewalks"
+    street_items = [row for row in world.objects if row.get("composition_pass") == "city_block_street_items_svg_v1"]
+    assert sum(row.get("street_item_kind") == "telephone_box" for row in street_items) == 16
+    assert sum(row.get("street_item_kind") == "traffic_cone" for row in street_items) == 24
+    for asset, filename in {
+        "street_item_lamp": "street_lamp.png",
+        "street_item_telephone_box": "telephone_box.png",
+        "street_item_traffic_cone": "traffic_cone.png",
+    }.items():
+        definition = world.catalog.object(asset)
+        assert definition.image == f"city_block://street_decorations/{filename}"
+        path = ROOT / "assets" / "source_packs" / "city_block" / "street_decorations" / filename
+        loaded = pygame.image.load(str(path))
+        assert loaded.get_width() > 32 and loaded.get_height() > 32 and loaded.get_flags() & pygame.SRCALPHA
     connectivity = v110_pedestrian_connectivity.apply(world)
     zebra_art = [row for row in world.objects if str(row.get("street_marking", "")).startswith("zebra_")]
-    assert zebra_art and len(zebra_art) < 600, "zebra-crossing art is still visually overpopulated"
+    assert zebra_art and len(zebra_art) < 120, "zebra-crossing art is still visually overpopulated"
     assert all(row.get("street_marking") == "zebra_midblock" for row in zebra_art)
     assert connectivity["pedestrian_crosswalk_count"] >= 100, "routing crossings were removed with visual art"
     centerlines = [row for row in world.objects if str(row.get("street_marking", "")).startswith("dashed_center_line_")]
@@ -72,8 +86,8 @@ def main() -> None:
     assert len(highway_dividers) == len(highway_centerlines) * 6, "eight-lane highway dividers are incomplete"
     assert len(centerlines) == 384 and len(lane_dividers) == 1664, "scaled wide-road markings are incomplete"
     morphology = world.data.get("road_morphology", {})
-    assert morphology.get("physical_primary_road_width_cells") == 7, "primary roads are not physically wide"
-    assert morphology.get("physical_central_highway_width_cells") == 11, "central highway is not physically wider"
+    assert morphology.get("physical_primary_road_width_cells") == 3, "six-lane primary roads are not three cells wide"
+    assert morphology.get("physical_central_highway_width_cells") == 5, "central highway is not physically wider"
     assert len(world.data.get("building_synthesis", {}).get("buildings", [])) == 28, "building density was not reduced"
     assert all(row.get("asset") == "mark_white_repeating_single" for row in lane_dividers), "lane lines do not use city-block art"
     assert sum(bool(row.get("highway_lane_network")) for row in lane_dividers) == 384, "highway dividers were not rescaled"
@@ -108,9 +122,10 @@ def main() -> None:
     assert 'car.render_length * 1.65' in client_source and 'npc_scale = max(2' in client_source
     server_source = (ROOT / "server.py").read_text(encoding="utf-8")
     assert "_traffic_should_yield_to_pedestrian" in server_source and '"horn": time.monotonic() < self.horn_until' in server_source
-    assert "moved_aside" in server_source and 'allow_road = npc.kind == "pedestrian"' in server_source
+    assert "moved_aside" in server_source and 'allowed = {"walk", "sidewalk"}' in server_source
+    assert "fleeing_horn" in server_source and "npc.stuck_time" in server_source and "npc.route_direction *= -1" in server_source
     assert "Install: %CD%" in updater_source and "Commit: !LOCAL_SHA!" in updater_source
-    print(f"V120_PLAYER_REPORTS_OK signals={len(signals)} roof_decals={len(roof_decals)} centerlines={len(centerlines)} lane_dividers={len(lane_dividers)} sidewalk_apron={v110_pedestrian_connectivity.SIDEWALK_APRON_FRACTION:.2f} sidewalk_drive=yes job_npcs=yes controls_tab=yes frames_removed=yes")
+    print(f"V120_PLAYER_REPORTS_OK signals={len(signals)} roof_decals={len(roof_decals)} centerlines={len(centerlines)} lane_dividers={len(lane_dividers)} zebras={len(zebra_art)} street_items={len(street_items)+len(lamps)} sidewalk_apron={v110_pedestrian_connectivity.SIDEWALK_APRON_FRACTION:.2f} sidewalk_drive=yes job_npcs=yes controls_tab=yes frames_removed=yes")
 
 
 if __name__ == "__main__":

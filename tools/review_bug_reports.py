@@ -96,6 +96,8 @@ def open_screenshot(path: Path | None) -> None:
         print("  Screenshot: none supplied")
         return
     print(f"  Screenshot: {path}")
+    if os.getenv("PYMMO_BUG_REVIEW_NO_OPEN", "").strip().casefold() in {"1", "true", "yes"}:
+        return
     if os.name == "nt":
         try:
             os.startfile(path)  # type: ignore[attr-defined]

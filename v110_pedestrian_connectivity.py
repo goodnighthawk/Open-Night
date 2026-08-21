@@ -269,14 +269,22 @@ def _add_midblock_zebra_art(world, crossings: list[Crosswalk]) -> int:
     stripe_length = max(34, int(round(176 * scale)))
     near = int(round(40 * scale))
     added = 0
+    painted_crossing_index = 0
     for crossing in crossings:
         # Keep every crossing available to pedestrian routing, but reserve
         # painted zebras for mid-block crossings. Painting all four approaches
         # at every intersection overwhelmed the widened-road presentation.
         if crossing.kind != "midblock":
             continue
+        # All crossings remain authoritative route links, but only every third
+        # mid-block link is painted. Report #44 showed that drawing every safe
+        # link made the streets read as one continuous field of zebra stripes.
+        if painted_crossing_index % 3 != 0:
+            painted_crossing_index += 1
+            continue
+        painted_crossing_index += 1
         road_cells = crossing.road_end - crossing.road_start + 1
-        stripe_count = max(8, road_cells * 2)
+        stripe_count = 6
         span = road_cells * world.cell_px
         spacing = span / stripe_count
         if crossing.axis == "x":

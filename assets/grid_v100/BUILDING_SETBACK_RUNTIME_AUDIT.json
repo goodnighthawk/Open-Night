@@ -5,204 +5,204 @@
   "edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
   "edge_alpha_rows": [
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_bottom_center",
-      "transparent_or_translucent_px": 24191
+      "transparent_or_translucent_px": 6105
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_bottom_left_outer",
-      "transparent_or_translucent_px": 37246
+      "transparent_or_translucent_px": 9316
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_bottom_right_outer",
-      "transparent_or_translucent_px": 37249
+      "transparent_or_translucent_px": 9362
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_left",
-      "transparent_or_translucent_px": 24287
+      "transparent_or_translucent_px": 6046
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_right",
-      "transparent_or_translucent_px": 24287
+      "transparent_or_translucent_px": 6057
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_top_center",
-      "transparent_or_translucent_px": 24180
+      "transparent_or_translucent_px": 6017
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_top_left_outer",
-      "transparent_or_translucent_px": 37334
+      "transparent_or_translucent_px": 9279
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_blue_top_right_outer",
-      "transparent_or_translucent_px": 37333
+      "transparent_or_translucent_px": 9325
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_bottom_center",
-      "transparent_or_translucent_px": 23736
+      "transparent_or_translucent_px": 6019
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_bottom_left_outer",
-      "transparent_or_translucent_px": 36980
+      "transparent_or_translucent_px": 9225
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_bottom_right_outer",
-      "transparent_or_translucent_px": 36996
+      "transparent_or_translucent_px": 9358
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_left",
-      "transparent_or_translucent_px": 23707
+      "transparent_or_translucent_px": 5845
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_right",
-      "transparent_or_translucent_px": 23708
+      "transparent_or_translucent_px": 6008
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_top_center",
-      "transparent_or_translucent_px": 23754
+      "transparent_or_translucent_px": 5907
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_top_left_outer",
-      "transparent_or_translucent_px": 37113
+      "transparent_or_translucent_px": 9188
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_dark_green_top_right_outer",
-      "transparent_or_translucent_px": 37116
+      "transparent_or_translucent_px": 9293
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_bottom_center",
-      "transparent_or_translucent_px": 23741
+      "transparent_or_translucent_px": 6019
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_bottom_left_outer",
-      "transparent_or_translucent_px": 36955
+      "transparent_or_translucent_px": 9225
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_bottom_right_outer",
-      "transparent_or_translucent_px": 36969
+      "transparent_or_translucent_px": 9344
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_left",
-      "transparent_or_translucent_px": 23658
+      "transparent_or_translucent_px": 5844
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_right",
-      "transparent_or_translucent_px": 23659
+      "transparent_or_translucent_px": 5985
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_top_center",
-      "transparent_or_translucent_px": 23719
+      "transparent_or_translucent_px": 5892
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_top_left_outer",
-      "transparent_or_translucent_px": 37077
+      "transparent_or_translucent_px": 9181
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_green_top_right_outer",
-      "transparent_or_translucent_px": 37080
+      "transparent_or_translucent_px": 9277
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_bottom_center",
-      "transparent_or_translucent_px": 24017
+      "transparent_or_translucent_px": 6062
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_bottom_left_outer",
-      "transparent_or_translucent_px": 37186
+      "transparent_or_translucent_px": 9301
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_bottom_right_outer",
-      "transparent_or_translucent_px": 37201
+      "transparent_or_translucent_px": 9347
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_left",
-      "transparent_or_translucent_px": 24016
+      "transparent_or_translucent_px": 5974
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_right",
-      "transparent_or_translucent_px": 24016
+      "transparent_or_translucent_px": 6032
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_top_center",
-      "transparent_or_translucent_px": 24043
+      "transparent_or_translucent_px": 5993
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_top_left_outer",
-      "transparent_or_translucent_px": 37287
+      "transparent_or_translucent_px": 9264
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_red_top_right_outer",
-      "transparent_or_translucent_px": 37295
+      "transparent_or_translucent_px": 9318
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_bottom_center",
-      "transparent_or_translucent_px": 23762
+      "transparent_or_translucent_px": 6020
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_bottom_left_outer",
-      "transparent_or_translucent_px": 36952
+      "transparent_or_translucent_px": 9225
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_bottom_right_outer",
-      "transparent_or_translucent_px": 36972
+      "transparent_or_translucent_px": 9346
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_left",
-      "transparent_or_translucent_px": 23669
+      "transparent_or_translucent_px": 5844
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_right",
-      "transparent_or_translucent_px": 23670
+      "transparent_or_translucent_px": 5990
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_top_center",
-      "transparent_or_translucent_px": 23761
+      "transparent_or_translucent_px": 5911
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_top_left_outer",
-      "transparent_or_translucent_px": 37073
+      "transparent_or_translucent_px": 9181
     },
     {
-      "area_px": 65536,
+      "area_px": 16384,
       "tile_id": "bld_yellow_top_right_outer",
-      "transparent_or_translucent_px": 37076
+      "transparent_or_translucent_px": 9275
     }
   ],
   "edge_tile_count": 40,
@@ -210,8 +210,8 @@
   "errors": [],
   "ground_roof_registration_mismatch_count": 0,
   "minimum_building_setback_cells": 1,
-  "minimum_edge_transparent_or_translucent_px": 23658,
+  "minimum_edge_transparent_or_translucent_px": 5844,
   "proof": "canonical_v100_joint_building_setback_and_alpha",
-  "shifted_building_count": 3,
+  "shifted_building_count": 16,
   "theme_ownership_mismatch_count": 0
 }
