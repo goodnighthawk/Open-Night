@@ -135,10 +135,10 @@ def _indexed_character_appearance(index: int, *, preset_only: bool = False) -> d
         parts = character_profile_parts(pid, "topdown")
         return normalize_character({"profile": pid, **parts})
     options = character_custom_options()
-    appearance = {"profile": "custom", "body": "neutral_body"}
-    strides = {"head": 1, "top": 3, "bottom": 5, "footwear": 7, "accessory": 11}
-    offsets = {"head": 0, "top": 2, "bottom": 1, "footwear": 3, "accessory": 5}
-    for slot in ("head", "top", "bottom", "footwear", "accessory"):
+    appearance = {"profile": "custom"}
+    strides = {"hat": 5, "head": 3, "body": 7}
+    offsets = {"hat": 1, "head": 2, "body": 4}
+    for slot in ("hat", "head", "body"):
         choices = options.get(slot, [])
         if choices:
             appearance[slot] = choices[(index * strides[slot] + offsets[slot]) % len(choices)]

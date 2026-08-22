@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import ast
-import base64
-import pathlib
+from pathlib import Path
 import struct
-import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
-from portrait_head_asset import HEAD_ATLAS_B64, HEAD_RECTS
+ROOT = Path(__file__).resolve().parents[1]
+PACK = ROOT / "assets" / "characters" / "grunge_topdown"
 
 
 def require(condition: bool, message: str) -> None:
@@ -17,47 +13,44 @@ def require(condition: bool, message: str) -> None:
         raise SystemExit(message)
 
 
+def png_size(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()[:24]
+    require(data[:8] == b"\x89PNG\r\n\x1a\n", f"not a PNG: {path}")
+    return struct.unpack(">II", data[16:24])
+
+
 def main() -> None:
-    require(len(HEAD_RECTS) == 17, f"expected 17 selectable heads, got {len(HEAD_RECTS)}")
-    png = base64.b64decode(HEAD_ATLAS_B64, validate=True)
-    require(png.startswith(b"\x89PNG\r\n\x1a\n"), "embedded head atlas is not a PNG")
-    width, height = struct.unpack(">II", png[16:24])
-    require((width, height) == (140, 112), f"unexpected atlas dimensions {(width, height)}")
-    for index, (x, y, w, h) in enumerate(HEAD_RECTS):
-        require(w > 0 and h > 0 and x >= 0 and y >= 0, f"invalid head rect {index}")
-        require(x + w <= width and y + h <= height, f"head rect {index} outside atlas")
-        skin_tone, hair_style = divmod(index, 5)
-        require(skin_tone * 5 + hair_style == index, f"head encoding failed for {index}")
-        require(0 <= skin_tone < 5 and 0 <= hair_style < 5, f"head encoding exceeds server limits for {index}")
+    master = PACK / "master_8x10_v2_clean.png"
+    require(master.is_file(), "clean v2.0 master character sheet is missing")
+    require(png_size(master) == (1280, 1280), f"unexpected master dimensions: {png_size(master)}")
 
-    for filename in ("portrait_head_asset.py", "portrait_head_client.py", "open_night_player_launcher.py"):
-        ast.parse((ROOT / filename).read_text(encoding="utf-8"), filename=filename)
+    hats = sorted((PACK / "hats").glob("hat_*.png"))
+    heads = sorted((PACK / "heads").glob("head_*.png"))
+    bodies = sorted((PACK / "bodies").glob("body_*.png"))
+    require((len(hats), len(heads), len(bodies)) == (8, 8, 64), "replacement character layers are incomplete")
+    require(all(png_size(path) == (160, 128) for path in hats + heads + bodies), "runtime layer size changed")
 
-    run_client = (ROOT / "RUN_CLIENT.bat").read_text(encoding="utf-8")
-    require("v100_client.py" in run_client, "desktop launcher bypasses canonical client")
     canonical_client = (ROOT / "v100_client.py").read_text(encoding="utf-8")
-    require("import portrait_head_client" in canonical_client,
-            "canonical client does not load the head selector")
-    require("portrait_head_client._install()" in canonical_client,
-            "canonical client does not install the head selector")
+    require("portrait_head_client" not in canonical_client, "retired portrait overlay still loads in the canonical client")
+    runtime = (ROOT / "character_art.py").read_text(encoding="utf-8")
+    require("def _composed_frame" in runtime and "pygame.transform.rotate" in runtime,
+            "replacement layered renderer is incomplete")
+    catalog = (ROOT / "character_catalog.py").read_text(encoding="utf-8")
+    require('PART_SLOTS = ("hat", "head", "body")' in catalog, "v2.0 customization slots changed")
+
+    client = (ROOT / "client.py").read_text(encoding="utf-8")
+    for token in ('("Hat", "hat"', '("Head", "head"', '("Body", "body"'):
+        require(token in client, f"launcher customization row missing: {token}")
+    database = (ROOT / "database.py").read_text(encoding="utf-8")
+    require('character_accessory VARCHAR(48)' in database, "compatible hat persistence field is missing")
+
     start = (ROOT / "START_OPEN_NIGHT.bat").read_text(encoding="utf-8")
     require("open_night_player_launcher.py" in start, "START_OPEN_NIGHT does not use player launcher")
 
-    player_launcher = (ROOT / "open_night_player_launcher.py").read_text(encoding="utf-8")
-    for hidden in ("WEB CLIENT", "MOVEMENT PREVIEW", "MAP VIEWER"):
-        require(hidden not in player_launcher, f"{hidden} still exposed in player launcher")
-    for visible in ("MAP GENERATOR", "QUICK TEST", "START SERVER", "DESKTOP CLIENT"):
-        require(visible in player_launcher, f"{visible} missing from player launcher")
-
-    character_catalog = (ROOT / "character_catalog.py").read_text(encoding="utf-8")
-    require('"skin_tone": 5' in character_catalog, "skin_tone server limit changed")
-    require('"hair_style": 5' in character_catalog, "hair_style server limit changed")
-    require('"top_color": 8' in character_catalog, "portrait sentinel no longer fits top_color")
-
     print("PLAYER_REVISION_GATE=PASS")
-    print("selectable_heads=17")
-    print("atlas=140x112")
-    print("launcher_buttons=4")
+    print("character_pack=grunge_topdown")
+    print("master_sheet=1280x1280")
+    print("runtime_layers=80")
 
 
 if __name__ == "__main__":

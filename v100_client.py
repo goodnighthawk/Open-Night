@@ -20,7 +20,6 @@ v100_scale_normalization.install()
 import grid_client_entry  # noqa: F401 - installs the GridWorld cutover
 import client as game_client
 import bug_chat_shortcut
-import portrait_head_client
 import v110_bug_delivery_client
 import v110_bug_railway_relay_client
 import v110_job_locations
@@ -33,7 +32,6 @@ def install_v100_client() -> None:
     v100_safe_layout.install(v100_runtime_refinement)
     v100_runtime_refinement.install()
     v100_scale_normalization.install()
-    portrait_head_client._install()
     bug_chat_shortcut.install()
     v110_version_client.install(game_client)
     # Normalize gameplay destinations as soon as the canonical GridWorld has

@@ -479,16 +479,13 @@ class Launcher:
         self.customizing = False
         self.appearance = normalize_character(CHARACTER_DEFAULT)
         self.appearance_changed = False
-        # v1.2 approved dual-camera paper-doll pack. Only parts registered in
-        # both top-down and isometric modes are exposed in the launcher.
+        # The grungy 90-degree pack uses three independently selectable layers.
         options = character_custom_options()
         self._custom_rows = [
             ("Preset", "profile", character_preset_options()),
+            ("Hat", "hat", options.get("hat", [])),
             ("Head", "head", options.get("head", [])),
-            ("Top", "top", options.get("top", [])),
-            ("Bottom", "bottom", options.get("bottom", [])),
-            ("Footwear", "footwear", options.get("footwear", [])),
-            ("Accessory", "accessory", options.get("accessory", [])),
+            ("Body", "body", options.get("body", [])),
         ]
 
     @staticmethod
@@ -605,19 +602,17 @@ class Launcher:
         pygame.draw.rect(self.screen, (24, 26, 28), panel, border_radius=10)
         pygame.draw.rect(self.screen, (105, 108, 112), panel, width=2, border_radius=10)
         self.screen.blit(self.modal_title.render("CHARACTER", True, TEXT_COLOR), (panel.x + 36, panel.y + 28))
-        self.screen.blit(self.small.render("Approved dual-camera character pack — parts are shared by players and NPCs", True, MUTED_TEXT), (panel.x + 38, panel.y + 68))
+        self.screen.blit(self.small.render("Grungy 90-degree character pack — Hat + Head + Body", True, MUTED_TEXT), (panel.x + 38, panel.y + 68))
 
         preview = pygame.Rect(panel.x + 30, panel.y + 108, 330, 405)
         pygame.draw.rect(self.screen, (17, 18, 20), preview, border_radius=8)
         pygame.draw.rect(self.screen, (62, 65, 68), preview, width=2, border_radius=8)
-        # Show both registered camera modes using the same saved paper-doll parts.
+        # The source art is strictly 90-degree top-down; aim rotates the assembled puppet.
         angle = (time.monotonic() * 0.55) % (math.pi * 2)
-        left_center = (preview.x + 88, preview.y + 205)
-        right_center = (preview.x + 244, preview.y + 205)
-        draw_character(self.screen, left_center, angle, self.appearance, scale=3, local_ring=(85, 78, 45), moving=True, anim_time=time.monotonic(), mode="topdown")
-        draw_character(self.screen, right_center, angle, self.appearance, scale=3, moving=True, anim_time=time.monotonic(), mode="isometric")
-        self.screen.blit(self.small.render("TOP-DOWN", True, MUTED_TEXT), (preview.x + 45, preview.bottom - 42))
-        self.screen.blit(self.small.render("ISOMETRIC", True, MUTED_TEXT), (preview.x + 205, preview.bottom - 42))
+        preview_center = (preview.centerx, preview.y + 205)
+        draw_character(self.screen, preview_center, angle, self.appearance, scale=4, local_ring=(85, 78, 45), moving=True, anim_time=time.monotonic(), mode="topdown")
+        label = self.small.render("90° TOP-DOWN", True, MUTED_TEXT)
+        self.screen.blit(label, label.get_rect(center=(preview.centerx, preview.bottom - 34)))
 
         row_y = panel.y + 135
         for label, key, choices in self._custom_rows:
@@ -633,7 +628,7 @@ class Launcher:
 
         self._button(self.screen, reset, "RESET", self.small)
         self._button(self.screen, done, "DONE", self.small)
-        note = "Changes are saved to your account; NPCs use the same approved part catalog."
+        note = "Changes are saved to your account; every human NPC uses this same catalog."
         self.screen.blit(self.small.render(note, True, (180, 145, 105)), (panel.x + 190, panel.bottom - 51))
         return False
 
