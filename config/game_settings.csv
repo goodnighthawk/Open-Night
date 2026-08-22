@@ -81,6 +81,7 @@ vehicle,player_front_axle_offset_ratio,0.36,float,Player car steering pivot meas
 vehicle,passenger_capacity,3,int,Maximum player passengers in a car in addition to the driver
 vehicle,passenger_board_max_speed_px_s,35,float,Maximum car speed at which a nearby player can board as passenger
 vehicle,passenger_exit_max_speed_px_s,70,float,Passengers and drivers must slow below this speed before exiting
+vehicle,player_handbrake_px_s2,760,float,Deceleration while a player driver holds Space
 engine,ai_profile_version,2,int,v2.0 directional-flow AI tuning migration marker
 engine,client_profile_version,290,int,v0.9.0 consolidation profile: tighter steering, true animation-free layer transitions, and collision recovery
 render,fast_rotation_while_dragging,true,bool,Use fast whole-scene rotation during active middle-mouse drag; filtered final frame resumes on release

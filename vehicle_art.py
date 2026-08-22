@@ -166,7 +166,11 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
         return None
 
     generated_heavy = meta.get("art_set") == "generated_vehicle_fleet_2026_08_22" and int(meta.get("index", 999)) <= 34
-    if generated_heavy:
+    # The generated PNGs in the approved fleet are complete exports. The old
+    # unconditional repair appended a flipped rear strip to gridcar010, which
+    # appeared as a detached/clipped texture behind the truck. Keep the repair
+    # available only for a future manifest row that explicitly opts into it.
+    if generated_heavy and bool(meta.get("repair_rear_crop", False)):
         source = _repair_generated_rear_crop(source, str(meta.get("category", "")).lower())
 
     # Player-supplied sheets are allowed to contain a horizontal source sprite;

@@ -116,7 +116,7 @@ def main() -> None:
     server.GRID_RUNTIME_ACTIVE = True
     server.TRAFFIC_COUNT = TRAFFIC_COUNT
     population = v110_grid_population.prepare_and_initialize(server, server.ACTIVE_MAP, server.GRID_WORLD)
-    cars = list(server.traffic_vehicles)
+    cars = [car for car in server.traffic_vehicles if not car.parked]
     if len(cars) < 12:
         raise RuntimeError(f"traffic audit expected at least 12 safe cars, got {len(cars)}")
 
@@ -134,6 +134,8 @@ def main() -> None:
         before = {car.vehicle_id: (float(car.x), float(car.y)) for car in server.traffic_vehicles}
         server.update_traffic(DT, [], tick * DT)
         for car in server.traffic_vehicles:
+            if car.parked:
+                continue
             old = before.get(car.vehicle_id, (car.x, car.y))
             moved = math.hypot(float(car.x) - old[0], float(car.y) - old[1])
             if tick >= warmup_ticks:
@@ -183,7 +185,8 @@ def main() -> None:
         "simulation_seconds": SIM_SECONDS,
         "warmup_seconds": WARMUP_SECONDS,
         "traffic_requested": TRAFFIC_COUNT,
-        "traffic_spawned": len(server.traffic_vehicles),
+        "traffic_spawned": len(cars),
+        "parked_vehicle_count": sum(1 for car in server.traffic_vehicles if car.parked),
         "traffic_route_count": int(population.get("traffic_route_count", 0)),
         "lane_offsets_px": route_offsets,
         "max_stationary_allowed_seconds": MAX_STATIONARY_SECONDS,

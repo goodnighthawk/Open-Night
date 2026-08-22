@@ -70,7 +70,7 @@ def build_procedural_block_props(
             continue
         for local_index in range(2):
             asset, width, height = STREET_PROPS[(index * 2 + local_index) % len(STREET_PROPS)]
-            if asset == "block_prop_shrub_round":
+            if asset in {"block_prop_shrub_round", "block_prop_planter_wood_shrubs"}:
                 width, height = width * 4, height * 4
             elif asset == "block_prop_patio_umbrella":
                 width, height = width * 3, height * 3
@@ -95,6 +95,14 @@ def build_procedural_block_props(
                 objects[-1]["decorative_only"] = False
                 objects[-1]["collision_kind"] = "tree"
                 objects[-1]["scale_policy"] = "reported_tree_scale_4x"
+            elif asset == "block_prop_planter_wood_shrubs":
+                # Report #152 points at the multi-shrub wooden planter, not the
+                # round shrub handled by the earlier report. Give the visible
+                # canopy the same four-times scale and a matching solid footprint.
+                objects[-1]["collision_radius_px"] = int(round(min(width, height) * 0.30))
+                objects[-1]["decorative_only"] = False
+                objects[-1]["collision_kind"] = "tree_planter"
+                objects[-1]["scale_policy"] = "reported_tree_planter_scale_4x"
             elif asset == "block_prop_patio_umbrella":
                 objects[-1]["overhead"] = True
                 objects[-1]["walk_under"] = True

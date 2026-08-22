@@ -27,6 +27,7 @@ COLLISION_LENGTH_META_SCALE = 3.25
 # awareness for narrow sheet crops while the reduced longitudinal scale removes
 # the oversized nose/tail box reported by players.
 COLLISION_WIDTH_META_SCALE = 3.35
+LARGE_TRUCK_COLLISION_WIDTH_META_SCALE = 3.65
 CLIENT_RENDER_MULTIPLIER = 1.00
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
 MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 3.25
@@ -40,7 +41,12 @@ def scaled_meta(meta: dict) -> dict:
     # inset ratios are preserved instead of inflating the invisible body beyond
     # the sprite ends (current report #126).
     out["collision_length"] = max(44.0, float(out.get("collision_length", 42.0)) * COLLISION_LENGTH_META_SCALE)
-    out["collision_width"] = max(24.0, float(out.get("collision_width", 18.0)) * COLLISION_WIDTH_META_SCALE)
+    width_scale = (
+        LARGE_TRUCK_COLLISION_WIDTH_META_SCALE
+        if str(out.get("category", "")).lower() == "large_truck"
+        else COLLISION_WIDTH_META_SCALE
+    )
+    out["collision_width"] = max(24.0, float(out.get("collision_width", 18.0)) * width_scale)
     out["v110_vehicle_proportions"] = True
     return out
 
@@ -59,11 +65,17 @@ def install(server_module) -> None:
         v110_traffic_recovery.install(server_module)
         return
     original = server_module._traffic_asset
+    original_parked = server_module._parked_asset
 
     def traffic_asset_v110(index: int) -> dict:
         return scaled_meta(original(index))
 
+    def parked_asset_v110(index: int) -> dict:
+        return scaled_meta(original_parked(index))
+
     server_module._v110_original_traffic_asset = original
+    server_module._v110_original_parked_asset = original_parked
     server_module._traffic_asset = traffic_asset_v110
+    server_module._parked_asset = parked_asset_v110
     server_module._v110_vehicle_proportions_installed = True
     v110_traffic_recovery.install(server_module)

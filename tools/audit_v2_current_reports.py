@@ -220,7 +220,9 @@ def main() -> int:
     curb_preview_path.parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(curb_preview, curb_preview_path)
 
-    lamps = [item for item in world.objects if item.get("emits_light")]
+    # Public phones gained their own compact light pools in v2.3. This carried
+    # road-overhang check applies only to the tall sidewalk-lamp fixtures.
+    lamps = [item for item in world.objects if item.get("lighting_kind") == "sidewalk_lamp"]
     require(len(lamps) >= 80, f"expected visible lamp population, got {len(lamps)}")
     direction_ok = {"north": lambda dx, dy: dy < 0, "east": lambda dx, dy: dx > 0,
                     "south": lambda dx, dy: dy > 0, "west": lambda dx, dy: dx < 0}

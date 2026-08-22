@@ -207,6 +207,27 @@ def _body_state(animation: str, anim_time: float) -> str:
     return animation if animation in ANIMATION_ROWS else "idle"
 
 
+def _north_facing_baseball_cap(source: pygame.Surface) -> pygame.Surface:
+    """Orient hat 07's white front panel and peak toward source north."""
+    result = pygame.Surface(source.get_size(), pygame.SRCALPHA)
+    rect = source.get_bounding_rect(min_alpha=10)
+    if rect.width <= 0 or rect.height <= 0:
+        return source.copy()
+    crown = pygame.transform.flip(source.subsurface(rect).copy(), False, True)
+    # Draw the visor first so the flipped crown naturally overlaps its base.
+    brim_width = max(14, int(round(rect.width * 0.62)))
+    brim_height = max(7, int(round(rect.height * 0.24)))
+    brim = pygame.Rect(0, 0, brim_width, brim_height)
+    brim.midbottom = (rect.centerx, rect.top + max(2, brim_height // 3))
+    brim.clamp_ip(result.get_rect())
+    pygame.draw.ellipse(result, OUTLINE, brim)
+    inner = brim.inflate(-4, -3)
+    if inner.width > 0 and inner.height > 0:
+        pygame.draw.ellipse(result, (164, 42, 29, 255), inner)
+    result.blit(crown, rect)
+    return result
+
+
 @lru_cache(maxsize=1024)
 def _composed_frame(hat: str, head: str, body: str, state: str) -> pygame.Surface:
     body_index = _part_index(body, "body")
@@ -225,6 +246,8 @@ def _composed_frame(hat: str, head: str, body: str, state: str) -> pygame.Surfac
     if hat != "none":
         hat_index = _part_index(hat, "hat")
         hat_surface = _load_part(f"hats/hat_{hat_index:02d}.png")
+        if hat_index == 7:
+            hat_surface = _north_facing_baseball_cap(hat_surface)
         hat_rect = hat_surface.get_bounding_rect(min_alpha=10)
         hat_center_x = hat_rect.centerx if hat_rect.width else hat_surface.get_width() // 2
         canvas.blit(

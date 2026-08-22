@@ -2107,6 +2107,13 @@ class Game:
         # affects camera look-ahead only and never changes the character pose.
         local = self.players.get(self.local_id or "")
         in_vehicle = bool(getattr(local, "in_vehicle", False)) if local is not None else False
+        handbrake = bool(
+            not blocked_actions
+            and in_vehicle
+            and str(getattr(local, "vehicle_kind", "")) == "car"
+            and str(getattr(local, "vehicle_role", "driver")) == "driver"
+            and keys[pygame.K_SPACE]
+        ) if local is not None else False
         shift_boost = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
         if in_vehicle:
             boost = bool(not blocked_actions and shift_boost)
@@ -2124,6 +2131,7 @@ class Game:
 
         payload = {
             "type": "input", "x": x, "y": y, "aim": body_aim, "boost": boost,
+            "handbrake": handbrake,
             "crouch": crouch, "jump": bool(self.jump_request_pending and not blocked_actions),
             "prone_toggle": bool(self.prone_toggle_pending and not blocked_actions),
         }
@@ -2304,6 +2312,7 @@ class Game:
         # composition. Underground static detail is already baked into its tiles.
         if active_world_level < 0:
             return
+        self.draw_parking_spots()
         self.draw_hydrant_effects()
         self.draw_bike_lanes()
 
@@ -2314,6 +2323,34 @@ class Game:
 
         self.draw_interior_entries()
         self.draw_landmarks()
+
+    def draw_parking_spots(self) -> None:
+        """Paint compact curbside bay markings beneath dynamic vehicles."""
+        for spot in self.map_config.get("parking_spots", []) or []:
+            try:
+                x, y = map(float, spot.get("pos", (0.0, 0.0)))
+                angle = float(spot.get("angle", 0.0))
+            except (TypeError, ValueError, IndexError):
+                continue
+            sx, sy = self.world_to_screen(x, y)
+            if sx < -130 or sy < -130 or sx > self.screen.get_width() + 130 or sy > self.screen.get_height() + 130:
+                continue
+            hx, hy = math.cos(angle), math.sin(angle)
+            lx, ly = -hy, hx
+            half_length, half_width = 76.0, 29.0
+            corners = [
+                (int(sx + hx * along + lx * across), int(sy + hy * along + ly * across))
+                for along, across in (
+                    (-half_length, -half_width), (half_length, -half_width),
+                    (half_length, half_width), (-half_length, half_width),
+                )
+            ]
+            pygame.draw.lines(self.screen, (194, 188, 151), True, corners, 2)
+            # End ticks keep an empty bay readable without adding floating UI.
+            for along in (-half_length, half_length):
+                a = (int(sx + hx * along - lx * 10), int(sy + hy * along - ly * 10))
+                b = (int(sx + hx * along + lx * 10), int(sy + hy * along + ly * 10))
+                pygame.draw.line(self.screen, (224, 216, 170), a, b, 2)
 
     def draw_landmarks(self) -> None:
         """Small in-world landmark markers; the full context lives on the M map."""
@@ -2858,7 +2895,7 @@ class Game:
                 if role == "passenger":
                     caption = f"PASSENGER   {car.vehicle_class.upper()}   {mph:02d} mph   [T] EXIT"
                 else:
-                    caption = f"DRIVER   {car.vehicle_class.upper()}   {mph:02d} mph   [SHIFT] BOOST   [T] EXIT"
+                    caption = f"DRIVER   {car.vehicle_class.upper()}   {mph:02d} mph   [SPACE] HANDBRAKE   [SHIFT] BOOST   [T] EXIT"
                 text = self.font.render(caption, True, TEXT_COLOR)
                 box = text.get_rect(midbottom=(w // 2, h - 18)).inflate(22, 12)
                 pygame.draw.rect(self.screen, (18,20,21), box, border_radius=5)
@@ -2876,9 +2913,11 @@ class Game:
         elif car is not None:
             if car.driver == "player":
                 action = "RIDE AS PASSENGER" if car.passengers < car.passenger_capacity else "CAR FULL"
+                key = "E"
             else:
                 action = "STEAL" if car.driver == "npc" else "ENTER"
-            text = self.font.render(f"[T] {action} {car.vehicle_class.upper()}", True, LOCAL_COLOR)
+                key = "T"
+            text = self.font.render(f"[{key}] {action} {car.vehicle_class.upper()}", True, LOCAL_COLOR)
         else:
             return
         box = text.get_rect(midbottom=(w // 2, h - 18)).inflate(22, 12)
@@ -4024,8 +4063,12 @@ class Game:
                             local = self.players.get(self.local_id or "")
                             if local is not None and bool(getattr(local, "in_vehicle", False)):
                                 self.network.send({"type": "vehicle_lights", "action": "right"})
-                            elif not self.try_enter_interior():
-                                self.network.send({"type": "interact"})
+                            else:
+                                car = self.nearest_client_vehicle()
+                                if car is not None and car.driver == "player":
+                                    self.network.send({"type": "passenger_action"})
+                                elif not self.try_enter_interior():
+                                    self.network.send({"type": "interact"})
                         elif event.key == pygame.K_q and not self.inventory_open and not self.map_open:
                             local = self.players.get(self.local_id or "")
                             if local is not None and bool(getattr(local, "in_vehicle", False)):

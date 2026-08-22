@@ -1,4 +1,4 @@
-"""Offline release gate for the v2.2 bug-report intake baseline."""
+"""Offline release gate for the v2.3 bug-report intake baseline."""
 
 from __future__ import annotations
 
@@ -14,11 +14,10 @@ def main() -> int:
     with snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     by_issue = {int(row["github_issue"]): row for row in rows}
-    baseline = [row for row in rows if int(row["github_issue"]) <= 149]
-    assert len(baseline) == 129, f"expected 129 v2.2-baseline issues, found {len(baseline)}"
-    assert max(int(row["github_issue"]) for row in baseline) == 149
-    assert sum(row["state"] == "open" for row in baseline) == 125
-    for number in range(136, 150):
+    assert len(rows) == 140, f"expected 140 pulled issues, found {len(rows)}"
+    assert max(by_issue) == 160
+    assert sum(row["state"] == "open" for row in rows) == 136
+    for number in range(150, 161):
         row = by_issue[number]
         assert row["state"] == "open"
         assert row["review_status"] == "pending-review"
@@ -27,10 +26,11 @@ def main() -> int:
         for value in row.values():
             assert not str(value or "").lstrip().startswith(("=", "+", "-", "@"))
 
-    checklist = (ROOT / "V2_2_CURRENT_BUG_CHECKLIST.md").read_text(encoding="utf-8")
-    for number in range(136, 150):
+    checklist = (ROOT / "V2_3_CURRENT_BUG_CHECKLIST.md").read_text(encoding="utf-8")
+    for number in range(150, 161):
         assert f"issues/{number}" in checklist
-    print("V2.2 BUG INTAKE AUDIT PASSED: 129 total / 125 open / current reports #136-#149")
+    assert (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip() == "2.3"
+    print("V2.3 BUG INTAKE AUDIT PASSED: 140 total / 136 open / current reports #150-#160")
     return 0
 
 

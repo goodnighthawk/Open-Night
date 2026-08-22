@@ -292,6 +292,66 @@ def _pedestrian_starts(routes: list[dict], target: int = PEDESTRIAN_TARGET) -> l
     return starts
 
 
+def _build_parking_spots(world, traffic_signals: list[dict], limit: int = 18) -> list[dict]:
+    """Create deterministic curbside bays away from junction conflict zones."""
+    signals = [tuple(map(float, row.get("pos", (0.0, 0.0)))) for row in traffic_signals]
+    candidates: list[tuple[int, int, str]] = []
+    directions = (
+        ("north", 0, -1), ("east", 1, 0),
+        ("south", 0, 1), ("west", -1, 0),
+    )
+    for gy in range(1, world.height - 1):
+        for gx in range(1, world.width - 1):
+            if not _is_road(world, gx, gy):
+                continue
+            road_neighbours = sum(_is_road(world, gx + dx, gy + dy) for _, dx, dy in directions)
+            pavement_edges = [
+                direction for direction, dx, dy in directions
+                if _cell_collision(world, gx + dx, gy + dy) in {"walk", "sidewalk"}
+            ]
+            # A straight road-edge cell has three road neighbours and one curb.
+            # Four-way cells belong to junctions and are never parking bays.
+            if road_neighbours != 3 or len(pavement_edges) != 1:
+                continue
+            cx, cy = world.cell_center(gx, gy)
+            if any(math.hypot(cx - sx, cy - sy) < world.cell_px * 2.2 for sx, sy in signals):
+                continue
+            candidates.append((gx, gy, pavement_edges[0]))
+
+    candidates.sort(key=lambda row: ((row[0] * 47 + row[1] * 71) % 1009, row[1], row[0]))
+    selected: list[tuple[int, int, str]] = []
+    for candidate in candidates:
+        gx, gy, _edge = candidate
+        if any(abs(gx - ox) + abs(gy - oy) < 4 for ox, oy, _ in selected):
+            continue
+        selected.append(candidate)
+        if len(selected) >= max(0, int(limit)):
+            break
+
+    spots: list[dict] = []
+    edge_vectors = {
+        "north": (0.0, -1.0), "east": (1.0, 0.0),
+        "south": (0.0, 1.0), "west": (-1.0, 0.0),
+    }
+    for index, (gx, gy, edge) in enumerate(selected, 1):
+        cx, cy = world.cell_center(gx, gy)
+        ex, ey = edge_vectors[edge]
+        # Sit near the curb while retaining enough road inside the cell for the
+        # complete collision width. North/south curbs imply east/west parking.
+        x = cx + ex * world.cell_px * 0.18
+        y = cy + ey * world.cell_px * 0.18
+        angle = 0.0 if edge in {"north", "south"} else math.pi / 2.0
+        spots.append({
+            "id": f"parking_spot_{index:02d}",
+            "pos": [round(x, 3), round(y, 3)],
+            "angle": round(angle, 6),
+            "curb_edge": edge,
+            "occupied": index % 3 == 1,
+            "grid_native": True,
+        })
+    return spots
+
+
 def _grid_vehicle_blocked(world, car, x: float, y: float, angle: float) -> bool:
     hl = max(12.0, float(car.collision_length) * 0.5)
     hw = max(8.0, float(car.collision_width) * 0.5)
@@ -347,9 +407,14 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     map_config["traffic_routes"] = traffic_routes
     map_config["traffic_starts"] = _traffic_starts(traffic_routes, traffic_count)
     map_config["traffic_signals"] = _build_traffic_signals(world)
+    map_config["parking_spots"] = _build_parking_spots(world, map_config["traffic_signals"])
     map_config["npc_routes"] = pedestrian_routes
     map_config["npc_starts"] = _pedestrian_starts(pedestrian_routes)
-    map_config["parked_vehicle_spawns"] = []
+    map_config["parked_vehicle_spawns"] = [
+        [*spot["pos"], spot["angle"]]
+        for spot in map_config["parking_spots"]
+        if spot["occupied"]
+    ]
     map_config["bicycle_routes"] = []
     map_config["bicycle_starts"] = []
     map_config["parked_bicycle_spawns"] = []
@@ -358,6 +423,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     server_module.bicycles.clear()
     server_module.npc_pedestrians.clear()
     server_module.initialize_traffic(traffic_count)
+    server_module.initialize_parked_vehicles()
     server_module.initialize_npcs()
     server_module.initialize_hydrants()
 
@@ -375,7 +441,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
         safe_cars.append(car)
     server_module.traffic_vehicles[:] = safe_cars
 
-    if traffic_count > 0 and not server_module.traffic_vehicles:
+    if traffic_count > 0 and not any(not car.parked for car in server_module.traffic_vehicles):
         raise RuntimeError("v1.1 GridWorld traffic requested but every car spawn was rejected")
     if not server_module.npc_pedestrians:
         raise RuntimeError("v1.1 GridWorld pedestrian initialization produced no NPCs")
@@ -384,8 +450,10 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
         "authority": "gridworld_native_surface_population",
         "traffic_route_count": len(traffic_routes),
         "traffic_requested": traffic_count,
-        "traffic_spawned": len(server_module.traffic_vehicles),
+        "traffic_spawned": sum(1 for car in server_module.traffic_vehicles if not car.parked),
         "traffic_signal_count": len(map_config["traffic_signals"]),
+        "parking_spot_count": len(map_config["parking_spots"]),
+        "parked_vehicle_count": sum(1 for car in safe_cars if car.parked),
         "pedestrian_route_count": len(pedestrian_routes),
         "pedestrians_spawned": sum(1 for npc in server_module.npc_pedestrians if npc.kind == "pedestrian"),
         "dogs_spawned": sum(1 for npc in server_module.npc_pedestrians if npc.kind == "dog"),

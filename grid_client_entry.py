@@ -37,10 +37,10 @@ def _grid_ground_active(game: game_client.Game) -> bool:
 
 def _draw_world_grid_exclusive(game: game_client.Game) -> None:
     """Render exactly one Ground authority when the v1.0 grid is active."""
-    if not _grid_ground_active(game):
-        _ORIGINAL_DRAW_WORLD(game)
-        return
-    game.grid_renderer.draw_view(game.screen, game.camera(), "ground")
+    # The canonical draw_world already selects GridRenderer for Ground/Roof and
+    # then paints synchronized fixtures, parking bays, hydrants and landmarks.
+    # Calling GridRenderer directly here hid every dynamic traffic-light fixture.
+    _ORIGINAL_DRAW_WORLD(game)
 
 
 def _with_grid_player_scale(game: game_client.Game, callback, *args, **kwargs):
@@ -151,10 +151,10 @@ def _draw_grid_world_map_impl(game: game_client.Game) -> None:
 
     # Preserve job-economy destinations as gameplay markers. They are not map
     # geometry and can be migrated to grid-associated records independently.
-    for raw_pos, marker_color, marker_label in (
-        (game.map_config.get("supplier_pos", game_client.SUPPLIER_POS), game_client.SUPPLIER_COLOR, "SUPPLIER"),
-        (game.map_config.get("customer_pos", game_client.CUSTOMER_POS), game_client.CUSTOMER_COLOR, "BUYER"),
-    ):
+    for job in game._job_locations():
+        raw_pos = job["pos"]
+        marker_label = str(job["role"]).upper()
+        marker_color = game_client.SUPPLIER_COLOR if marker_label == "SUPPLIER" else game_client.CUSTOMER_COLOR
         try:
             p = _grid_map_point(map_rect, world, raw_pos[0], raw_pos[1])
         except (TypeError, IndexError, KeyError):
@@ -261,10 +261,13 @@ def _draw_grid_local_minimap(game: game_client.Game) -> None:
             return None
         return int(radius + dx * scale), int(radius + dy * scale)
 
-    for raw_pos, marker_color in (
-        (game.map_config.get("supplier_pos", game_client.SUPPLIER_POS), game_client.SUPPLIER_COLOR),
-        (game.map_config.get("customer_pos", game_client.CUSTOMER_POS), game_client.CUSTOMER_COLOR),
-    ):
+    for job in game._job_locations():
+        raw_pos = job["pos"]
+        marker_color = (
+            game_client.SUPPLIER_COLOR
+            if str(job.get("role", "")).lower() == "supplier"
+            else game_client.CUSTOMER_COLOR
+        )
         try:
             p = marker_point(raw_pos[0], raw_pos[1])
         except (TypeError, ValueError, IndexError, KeyError):

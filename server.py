@@ -160,6 +160,17 @@ def _traffic_asset(index: int) -> dict:
     return eligible[index % len(eligible)]
 
 
+def _parked_asset(index: int) -> dict:
+    """Use the retained compact pixel-car fleet for curbside parking."""
+    compact = [
+        row for row in load_vehicle_catalog()
+        if row.get("traffic_eligible")
+        and str(row.get("category", "")).lower() in {"compact", "sedan", "sports", "taxi"}
+        and row.get("art_set") != "generated_vehicle_fleet_2026_08_22"
+    ]
+    return compact[max(0, int(index)) % len(compact)] if compact else _traffic_asset(index)
+
+
 def network_map_payload(map_config: dict) -> dict:
     """Return a compact JSON-safe map descriptor.
 
@@ -178,6 +189,7 @@ def network_map_payload(map_config: dict) -> dict:
         # Global map UI needs every job destination even when static world data
         # comes from a transferred portable cache.
         out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
+        out["parking_spots"] = [dict(row) for row in map_config.get("parking_spots", [])]
         return out
 
     if bool(map_config.get("chunked", False)):
@@ -198,6 +210,7 @@ def network_map_payload(map_config: dict) -> dict:
         # The full M map is global UI and cannot infer off-interest job NPCs from
         # nearby snapshots. Publish the complete compact destination list.
         out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
+        out["parking_spots"] = [dict(row) for row in map_config.get("parking_spots", [])]
         out.update(grid_network_metadata(map_config))
         return out
 
@@ -273,6 +286,7 @@ class ClientSession:
     passenger_vehicle_id: str = ""
     riding_bicycle_id: str = ""
     boost: bool = False
+    handbrake: bool = False
     crouch_requested: bool = False
     crouching: bool = False
     crouch_cancel_latched: bool = False
@@ -797,7 +811,7 @@ def initialize_parked_vehicles() -> None:
     for i, spawn in enumerate(spawns):
         if not isinstance(spawn, (list, tuple)) or len(spawn) < 2:
             continue
-        meta = _traffic_asset(i)
+        meta = _parked_asset(i)
         x, y = float(spawn[0]), float(spawn[1])
         angle = float(spawn[2]) if len(spawn) >= 3 else 0.0
         route_heading = _nearest_route_heading(x, y, routes)
@@ -1646,6 +1660,83 @@ def _pedestrian_signal_allows_entry(world, x: float, y: float, nx: float, ny: fl
     return False
 
 
+def _pedestrian_vehicle_allows_entry(world, x: float, y: float, nx: float, ny: float) -> bool:
+    """Let pedestrians choose crossings, but hold at the curb for nearby cars."""
+    if world is None or world.collision_at("ground", x, y) == "road":
+        return True
+    if world.collision_at("ground", nx, ny) != "road":
+        return True
+    for car in traffic_vehicles:
+        dx, dy = nx - car.x, ny - car.y
+        distance = math.hypot(dx, dy)
+        close_radius = car.collision_length * 0.5 + 58.0
+        if distance <= close_radius:
+            return False
+        if abs(car.speed) < 4.0:
+            continue
+        direction = 1.0 if car.speed >= 0.0 else -1.0
+        hx = math.cos(car.angle) * direction
+        hy = math.sin(car.angle) * direction
+        forward = dx * hx + dy * hy
+        lateral = abs(-dx * hy + dy * hx)
+        approach = max(190.0, abs(car.speed) * 0.9 + car.collision_length * 0.5)
+        if -car.collision_length * 0.35 < forward < approach and lateral < car.collision_width * 0.5 + 38.0:
+            return False
+    return True
+
+
+def _resolve_npc_personal_space(world, personal_space: float) -> int:
+    """Apply soft pedestrian body separation while preserving legal surfaces."""
+    if world is None:
+        return 0
+    movers = [npc for npc in npc_pedestrians if npc.kind not in {"supplier", "buyer"} and npc.route_index >= 0]
+    minimum = max(20.0, float(personal_space) * 0.90)
+    resolved = 0
+    for _pass in range(2):
+        grid = build_spatial_grid(movers, max(64.0, minimum * 2.5))
+        checked: set[tuple[str, str]] = set()
+        for npc in sorted(movers, key=lambda item: item.npc_id):
+            for other in nearby_from_grid(npc, grid, max(64.0, minimum * 2.5), 1):
+                if other is npc:
+                    continue
+                pair = tuple(sorted((npc.npc_id, other.npc_id)))
+                if pair in checked:
+                    continue
+                checked.add(pair)
+                dx, dy = other.x - npc.x, other.y - npc.y
+                distance = math.hypot(dx, dy)
+                if distance >= minimum:
+                    continue
+                if distance < 0.01:
+                    angle = math.radians(sum(ord(ch) for ch in pair[0]) % 360)
+                    ux, uy = math.cos(angle), math.sin(angle)
+                else:
+                    ux, uy = dx / distance, dy / distance
+                separation = (minimum - distance) * 0.5 + 0.6
+                candidates = (
+                    (npc.x - ux * separation, npc.y - uy * separation,
+                     other.x + ux * separation, other.y + uy * separation),
+                    (npc.x - uy * separation, npc.y + ux * separation,
+                     other.x + uy * separation, other.y - ux * separation),
+                )
+                current_a = world.collision_at("ground", npc.x, npc.y)
+                current_b = world.collision_at("ground", other.x, other.y)
+                for ax, ay, bx, by in candidates:
+                    surface_a = world.collision_at("ground", ax, ay)
+                    surface_b = world.collision_at("ground", bx, by)
+                    allowed_a = {"road"} if current_a == "road" else {"walk", "sidewalk"}
+                    allowed_b = {"road"} if current_b == "road" else {"walk", "sidewalk"}
+                    if surface_a not in allowed_a or surface_b not in allowed_b:
+                        continue
+                    if world.object_collision_at(ax, ay, 7.0) or world.object_collision_at(bx, by, 7.0):
+                        continue
+                    npc.x, npc.y = ax, ay
+                    other.x, other.y = bx, by
+                    resolved += 1
+                    break
+    return resolved
+
+
 def update_npcs(
     dt: float,
     sessions: list[ClientSession],
@@ -1693,9 +1784,9 @@ def update_npcs(
             continue
         ux, uy = dx / dist, dy / dist
 
-        # Report #58: ambient pedestrians are non-blocking to one another. They
-        # may visually pass through in a crowd instead of forming permanent
-        # single-file walls. Cars/horns and signal rules remain authoritative.
+        # Report #58: ambient pedestrians are non-blocking to one another at
+        # route level, so they never form permanent single-file walls. Report
+        # #159 adds legal sidesteps and soft separation for visible bodies.
         current_surface = GRID_WORLD.collision_at("ground", npc.x, npc.y) if GRID_WORLD is not None else "sidewalk"
         job_clearance = max(92.0, personal_space * 3.4)
         nearest_job = min(
@@ -1847,7 +1938,8 @@ def update_npcs(
 
         step = min(dist, npc.speed * step_dt)
         nx, ny = npc.x + ux * step, npc.y + uy * step
-        if not _pedestrian_signal_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny, signal_time):
+        if (not _pedestrian_signal_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny, signal_time)
+                or not _pedestrian_vehicle_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny)):
             npc.signal_waiting = True
             npc.pause_timer = 0.0
             npc.aim = math.atan2(uy, ux)
@@ -1878,13 +1970,73 @@ def update_npcs(
             if (sum(ord(c) for c in npc.npc_id) + npc.step_counter) % 12 == 0:
                 npc.pause_timer = 0.25
 
+    _resolve_npc_personal_space(GRID_WORLD, personal_space)
+
 
 def vehicle_speed_mph(speed_px_s: float) -> float:
     return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
 
 
+def _apply_player_handbrake(car: TrafficVehicle, dt: float) -> None:
+    deceleration = float(VEHICLE_SETTINGS.get("player_handbrake_px_s2", 760.0))
+    car.brake_lights = True
+    if car.speed > 0.0:
+        car.speed = max(0.0, car.speed - deceleration * max(0.0, float(dt)))
+    elif car.speed < 0.0:
+        car.speed = min(0.0, car.speed + deceleration * max(0.0, float(dt)))
+
+
+def _point_clear_of_vehicles(x: float, y: float, radius: float, ignored: TrafficVehicle) -> bool:
+    for other in traffic_vehicles:
+        if other is ignored:
+            continue
+        dx, dy = x - other.x, y - other.y
+        ca, sa = math.cos(other.angle), math.sin(other.angle)
+        longitudinal = abs(dx * ca + dy * sa)
+        lateral = abs(-dx * sa + dy * ca)
+        if (longitudinal < other.collision_length * 0.5 + radius
+                and lateral < other.collision_width * 0.5 + radius):
+            return False
+    return True
+
+
+def _displace_point_from_car(
+    x: float, y: float, radius: float, car: TrafficVehicle,
+) -> tuple[float, float] | None:
+    """Return a nearby legal pose outside a car body, or None if not overlapping."""
+    dx, dy = float(x) - car.x, float(y) - car.y
+    ca, sa = math.cos(car.angle), math.sin(car.angle)
+    longitudinal = dx * ca + dy * sa
+    lateral = -dx * sa + dy * ca
+    half_l = car.collision_length * 0.5
+    half_w = car.collision_width * 0.5
+    if abs(longitudinal) >= half_l + radius or abs(lateral) >= half_w + radius:
+        return None
+    identity = sum(ord(ch) for ch in car.vehicle_id)
+    lateral_sign = 1.0 if lateral > 0.5 else (-1.0 if lateral < -0.5 else (1.0 if identity % 2 else -1.0))
+    longitudinal_sign = 1.0 if longitudinal > 0.5 else (-1.0 if longitudinal < -0.5 else (1.0 if car.speed >= 0.0 else -1.0))
+    clearance = 8.0
+    local_candidates = (
+        (max(-half_l, min(half_l, longitudinal)), lateral_sign * (half_w + radius + clearance)),
+        (max(-half_l, min(half_l, longitudinal)), -lateral_sign * (half_w + radius + clearance)),
+        (longitudinal_sign * (half_l + radius + clearance), lateral),
+        (-longitudinal_sign * (half_l + radius + clearance), lateral),
+    )
+    for local_x, local_y in local_candidates:
+        nx = car.x + ca * local_x - sa * local_y
+        ny = car.y + sa * local_x + ca * local_y
+        if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None:
+            if not GRID_WORLD.circle_walkable("ground", nx, ny, radius):
+                continue
+        elif blocked(nx, ny, ACTIVE_MAP, level=0):
+            continue
+        if _point_clear_of_vehicles(nx, ny, radius, car):
+            return nx, ny
+    return None
+
+
 def update_player_vehicle_impacts(sessions: list[ClientSession], now: float) -> None:
-    """Put struck on-foot players prone while briefly removing traffic blocking."""
+    """Displace struck players and put them prone instead of leaving an overlap."""
     moving_cars = [
         car for car in traffic_vehicles
         if not car.parked and vehicle_speed_mph(car.speed) >= 12.0
@@ -1903,6 +2055,9 @@ def update_player_vehicle_impacts(sessions: list[ClientSession], now: float) -> 
             if (longitudinal > car.collision_length * 0.5 + PLAYER_RADIUS * 0.55
                     or lateral > car.collision_width * 0.5 + PLAYER_RADIUS * 0.55):
                 continue
+            displaced = _displace_point_from_car(session.player.x, session.player.y, PLAYER_RADIUS, car)
+            if displaced is not None:
+                session.player.x, session.player.y = displaced
             session.prone = True
             session.crouching = False
             session.crouch_cancel_latched = bool(session.crouch_requested)
@@ -1915,6 +2070,30 @@ def update_player_vehicle_impacts(sessions: list[ClientSession], now: float) -> 
             session.forced_prone_until = now + 1.10
             session.collision_disabled_until = now + 1.45
             break
+
+
+def displace_low_speed_npcs() -> int:
+    """Shove ambient NPCs clear below run-over speed instead of pinning traffic."""
+    runover_mph = max(1.0, float(NPC_AI.get("runover_min_speed_mph", 30.0)))
+    moving_cars = [
+        car for car in traffic_vehicles
+        if not car.parked and 0.8 <= vehicle_speed_mph(car.speed) < runover_mph
+    ]
+    displaced_count = 0
+    for npc in npc_pedestrians:
+        if npc.kind in {"supplier", "buyer"}:
+            continue
+        for car in moving_cars:
+            displaced = _displace_point_from_car(npc.x, npc.y, 9.0, car)
+            if displaced is None:
+                continue
+            npc.x, npc.y = displaced
+            npc.last_progress_x, npc.last_progress_y = displaced
+            npc.stuck_time = 0.0
+            npc.pause_timer = 0.0
+            displaced_count += 1
+            break
+    return displaced_count
 
 
 def update_hydrants(now: float) -> None:
@@ -2062,6 +2241,61 @@ def _vehicle_hits_vehicle(car: TrafficVehicle, x: float, y: float, angle: float)
     return False
 
 
+def _push_blocking_vehicles(car: TrafficVehicle, x: float, y: float, angle: float, push_step: float) -> bool:
+    """Move non-player cars clear of a player car's proposed footprint."""
+    blockers = [
+        other for other in traffic_vehicles
+        if other is not car and _oriented_boxes_overlap(
+            x, y, angle, car.collision_length, car.collision_width,
+            other.x, other.y, other.angle, other.collision_length, other.collision_width,
+        )
+    ]
+    if not blockers:
+        return True
+    # Never relocate another player's authoritative car behind their back.
+    if any(other.controlled_by for other in blockers):
+        return False
+    direction = 1.0 if car.speed >= 0.0 else -1.0
+    forward = (math.cos(angle) * direction, math.sin(angle) * direction)
+    for other in blockers:
+        radial_x, radial_y = other.x - x, other.y - y
+        radial_mag = math.hypot(radial_x, radial_y)
+        radial = forward if radial_mag < 1.0 else (radial_x / radial_mag, radial_y / radial_mag)
+        side = (-forward[1], forward[0])
+        moved = False
+        for ux, uy in (radial, forward, side, (-side[0], -side[1])):
+            for factor in (1.0, 1.55, 2.1, 3.2, 4.6):
+                distance = max(10.0, float(push_step)) * factor
+                ox, oy = other.x + ux * distance, other.y + uy * distance
+                if _vehicle_map_blocked(other, ox, oy, other.angle):
+                    continue
+                if _oriented_boxes_overlap(
+                    x, y, angle, car.collision_length, car.collision_width,
+                    ox, oy, other.angle, other.collision_length, other.collision_width,
+                ):
+                    continue
+                occupied = any(
+                    third is not car and third is not other and _oriented_boxes_overlap(
+                        ox, oy, other.angle, other.collision_length, other.collision_width,
+                        third.x, third.y, third.angle, third.collision_length, third.collision_width,
+                    )
+                    for third in traffic_vehicles
+                )
+                if occupied:
+                    continue
+                other.x, other.y = ox, oy
+                other.last_progress_x, other.last_progress_y = ox, oy
+                other.speed = max(other.speed, abs(car.speed) * 0.28)
+                other.stuck_time = 0.0
+                moved = True
+                break
+            if moved:
+                break
+        if not moved:
+            return False
+    return not _vehicle_hits_vehicle(car, x, y, angle)
+
+
 def _spawn_ejected_driver(car: TrafficVehicle) -> None:
     routes = ACTIVE_MAP.get("npc_routes", []) or []
     if not routes:
@@ -2170,6 +2404,44 @@ async def process_interior_action(session: ClientSession, action: str, message: 
         player.interior_x = player.interior_y = 0
         player.interior_aim = 0.0
         await send_json(session.websocket, _interior_state_payload(player))
+
+
+async def process_passenger_action(session: ClientSession) -> None:
+    """E-key passenger boarding without stealing or taking the driver seat."""
+    p = session.player
+    if p.interior_id or session.driving_vehicle_id or session.passenger_vehicle_id or session.riding_bicycle_id:
+        return
+    if int(getattr(p, "level", 0)) != 0:
+        await send_json(session.websocket, {"type": "notice", "text": "No passenger car on this level."})
+        return
+    eligible = [
+        car for car in traffic_vehicles
+        if car.controlled_by and car.controlled_by != p.player_id
+        and math.hypot(car.x - p.x, car.y - p.y) <= 118.0
+    ]
+    if not eligible:
+        await send_json(session.websocket, {"type": "notice", "text": "No player-driven car close enough for a passenger."})
+        return
+    car = min(eligible, key=lambda item: math.hypot(item.x - p.x, item.y - p.y))
+    if abs(car.speed) > PASSENGER_BOARD_MAX_SPEED:
+        await send_json(session.websocket, {"type": "notice", "text": "That car is moving too fast to board."})
+        return
+    if len(car.passenger_ids) >= PASSENGER_CAPACITY:
+        await send_json(session.websocket, {"type": "notice", "text": "That car has no free passenger seats."})
+        return
+    if p.player_id not in car.passenger_ids:
+        car.passenger_ids.append(p.player_id)
+    reset_on_foot_actions(session)
+    session.passenger_vehicle_id = car.vehicle_id
+    p.in_vehicle = True
+    p.vehicle_id = car.vehicle_id
+    p.vehicle_kind = "car"
+    p.vehicle_role = "passenger"
+    p.x, p.y, p.aim = car.x, car.y, car.angle
+    await send_json(session.websocket, {
+        "type": "notice",
+        "text": "Entered as a passenger. The driver controls the car; press T to exit.",
+    })
 
 
 async def process_car_action(session: ClientSession) -> None:
@@ -2354,7 +2626,7 @@ async def process_car_action(session: ClientSession) -> None:
     p.vehicle_kind = "car"
     p.vehicle_role = "driver"
     p.x, p.y, p.aim = car.x, car.y, car.angle
-    await send_json(session.websocket, {"type": "notice", "text": text + "  W/S throttle, A/D steer, SHIFT full throttle, T exit."})
+    await send_json(session.websocket, {"type": "notice", "text": text + "  W/S throttle, A/D steer, SPACE handbrake, SHIFT full throttle, T exit."})
 
 
 async def load_account(phone: str, name: str, requested_appearance: dict | None = None) -> tuple[int, list[dict | None], dict, bool]:
@@ -2937,11 +3209,13 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         session.input_y = max(-1.0, min(1.0, iy))
         session.aim = aim
         session.boost = bool(message.get("boost", False))
+        session.handbrake = bool(message.get("handbrake", False)) and bool(session.driving_vehicle_id)
         session.crouch_requested = bool(message.get("crouch", False))
         if not session.crouch_requested:
             session.crouch_cancel_latched = False
         if session.passenger_vehicle_id:
             session.boost = False
+            session.handbrake = False
         on_foot = not session.driving_vehicle_id and not session.passenger_vehicle_id and not session.riding_bicycle_id
         if on_foot:
             now = time.monotonic()
@@ -2968,6 +3242,8 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         await process_interaction(session)
     elif msg_type == "car_action":
         await process_car_action(session)
+    elif msg_type == "passenger_action":
+        await process_passenger_action(session)
     elif msg_type == "vehicle_lights":
         car = next((item for item in traffic_vehicles if item.vehicle_id == session.driving_vehicle_id), None)
         if car is None:
@@ -3273,6 +3549,7 @@ async def simulation_loop() -> None:
             if current - session.last_input_time > 0.5:
                 session.input_x = session.input_y = 0.0
                 session.boost = False
+                session.handbrake = False
             p = session.player
             finish_expired_player_jump(session, current)
 
@@ -3364,7 +3641,9 @@ async def simulation_loop() -> None:
                     brake = float(VEHICLE_SETTINGS.get("player_brake_px_s2", 390.0))
                     drag = float(VEHICLE_SETTINGS.get("player_drag_px_s2", 92.0))
 
-                    if throttle > 0.05:
+                    if session.handbrake:
+                        _apply_player_handbrake(car, dt)
+                    elif throttle > 0.05:
                         car.brake_lights = car.speed < -1.0
                         if car.speed < 0.0:
                             car.speed = min(0.0, car.speed + brake * dt)
@@ -3400,7 +3679,15 @@ async def simulation_loop() -> None:
                     dx = math.cos(proposed_angle) * car.speed * dt
                     dy = math.sin(proposed_angle) * car.speed * dt
                     nx, ny = rotated_center_x + dx, rotated_center_y + dy
-                    if not _vehicle_map_blocked(car, nx, ny, proposed_angle) and not _vehicle_hits_vehicle(car, nx, ny, proposed_angle) and not _vehicle_hits_bicycle(car,nx,ny,proposed_angle):
+                    map_clear = not _vehicle_map_blocked(car, nx, ny, proposed_angle)
+                    bicycle_clear = not _vehicle_hits_bicycle(car, nx, ny, proposed_angle)
+                    vehicle_clear = not _vehicle_hits_vehicle(car, nx, ny, proposed_angle)
+                    if map_clear and bicycle_clear and not vehicle_clear:
+                        vehicle_clear = _push_blocking_vehicles(
+                            car, nx, ny, proposed_angle,
+                            max(12.0, abs(car.speed) * dt + 8.0),
+                        )
+                    if map_clear and vehicle_clear and bicycle_clear:
                         car.x, car.y, car.angle = nx, ny, proposed_angle
                     else:
                         # v0.9 arcade collision recovery: try a short glancing slide
@@ -3528,6 +3815,7 @@ async def simulation_loop() -> None:
         update_player_vehicle_impacts(sessions, current_mono)
         update_bicycles(dt, sessions)
         update_npcs(dt, sessions, tick_index, signal_time)
+        displace_low_speed_npcs()
         update_npc_runovers(current_mono)
         update_hydrants(current_mono)
         tick_index += 1

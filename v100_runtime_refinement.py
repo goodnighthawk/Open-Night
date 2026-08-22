@@ -299,12 +299,46 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
     cone_cells = _spaced_cells(road_edges, occupied, 24, 5)
 
     for index, (gx, gy) in enumerate(telephone_cells, 1):
+        road_direction = next(
+            (
+                direction for direction, (dx, dy) in (
+                    ("north", (0, -1)), ("east", (1, 0)),
+                    ("south", (0, 1)), ("west", (-1, 0)),
+                )
+                if 0 <= gx + dx < world.width and 0 <= gy + dy < world.height
+                and world.collision_at("ground", *world.cell_center(gx + dx, gy + dy)) == "road"
+            ),
+            "north",
+        )
+        # Keep the handset/box visually inside the pavement instead of centered
+        # on the curb edge. Values are authored in the 256 px source-cell space
+        # and are normalized together with every other GridWorld object.
+        inward = {
+            "north": (0, 1), "east": (-1, 0),
+            "south": (0, -1), "west": (1, 0),
+        }[road_direction]
+        width_px, height_px = 128, 96
+        center_x = world.cell_px // 2 + inward[0] * 52
+        center_y = world.cell_px // 2 + inward[1] * 52
         world.objects.append({
             "asset": "street_item_telephone_box", "gx": gx, "gy": gy,
-            "offset_x_px": 64, "offset_y_px": 80, "width_px": 128, "height_px": 96,
+            "offset_x_px": center_x - width_px // 2,
+            "offset_y_px": center_y - height_px // 2,
+            "width_px": width_px, "height_px": height_px,
             "street_item_kind": "telephone_box", "street_item_index": index,
             "composition_pass": "city_block_street_items_svg_v1", "decorative_only": True,
-            "placement_policy": "spaced_sidewalk_cell_report44",
+            "placement_policy": "pavement_inset_public_phone_v23",
+            "road_edge_direction": road_direction,
+            # A compact cyan pool makes the pavement phone discoverable at
+            # night. Fixture and light remain one authoritative object record.
+            "emits_light": True,
+            "lighting_kind": "public_phone",
+            "light_offset_x_px": width_px // 2,
+            "light_offset_y_px": height_px // 2,
+            "light_radius_px": 190,
+            "light_color_rgb": [62, 194, 224],
+            "light_intensity": 0.24,
+            "light_registration": "public_phone_same_object_v23",
         })
     for index, (gx, gy) in enumerate(cone_cells, 1):
         world.objects.append({

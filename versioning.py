@@ -1,6 +1,6 @@
 """Single source of truth for the multiplayer wire/build version."""
 
-GAME_VERSION = "2.2"
+GAME_VERSION = "2.3"
 
 
 def version_label() -> str:
