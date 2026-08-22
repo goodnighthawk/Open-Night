@@ -25,6 +25,7 @@ class GameAudio:
         self.last_any_horn = 0.0
         self.previous_in_vehicle = False
         self.previous_speed = 0.0
+        self.game_audio_muted = False
         if sys.platform == "emscripten":
             return
         try:
@@ -56,7 +57,7 @@ class GameAudio:
             self.enabled = False
 
     def _play(self, key: str, volume: float = 1.0) -> pygame.mixer.Channel | None:
-        if not self.enabled or key not in self.sounds:
+        if self.game_audio_muted or not self.enabled or key not in self.sounds:
             return None
         try:
             channel = self.sounds[key].play()
@@ -65,6 +66,17 @@ class GameAudio:
             return channel
         except pygame.error:
             return None
+
+    def set_muted(self, muted: bool) -> None:
+        self.game_audio_muted = bool(muted)
+        if self.game_audio_muted and pygame.mixer.get_init():
+            for channel_index in range(pygame.mixer.get_num_channels()):
+                pygame.mixer.Channel(channel_index).stop()
+            self.engine_channel = None
+
+    def toggle_muted(self) -> bool:
+        self.set_muted(not self.game_audio_muted)
+        return self.game_audio_muted
 
     def ui_key(self, key: int) -> None:
         if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e, pygame.K_t):
@@ -80,7 +92,7 @@ class GameAudio:
         return max(0.0, min(0.75, (1.0 - distance / radius) * 0.75))
 
     def update(self, game) -> None:
-        if not self.enabled:
+        if self.game_audio_muted or not self.enabled:
             return
         local = game.players.get(game.local_id or "")
         if local is None:

@@ -70,6 +70,7 @@ from gameplay.camera_controller import LookAheadCamera
 from gameplay.input_controller import movement_vector
 from gameplay.issue_reporter import save_issue_report
 from gameplay.audio import GameAudio
+from gameplay.radio import RADIO_STATIONS, RadioPlayer
 from portable_paths import describe as shared_data_description
 from portable_map_runtime import cached_map_hashes, install_transfer_bundle, load_cached_map
 from mapfiles.grid import chunk_label
@@ -1248,6 +1249,7 @@ class Game:
         self.account_masked = ""
         self.settings = load_settings()
         self.audio = GameAudio()
+        self.radio = RadioPlayer()
         self.camera_controller = LookAheadCamera(self.settings.get("camera", {}))
         self.pause_menu_open = False
         self.pause_page = "main"
@@ -3215,12 +3217,54 @@ class Game:
             "controls": pygame.Rect(panel.x + 450, panel.bottom - 64, 130, 40),
             "quit": pygame.Rect(panel.right - 154, panel.bottom - 64, 130, 40),
             "back": pygame.Rect(panel.x + 24, panel.bottom - 64, 130, 40),
+            "radio": pygame.Rect(panel.x + 48, panel.y + 226, 190, 44),
         }
         toggles = {
             key: pygame.Rect(panel.right - 210, panel.y + 145 + i * 60 - self.pause_scroll, 150, 34)
             for i, (_, _, key, _, _) in enumerate(self._pause_settings_rows())
         }
         return panel, buttons, toggles
+
+    def _audio_toggle_layout(self, panel: pygame.Rect) -> tuple[pygame.Rect, pygame.Rect]:
+        return (
+            pygame.Rect(panel.right - 126, panel.y + 24, 50, 50),
+            pygame.Rect(panel.right - 65, panel.y + 31, 38, 38),
+        )
+
+    def _radio_slot_layout(self, panel: pygame.Rect) -> list[pygame.Rect]:
+        left = panel.x + 42
+        top = panel.y + 132
+        width = (panel.width - 102) // 2
+        return [
+            pygame.Rect(left + (i % 2) * (width + 18), top + (i // 2) * 66, width, 52)
+            for i in range(10)
+        ]
+
+    def _draw_audio_icons(self, panel: pygame.Rect, accent: tuple[int, int, int]) -> None:
+        music_rect, game_rect = self._audio_toggle_layout(panel)
+        panel2 = tuple(self.art_style.get("ui", {}).get("panel_2", (38, 41, 40)))
+        for rect in (music_rect, game_rect):
+            pygame.draw.rect(self.screen, panel2, rect, border_radius=7)
+            pygame.draw.rect(self.screen, accent, rect, width=2, border_radius=7)
+
+        # Large music-note control. A slash means radio/music is muted.
+        color = TEXT_COLOR
+        pygame.draw.line(self.screen, color, (music_rect.x + 29, music_rect.y + 12), (music_rect.x + 29, music_rect.y + 34), 4)
+        pygame.draw.line(self.screen, color, (music_rect.x + 29, music_rect.y + 12), (music_rect.x + 40, music_rect.y + 9), 4)
+        pygame.draw.circle(self.screen, color, (music_rect.x + 22, music_rect.y + 37), 7)
+        if self.radio.music_muted:
+            pygame.draw.line(self.screen, (235, 92, 92), music_rect.topleft, music_rect.bottomright, 4)
+
+        # Smaller game-audio speaker, deliberately subordinate to music.
+        pygame.draw.polygon(self.screen, color, [
+            (game_rect.x + 8, game_rect.y + 16), (game_rect.x + 14, game_rect.y + 16),
+            (game_rect.x + 22, game_rect.y + 10), (game_rect.x + 22, game_rect.y + 28),
+            (game_rect.x + 14, game_rect.y + 22), (game_rect.x + 8, game_rect.y + 22),
+        ])
+        if self.audio.game_audio_muted:
+            pygame.draw.line(self.screen, (235, 92, 92), game_rect.topleft, game_rect.bottomright, 3)
+        else:
+            pygame.draw.arc(self.screen, color, pygame.Rect(game_rect.x + 17, game_rect.y + 10, 14, 18), -1.0, 1.0, 2)
 
     def _pause_settings_rows(self) -> list[tuple[str, bool, str, str, str]]:
         return [
@@ -3282,6 +3326,29 @@ class Game:
         pygame.draw.line(self.screen, accent, (panel.x+12,panel.y+8), (panel.right-12,panel.y+8), 2)
         title = self.big_font.render("PAUSED / OPTIONS", True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 32, panel.y + 24))
+        self._draw_audio_icons(panel, accent)
+
+        if self.pause_page == "radio":
+            self.screen.blit(self.font.render("CAR RADIO", True, accent), (panel.x + 32, panel.y + 92))
+            local = self.players.get(self.local_id or "")
+            in_vehicle = bool(getattr(local, "in_vehicle", False)) if local is not None else False
+            hint = "Choose a station" if in_vehicle else "Enter a car to change stations"
+            self.screen.blit(self.tiny_font.render(hint, True, MUTED_TEXT), (panel.x + 185, panel.y + 99))
+            for index, rect in enumerate(self._radio_slot_layout(panel)):
+                station = RADIO_STATIONS[index]
+                active = station is not None and index == self.radio.selected_index
+                pygame.draw.rect(self.screen, tuple(ui.get("panel_2", (38, 41, 40))), rect, border_radius=6)
+                pygame.draw.rect(self.screen, accent if active else MUTED_TEXT, rect, width=2, border_radius=6)
+                if station is None:
+                    label, sub = f"{index + 1}. EMPTY", "Coming soon"
+                else:
+                    label, sub = f"{index + 1}. {station.name}", station.genre
+                self.screen.blit(self.small_font.render(label, True, TEXT_COLOR if station else MUTED_TEXT), (rect.x + 12, rect.y + 7))
+                self.screen.blit(self.tiny_font.render(sub, True, accent if active else MUTED_TEXT), (rect.x + 12, rect.y + 30))
+            status = self.radio.error or "Live MP3 stream • music volume is independent of game audio"
+            self.screen.blit(self.tiny_font.render(status[:92], True, MUTED_TEXT), (panel.x + 180, panel.bottom - 50))
+            self._draw_menu_button(buttons["back"], "BACK")
+            return
 
         if self.pause_page == "controls":
             self.screen.blit(self.font.render("CONTROLS", True, accent), (panel.x + 32, panel.y + 92))
@@ -3352,11 +3419,36 @@ class Game:
         self._draw_menu_button(buttons["friends"], "FRIENDS")
         self._draw_menu_button(buttons["controls"], "CONTROLS")
         self._draw_menu_button(buttons["quit"], "QUIT GAME")
+        self._draw_menu_button(buttons["radio"], "CAR RADIO", active=self.radio.playing_index is not None)
 
     def handle_pause_click(self, pos: tuple[int,int]) -> str | None:
         if not self.pause_menu_open:
             return None
         _, buttons, toggles = self._pause_layout()
+        panel, _, _ = self._pause_layout()
+        music_rect, game_rect = self._audio_toggle_layout(panel)
+        if music_rect.collidepoint(pos):
+            muted = self.radio.toggle_muted()
+            self.notice = f"Music {'muted' if muted else 'on'}"
+            self.notice_until = time.monotonic() + 1.5
+            return None
+        if game_rect.collidepoint(pos):
+            muted = self.audio.toggle_muted()
+            self.notice = f"Game audio {'muted' if muted else 'on'}"
+            self.notice_until = time.monotonic() + 1.5
+            return None
+        if self.pause_page == "radio":
+            if buttons["back"].collidepoint(pos):
+                self.pause_page = "main"
+                return None
+            local = self.players.get(self.local_id or "")
+            if local is not None and bool(getattr(local, "in_vehicle", False)):
+                for index, rect in enumerate(self._radio_slot_layout(panel)):
+                    if rect.collidepoint(pos) and self.radio.select(index):
+                        self.notice = f"Tuned to {RADIO_STATIONS[index].name}"
+                        self.notice_until = time.monotonic() + 1.5
+                        return None
+            return None
         if self.pause_page == "controls":
             if buttons["back"].collidepoint(pos):
                 self.pause_page = "main"
@@ -3403,6 +3495,9 @@ class Game:
             self.pause_scroll = 0
         elif buttons["controls"].collidepoint(pos):
             self.pause_page = "controls"
+            self.pause_scroll = 0
+        elif buttons["radio"].collidepoint(pos):
+            self.pause_page = "radio"
             self.pause_scroll = 0
         elif buttons["quit"].collidepoint(pos):
             return "quit"
@@ -3838,6 +3933,15 @@ class Game:
                 for npc in self.npcs.values():
                     npc.smooth(dt)
                 self.audio.update(self)
+                local_audio_player = self.players.get(self.local_id or "")
+                if local_audio_player is not None:
+                    if bool(getattr(local_audio_player, "in_vehicle", False)):
+                        desired_station = self.radio.selected_index
+                    else:
+                        # Adjacent server regions rotate through the three launch
+                        # stations, giving map areas their own audible identity.
+                        desired_station = sum(ord(char) for char in self.server_region_id) % 3
+                    self.radio.update(desired_station)
                 self.update_camera(dt)
                 self.send_input()
                 if self.interior.active:
@@ -3983,6 +4087,7 @@ class Game:
                 # browser event loop. This is effectively free on desktop.
                 await asyncio.sleep(0)
         finally:
+            self.radio.stop()
             self.network.stop()
             pygame.quit()
 
