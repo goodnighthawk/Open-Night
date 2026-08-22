@@ -1,0 +1,67 @@
+name: Windows Packaged Client
+
+on:
+  push:
+    branches: [release/nuitka-windows-installer]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-packaged-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows-package:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            packaging/windows/requirements-build.txt
+
+      - name: Verify branch contains latest main
+        shell: pwsh
+        run: |
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor origin/main HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaging branch is behind origin/main. Run SYNC_AND_BUILD_WINDOWS_RELEASE.bat."
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            choco install innosetup --yes --no-progress
+          }
+
+      - name: Build and smoke-test portable client and installer
+        shell: pwsh
+        run: .\packaging\windows\build_release.ps1
+
+      - name: Read packaged version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw VERSION.txt).Trim()
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload shareable Windows release
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-night-windows-v${{ steps.version.outputs.version }}
+          path: |
+            dist/windows/OpenNight.exe
+            dist/windows/OpenNight-Setup-*.exe
+            dist/windows/SHA256SUMS.txt
+            dist/windows/PACKAGE_SMOKE_TEST.txt
+          if-no-files-found: error
+          retention-days: 30
