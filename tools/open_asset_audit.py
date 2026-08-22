@@ -24,20 +24,19 @@ def rows(path: Path) -> list[dict[str, str]]:
 
 
 def main() -> int:
-    manifest = rows(ROOT / "assets/cars/vehicle_manifest.csv")
-    assert len(manifest) == 86, f"expected 86 vehicles, found {len(manifest)}"
-    imported = manifest[81:86]
-    assert [int(row["index"]) for row in imported] == list(range(81, 86))
-    assert [row["category"] for row in imported] == ["pickup", "sports", "truck", "emergency", "van"]
-    for row in imported:
-        assert row["file"].startswith("open_asset_arcade_car_")
+    manifest = rows(ROOT / "assets/cars/player_vehicle_manifest.csv")
+    generated = [row for row in manifest if row.get("art_set") == "generated_vehicle_fleet_2026_08_22"]
+    assert len(generated) == 28, f"expected 28 generated vehicles, found {len(generated)}"
+    for row in generated:
+        assert row["file"].startswith("../source_packs/gen_vehicles/gen_vehicle_")
         assert row["traffic_eligible"].lower() == "true"
-        assert png_size(ROOT / "assets/cars" / row["file"]) == (256, 256, 6)
+        width, height, color_type = png_size(ROOT / "assets/cars" / row["file"])
+        assert width > 32 and height > 64 and color_type == 6
 
     catalog = rows(ROOT / "assets/open_source_import/catalog.csv")
-    assert len(catalog) == 9, len(catalog)
+    assert len(catalog) == 4, len(catalog)
     assert all(row["license"] == "user_created" for row in catalog)
-    assert sum(row["asset_type"] == "vehicle_sprite" for row in catalog) == 5
+    assert sum(row["asset_type"] == "vehicle_sprite" for row in catalog) == 0
     for row in catalog:
         runtime = row["runtime_file"].strip()
         if runtime:
@@ -81,7 +80,7 @@ def main() -> int:
     assert any(isinstance(node, ast.FunctionDef) and node.name == "_traffic_asset" for node in ast.walk(server_tree))
 
     print("OPEN ASSET AUDIT PASSED")
-    print("  5 vehicles / 2 building views / 8-frame dust / 10 dedicated wide-gait run sheets")
+    print("  28 generated vehicles / 2 building views / 8-frame dust / 10 dedicated wide-gait run sheets")
     print("  user_created catalog / held-Shift run / server-authoritative double jump")
     return 0
 

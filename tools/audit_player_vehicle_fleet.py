@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 CARS = ROOT / "assets" / "cars"
 MANIFEST = CARS / "player_vehicle_manifest.csv"
 REPLACED_PASSENGER_TYPES = {"sedan", "compact", "sports"}
+CURRENT_ART_SETS = {"player_pixel_fleet_2026_08_20", "generated_vehicle_fleet_2026_08_22"}
 
 
 def fail(message: str) -> None:
@@ -47,20 +48,26 @@ def main() -> None:
 
     referenced_sheets: set[str] = set()
     for row in new_rows:
-        if str(row.get("art_set", "")) != "player_pixel_fleet_2026_08_20":
+        art_set = str(row.get("art_set", ""))
+        if art_set not in CURRENT_ART_SETS:
             fail(f"new vehicle row has unexpected art_set: {row}")
         if str(row.get("file", "")).startswith("approved_fleet_"):
             fail(f"legacy civilian PNG referenced by player row: {row}")
         sheet = str(row.get("sheet_file", "")).strip()
-        if not sheet:
-            fail(f"player vehicle row has no sheet_file: {row}")
-        referenced_sheets.add(sheet)
-        try:
-            crop = tuple(int(float(row[name])) for name in ("crop_x", "crop_y", "crop_w", "crop_h"))
-        except Exception:
-            fail(f"invalid crop metadata: {row}")
-        if crop[2] <= 0 or crop[3] <= 0:
-            fail(f"empty crop metadata: {row}")
+        if sheet:
+            referenced_sheets.add(sheet)
+            try:
+                crop = tuple(int(float(row[name])) for name in ("crop_x", "crop_y", "crop_w", "crop_h"))
+            except Exception:
+                fail(f"invalid crop metadata: {row}")
+            if crop[2] <= 0 or crop[3] <= 0:
+                fail(f"empty crop metadata: {row}")
+        else:
+            filename = str(row.get("file", "")).strip()
+            if art_set != "generated_vehicle_fleet_2026_08_22" or not filename.startswith("../source_packs/gen_vehicles/"):
+                fail(f"individual generated vehicle has an invalid path: {row}")
+            if not (CARS / filename).is_file():
+                fail(f"individual generated vehicle is missing: {filename}")
 
     for sheet in referenced_sheets:
         path = CARS / sheet
@@ -95,7 +102,7 @@ def main() -> None:
             fail(f"runtime could not decode player vehicle index {index}: {row}")
 
     print(
-        "player pixel fleet audit passed: "
+        "vehicle fleet audit passed: "
         f"{len(new_rows)} new vehicles, fallback types={sorted(fallback_categories)}, "
         f"sheets={len(referenced_sheets)}"
     )

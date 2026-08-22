@@ -152,11 +152,11 @@ def _traffic_asset(index: int) -> dict:
     if not eligible:
         return vehicle_meta(0)
     index = max(0, int(index))
-    # Keep the authored fleet varied while guaranteeing that the five converted
-    # user-created arcade cars appear in ordinary, low-traffic local sessions.
-    imported = [row for row in eligible if str(row.get("file", "")).startswith("open_asset_arcade_car_")]
-    if imported and index % 7 == 0:
-        return imported[(index // 7) % len(imported)]
+    # Keep the newly generated service/heavy fleet visible alongside the
+    # recently added player pixel cars in ordinary traffic.
+    generated = [row for row in eligible if row.get("art_set") == "generated_vehicle_fleet_2026_08_22"]
+    if generated and index % 3 == 0:
+        return generated[(index // 3) % len(generated)]
     return eligible[index % len(eligible)]
 
 
