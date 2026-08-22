@@ -37,6 +37,13 @@ def main() -> int:
     ):
         assert token in client_source, token
     assert "self.game_audio_muted or not self.enabled" in audio_source
+    assert "for sound in self.sounds.values()" in audio_source
+
+    radio_source = (ROOT / "gameplay" / "radio.py").read_text(encoding="utf-8")
+    for token in ("imageio_ffmpeg.get_ffmpeg_exe()", "pcm_s16le", "self._channel.queue(sound)"):
+        assert token in radio_source, token
+    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert "imageio-ffmpeg" in requirements and "python-vlc" not in requirements
 
     print("OPEN NIGHT v1.7 RADIO / AUDIO AUDIT: PASS")
     print("  3 live stations + 10 car slots + regional rotation + independent mute controls")

@@ -2,5 +2,5 @@ pygame-ce==2.5.8
 websockets>=16.0,<18
 mysql-connector-python>=9.0,<10
 Pillow>=10.0,<13
-python-vlc>=3.0.21203,<4
+imageio-ffmpeg>=0.6.0,<0.7
 pygbag==0.9.2

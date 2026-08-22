@@ -16,6 +16,17 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 2
 )
 
+".venv\Scripts\python.exe" -c "import imageio_ffmpeg" >nul 2>&1
+if errorlevel 1 (
+  echo Updating audio playback support...
+  ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+  if errorlevel 1 (
+    echo [ERROR] Could not install the live-radio decoder.
+    pause
+    exit /b 3
+  )
+)
+
 set "CLIENT_LOG=%~dp0client_crash.log"
 set "PYTHONFAULTHANDLER=1"
 set "PYTHONUNBUFFERED=1"

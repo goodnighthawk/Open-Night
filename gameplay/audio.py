@@ -70,8 +70,10 @@ class GameAudio:
     def set_muted(self, muted: bool) -> None:
         self.game_audio_muted = bool(muted)
         if self.game_audio_muted and pygame.mixer.get_init():
-            for channel_index in range(pygame.mixer.get_num_channels()):
-                pygame.mixer.Channel(channel_index).stop()
+            # Stop only the game's own samples. The live radio owns a separate
+            # mixer channel and must remain audible when game audio is muted.
+            for sound in self.sounds.values():
+                sound.stop()
             self.engine_channel = None
 
     def toggle_muted(self) -> bool:
