@@ -14,4 +14,4 @@ Started from a complete GitHub issue-mirror pull on 2026-08-22. The snapshot con
 - [x] Pull the complete current report mirror and inspect all four attached screenshots.
 - [x] Add focused behavioral checks for #161–#164 and render a runtime visual review sheet.
 - [x] Pass the complete carried report, multiplayer, traffic, collision, launcher, version, and visual gates.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
