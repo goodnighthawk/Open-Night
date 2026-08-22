@@ -567,16 +567,28 @@ def apply_world_refinement(world):
         # The source fixture points south. Rotate that end over the adjacent road.
         rotation = {"north": 180, "east": 270, "south": 0, "west": 90}[road_direction]
         item["rotation"] = rotation
-        source_w, source_h = 204, 768
+        # Reports #119/#128: the prior 204x768 presentation dominated an
+        # entire sidewalk cell. Render the same source at exactly half size and
+        # register its mount farther inside the sidewalk while the head still
+        # reaches the adjacent road.
+        source_w, source_h = 102, 384
         base, fixture = _lamp_anchor_geometry(rotation, source_w, source_h)
-        offset_x = world.cell_px // 2 - base[0]
-        offset_y = world.cell_px // 2 - base[1]
+        inward = {
+            "north": (0, 1), "east": (-1, 0),
+            "south": (0, -1), "west": (1, 0),
+        }[road_direction]
+        sidewalk_inset = 52
+        target_base_x = world.cell_px // 2 + inward[0] * sidewalk_inset
+        target_base_y = world.cell_px // 2 + inward[1] * sidewalk_inset
+        offset_x = target_base_x - base[0]
+        offset_y = target_base_y - base[1]
         light_x, light_y = fixture
         item["offset_x_px"] = offset_x
         item["offset_y_px"] = offset_y
         item["width_px"] = source_w
         item["height_px"] = source_h
-        item["placement_policy"] = "road_edge_base_and_fixture_transform_v14"
+        item["placement_policy"] = "half_scale_inset_sidewalk_base_v22"
+        item["sidewalk_inset_px"] = sidewalk_inset
         item["road_overhang_direction"] = road_direction
         occupied_lamp_cells.add((gx, gy))
         _install_city_block_street_item_defs(world)
@@ -584,7 +596,7 @@ def apply_world_refinement(world):
         item["emits_light"] = True
         item["light_offset_x_px"] = light_x
         item["light_offset_y_px"] = light_y
-        item["light_radius_px"] = 720
+        item["light_radius_px"] = 360
         item["light_color_rgb"] = [92, 145, 255]
         item["light_intensity"] = 0.28
         item["light_registration"] = "cardinal_transform_shared_anchors_report60"

@@ -70,6 +70,10 @@ def build_procedural_block_props(
             continue
         for local_index in range(2):
             asset, width, height = STREET_PROPS[(index * 2 + local_index) % len(STREET_PROPS)]
+            if asset == "block_prop_shrub_round":
+                width, height = width * 4, height * 4
+            elif asset == "block_prop_patio_umbrella":
+                width, height = width * 3, height * 3
             pick = (index * 7 + local_index * max(1, len(candidates) // 2)) % len(candidates)
             gx, gy = candidates[pick]
             objects.append({
@@ -87,7 +91,12 @@ def build_procedural_block_props(
                 "decorative_only": True,
             })
             if asset == "block_prop_shrub_round":
-                objects[-1]["collision_radius_px"] = 64
+                objects[-1]["collision_radius_px"] = int(round(min(width, height) * 0.30))
                 objects[-1]["decorative_only"] = False
                 objects[-1]["collision_kind"] = "tree"
+                objects[-1]["scale_policy"] = "reported_tree_scale_4x"
+            elif asset == "block_prop_patio_umbrella":
+                objects[-1]["overhead"] = True
+                objects[-1]["walk_under"] = True
+                objects[-1]["scale_policy"] = "reported_parasol_scale_3x"
     return objects

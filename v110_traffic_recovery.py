@@ -27,8 +27,13 @@ ROUTE_RESEAT_LOCAL_LIMIT_SCALE = 2.8
 MAX_RECOVERY_HEADING_CHANGE_RADIANS = math.radians(8.0)
 RECOVERY_INCH_SPEED_MIN = 12.0
 RECOVERY_INCH_SPEED_MAX = 24.0
+ORBIT_WINDOW_SECONDS = 3.4
+ORBIT_MIN_PATH_PX = 130.0
+ORBIT_MIN_TURN_RADIANS = math.radians(155.0)
+ORBIT_MAX_NET_DISPLACEMENT_PX = 90.0
 
 _LAST_ATTEMPT: dict[str, float] = {}
+_ORBIT_TRACK: dict[str, dict[str, float]] = {}
 
 
 def _stats(server_module) -> dict:
@@ -40,9 +45,51 @@ def _stats(server_module) -> dict:
         "attempts", "successes", "backoff_successes", "deflection_successes",
         "courtesy_overlap_clamps", "overlaps_detected", "overlaps_repaired",
         "overlap_repair_failures", "route_reseats", "blocked_repairs",
+        "orbit_detections", "orbit_recoveries",
     ):
         value.setdefault(key, 0)
     return value
+
+
+def _orbiting_cars(server_module, now: float) -> list[object]:
+    """Detect repeated turning with path travel but little net displacement."""
+    live_ids = {str(car.vehicle_id) for car in server_module.traffic_vehicles}
+    for stale_id in set(_ORBIT_TRACK) - live_ids:
+        _ORBIT_TRACK.pop(stale_id, None)
+    detected: list[object] = []
+    for car in server_module.traffic_vehicles:
+        if car.controlled_by or car.parked or int(car.route_index) < 0:
+            continue
+        car_id = str(car.vehicle_id)
+        row = _ORBIT_TRACK.get(car_id)
+        if row is None or now < row["time"]:
+            _ORBIT_TRACK[car_id] = {
+                "time": now, "start_x": float(car.x), "start_y": float(car.y),
+                "last_x": float(car.x), "last_y": float(car.y), "last_angle": float(car.angle),
+                "path": 0.0, "turn": 0.0,
+            }
+            continue
+        row["path"] += math.hypot(float(car.x) - row["last_x"], float(car.y) - row["last_y"])
+        angle_delta = (float(car.angle) - row["last_angle"] + math.pi) % (2.0 * math.pi) - math.pi
+        row["turn"] += abs(angle_delta)
+        row["last_x"], row["last_y"], row["last_angle"] = float(car.x), float(car.y), float(car.angle)
+        if now - row["time"] < ORBIT_WINDOW_SECONDS:
+            continue
+        net = math.hypot(float(car.x) - row["start_x"], float(car.y) - row["start_y"])
+        if (
+            row["path"] >= ORBIT_MIN_PATH_PX
+            and row["turn"] >= ORBIT_MIN_TURN_RADIANS
+            and net <= min(ORBIT_MAX_NET_DISPLACEMENT_PX, row["path"] * 0.42)
+        ):
+            detected.append(car)
+        _ORBIT_TRACK[car_id] = {
+            "time": now, "start_x": float(car.x), "start_y": float(car.y),
+            "last_x": float(car.x), "last_y": float(car.y), "last_angle": float(car.angle),
+            "path": 0.0, "turn": 0.0,
+        }
+    if detected:
+        _stats(server_module)["orbit_detections"] += len(detected)
+    return detected
 
 
 def _route_heading(server_module, car, route: dict) -> float:
@@ -313,6 +360,11 @@ def install(server_module) -> None:
         routes = server_module.ACTIVE_MAP.get("traffic_routes", []) or []
         if not routes:
             return
+
+        for car in _orbiting_cars(server_module, float(server_time)):
+            route = routes[int(car.route_index) % len(routes)]
+            if _reseat_to_nearest_clear_route_pose(server_module, car, route):
+                _stats(server_module)["orbit_recoveries"] += 1
 
         # Enforce a valid published state every tick. A repair candidate must be
         # on road and clear of all current bodies, so these passes cannot trade

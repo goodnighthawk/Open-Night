@@ -2710,11 +2710,13 @@ class Game:
             def lamp_point(position: tuple[int, int], color: tuple[int, int, int], core: int = 8, glow_radius: int = 22) -> None:
                 glow = pygame.Surface((glow_radius * 2 + 2, glow_radius * 2 + 2), pygame.SRCALPHA)
                 center = (glow_radius + 1, glow_radius + 1)
-                pygame.draw.circle(glow, (*color, 28), center, glow_radius)
-                pygame.draw.circle(glow, (*color, 56), center, max(core + 3, glow_radius // 2))
-                self.screen.blit(glow, glow.get_rect(center=position), special_flags=pygame.BLEND_RGBA_ADD)
-                pygame.draw.circle(self.screen, color, position, core)
-                pygame.draw.circle(self.screen, (255, 250, 222), position, max(2, core // 3))
+                pygame.draw.circle(glow, (*color, 18), center, glow_radius)
+                pygame.draw.circle(glow, (*color, 38), center, max(core + 3, glow_radius // 2))
+                pygame.draw.circle(glow, (*color, 88), center, core)
+                pygame.draw.circle(glow, (255, 250, 222, 112), center, max(2, core // 3))
+                # Normal alpha compositing keeps the lens visibly translucent;
+                # additive blending made even low-alpha circles read as opaque.
+                self.screen.blit(glow, glow.get_rect(center=position))
             if car.headlights:
                 for side in (-1.0, 1.0):
                     lamp_point(
@@ -2895,13 +2897,35 @@ class Game:
         pygame.draw.ellipse(self.screen, color, pygame.Rect(sx - 17, sy + 20, 34, 12), width=3)
 
     def _job_locations(self) -> list[dict]:
+        # The full server list is authoritative for the M map. Merge nearby live
+        # role NPCs so a streamed buyer/supplier can never disappear while map
+        # metadata is refreshing, and keep the legacy pair only as a last resort.
+        candidates: list[dict] = []
         rows = self.map_config.get("job_locations", [])
-        if isinstance(rows, list) and rows:
-            return [row for row in rows if isinstance(row, dict) and row.get("pos")]
-        return [
-            {"role": "supplier", "pos": self.map_config.get("supplier_pos", SUPPLIER_POS)},
-            {"role": "buyer", "pos": self.map_config.get("customer_pos", CUSTOMER_POS)},
-        ]
+        if isinstance(rows, list):
+            candidates.extend(row for row in rows if isinstance(row, dict) and row.get("pos"))
+        for npc in self.npcs.values():
+            role = str(getattr(npc, "kind", "")).lower()
+            if role in {"supplier", "buyer"}:
+                candidates.append({"role": role, "pos": [npc.render_x, npc.render_y], "id": str(npc.id)})
+        if not candidates:
+            candidates.extend((
+                {"role": "supplier", "pos": self.map_config.get("supplier_pos", SUPPLIER_POS)},
+                {"role": "buyer", "pos": self.map_config.get("customer_pos", CUSTOMER_POS)},
+            ))
+        merged: list[dict] = []
+        seen: set[tuple[str, int, int]] = set()
+        for row in candidates:
+            try:
+                role = str(row.get("role", "buyer")).lower()
+                pos = row["pos"]
+                key = (role, int(round(float(pos[0]))), int(round(float(pos[1]))))
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if key not in seen:
+                seen.add(key)
+                merged.append({**row, "role": role, "pos": [float(pos[0]), float(pos[1])]})
+        return merged
 
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""
@@ -2968,6 +2992,7 @@ class Game:
         draw_character(
             self.screen, (sx, sy), body_aim, player.appearance, scale=render_scale, local_ring=None,
             moving=moving, animation=animation, anim_time=time.monotonic() - player.anim_epoch,
+            draw_shadow=not local,
         )
 
     def draw_blood_stain(self, stain: dict) -> None:
@@ -3715,11 +3740,14 @@ class Game:
         pygame.draw.circle(circle_mask, (255,255,255,255), (radius,radius), radius-3)
         mini.blit(circle_mask, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
         pygame.draw.circle(mini, border, (radius,radius), radius-2, width=7)
-        # Supplier and buyer are gameplay destinations, so they remain visible
-        # on the private/friend-focused minimap whenever they are in local range.
+        # Collect job markers now and paint them after the local arrow. A buyer
+        # at the player's exact position must remain visible instead of being
+        # completely covered by the arrow/center dot.
+        minimap_job_markers: list[tuple[tuple[int, int], tuple[int, int, int], str]] = []
         for job in self._job_locations():
             raw_pos = job["pos"]
-            marker_color = SUPPLIER_COLOR if str(job["role"]).lower() == "supplier" else CUSTOMER_COLOR
+            role = str(job["role"]).lower()
+            marker_color = SUPPLIER_COLOR if role == "supplier" else CUSTOMER_COLOR
             try:
                 dx = float(raw_pos[0]) - local.render_x
                 dy = float(raw_pos[1]) - local.render_y
@@ -3727,8 +3755,7 @@ class Game:
                 continue
             if dx * dx + dy * dy <= (world_radius * 0.94) ** 2:
                 marker_pos = (int(radius + dx * scale), int(radius + dy * scale))
-                pygame.draw.circle(mini, (18, 24, 28), marker_pos, 7)
-                pygame.draw.circle(mini, marker_color, marker_pos, 5)
+                minimap_job_markers.append((marker_pos, marker_color, "S" if role == "supplier" else "B"))
 
         # The compact minimap is deliberately private/friend-focused. The full
         # M map retains the complete online roster for general orientation.
@@ -3752,6 +3779,11 @@ class Game:
         right = (int(radius + math.cos(heading-2.55)*9), int(radius + math.sin(heading-2.55)*9))
         pygame.draw.polygon(mini, (244,244,237), [tip,left,right])
         pygame.draw.polygon(mini, border, [tip,left,right], width=1)
+        for marker_pos, marker_color, role_letter in minimap_job_markers:
+            pygame.draw.circle(mini, (18, 24, 28), marker_pos, 11)
+            pygame.draw.circle(mini, marker_color, marker_pos, 9, width=3)
+            badge = self.tiny_font.render(role_letter, True, marker_color)
+            mini.blit(badge, badge.get_rect(center=marker_pos))
         self.screen.blit(mini, (18, self.screen.get_height() - diameter - 58))
         n = self.small_font.render("N", True, TEXT_COLOR)
         self.screen.blit(n, (18 + radius - n.get_width()//2, self.screen.get_height() - diameter - 53))
@@ -4171,6 +4203,10 @@ class Game:
                         elif kind == "npc": self.draw_npc(obj)
                         else: self.draw_player(obj, local=(obj.id == self.local_id))
 
+                    if active_world_level == 0 and self.grid_renderer is not None:
+                        # Ground canopies cover walkers but remain below true
+                        # elevated-road/roof overlays and their occupants.
+                        self.grid_renderer.draw_overhead_objects(self.screen, self.camera(), "ground")
                     if active_world_level >= 0:
                         positive_levels = sorted({
                             int(float(road.get("level", 0) or 0))

@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 import csv
 import os
 from pathlib import Path
 import shutil
 import sys
-import tempfile
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,13 +27,26 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+@contextmanager
+def audit_directory(name: str):
+    """Use an ordinary workspace directory; Windows temp ACLs can block CI."""
+    path = ROOT / "work" / "audit_v110_bug_delivery" / name
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        yield str(path)
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def exercise_real_mixed_schema_fixture() -> dict:
     fixture = os.getenv("OPEN_NIGHT_BUG_FIXTURE", "").strip()
     if not fixture:
         return {"fixture": "not supplied"}
     source = Path(fixture)
     require(source.is_file(), f"fixture missing: {source}")
-    with tempfile.TemporaryDirectory() as tmp:
+    with audit_directory("real_fixture") as tmp:
         target = Path(tmp) / "issue_reports.csv"
         shutil.copy2(source, target)
         before = list(csv.reader(target.open("r", encoding="utf-8-sig", newline="")))
@@ -72,7 +85,7 @@ def exercise_synthetic_mixed_schema() -> dict:
     for key, value in values.items():
         new_row[base.index(key)] = value
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with audit_directory("synthetic_schema") as tmp:
         path = Path(tmp) / "issue_reports.csv"
         with path.open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.writer(handle)
@@ -168,7 +181,7 @@ def exercise_client_acknowledgement() -> dict:
         def _build_version(self):
             return "Open Night v1.1 - bug review / GridWorld population"
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with audit_directory("client_ack") as tmp:
         old_root = os.environ.get("PYMMO_SHARED_DATA")
         os.environ["PYMMO_SHARED_DATA"] = tmp
         try:
@@ -240,7 +253,7 @@ def exercise_railway_client_route() -> dict:
             self.notice = ""
             self.notice_until = 0.0
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with audit_directory("railway_relay") as tmp:
         old_root = os.environ.get("PYMMO_SHARED_DATA")
         os.environ["PYMMO_SHARED_DATA"] = tmp
         try:

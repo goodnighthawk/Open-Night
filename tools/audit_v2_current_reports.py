@@ -257,8 +257,10 @@ def main() -> int:
         require(token in client_source, f"explicit customization step missing {token!r}")
     require("fire_escape_target" in client_source and "CLIMB FIRE ESCAPE" in client_source,
             "fire escape E prompt is missing")
-    require("traffic_engine_channel" in audio_source and "radius=1400.0" in audio_source,
-            "distance-attenuated NPC engine loop is missing")
+    require("traffic_engine_channels" in audio_source and "_traffic_distance_volume" in audio_source,
+            "multi-source distance-attenuated NPC engines are missing")
+    require("selected = selected[:4]" in audio_source and "normalized * normalized" in audio_source,
+            "NPC engine channel cap or quiet nonlinear falloff is missing")
 
     character = _character_audit()
     bus = _bus_audit()

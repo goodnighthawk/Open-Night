@@ -33,6 +33,9 @@ HEAD_SHIFT_Y = {
     "run_left": -44, "run_right": -44, "jump": -52,
     "crouch": -58, "prone": -60,
 }
+# Keep head registration intact while moving the authored hat crown farther
+# north over the top-down head in every animation state.
+HAT_SHIFT_Y = -8
 
 MASTER_BODY_ROWS = {
     "idle": 2,
@@ -224,7 +227,10 @@ def _composed_frame(hat: str, head: str, body: str, state: str) -> pygame.Surfac
         hat_surface = _load_part(f"hats/hat_{hat_index:02d}.png")
         hat_rect = hat_surface.get_bounding_rect(min_alpha=10)
         hat_center_x = hat_rect.centerx if hat_rect.width else hat_surface.get_width() // 2
-        canvas.blit(hat_surface, (origin_x + body_center_x - hat_center_x, origin_y + shift_y))
+        canvas.blit(
+            hat_surface,
+            (origin_x + body_center_x - hat_center_x, origin_y + shift_y + HAT_SHIFT_Y),
+        )
     return canvas
 
 
@@ -325,6 +331,7 @@ def draw_character(
     action: str | None = None,
     action_phase: int = 0,
     weapon_id: str | None = None,
+    draw_shadow: bool = True,
 ) -> pygame.Rect:
     if action:
         sprite = build_action_surface(appearance, action, mode=mode, aim_radians=aim_radians, phase=action_phase, scale=scale, weapon_id=weapon_id)
@@ -338,9 +345,10 @@ def draw_character(
         dust = _sprint_dust_frame(int(float(anim_time) * 18.0) % 8, max(50, min(800, int(round(float(scale) * 100.0)))))
         if dust is not None:
             target.blit(dust, dust.get_rect(midbottom=(center[0], center[1] + int(18 * max(0.5, float(scale))))))
-    shadow = pygame.Surface((max(10, int(sprite.get_width() * 0.72)), max(4, int(4 * max(0.5, float(scale))))), pygame.SRCALPHA)
-    pygame.draw.ellipse(shadow, (*SHADOW, SHADOW_ALPHA), shadow.get_rect())
-    target.blit(shadow, shadow.get_rect(center=(center[0] + 1, center[1] + int(12 * max(0.5, float(scale))))))
+    if draw_shadow:
+        shadow = pygame.Surface((max(10, int(sprite.get_width() * 0.72)), max(4, int(4 * max(0.5, float(scale))))), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (*SHADOW, SHADOW_ALPHA), shadow.get_rect())
+        target.blit(shadow, shadow.get_rect(center=(center[0] + 1, center[1] + int(12 * max(0.5, float(scale))))))
     if local_ring is not None:
         pygame.draw.circle(target, local_ring, center, max(16, int(18 * max(0.5, float(scale)))), width=2)
     _outline(target, sprite, rect)

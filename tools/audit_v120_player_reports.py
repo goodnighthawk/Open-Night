@@ -51,13 +51,14 @@ def main() -> None:
     lamp_cells = {(int(row["gx"]), int(row["gy"])) for row in lamps}
     assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
     assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
-               and row.get("placement_policy") == "road_edge_base_and_fixture_transform_v14"
+               and row.get("placement_policy") == "half_scale_inset_sidewalk_base_v22"
+               and int(row.get("sidewalk_inset_px", 0)) == 52
                and row.get("asset") == "street_item_lamp"
                and row.get("light_registration") == "cardinal_transform_shared_anchors_report60"
                and row.get("road_overhang_direction") in {"north", "east", "south", "west"}
-               and int(row.get("width_px", 0)) >= 102
-               and int(row.get("height_px", 0)) >= 384
-               and int(row.get("light_radius_px", 0)) >= 360 for row in lamps), \
+               and int(row.get("width_px", 0)) >= 51
+               and int(row.get("height_px", 0)) >= 192
+               and int(row.get("light_radius_px", 0)) >= 180 for row in lamps), \
         "streetlamps were not relocated from the expanded road onto sidewalks"
     street_items = [row for row in world.objects if row.get("composition_pass") == "city_block_street_items_svg_v1"]
     assert sum(row.get("street_item_kind") == "telephone_box" for row in street_items) == 16

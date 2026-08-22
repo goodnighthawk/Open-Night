@@ -1660,7 +1660,11 @@ def update_npcs(
     active_radius = float(NPC_AI.get("active_radius_px", 1800.0))
     far_hz = max(1.0, float(NPC_AI.get("far_update_hz", 5.0)))
     far_stride = max(1, int(round(SERVER_TICK_RATE / far_hz)))
-    grid = build_spatial_grid(npc_pedestrians, max(64.0, personal_space * 3.0))
+    job_npcs = [npc for npc in npc_pedestrians if npc.kind in {"supplier", "buyer"}]
+    moving_npcs = [npc for npc in npc_pedestrians if 0 <= npc.route_index < len(routes)]
+    # Stationary job NPCs have their own keep-clear rule below and must not be
+    # treated as members of the ambient crowd spatial hash.
+    grid = build_spatial_grid(moving_npcs, max(64.0, personal_space * 3.0))
 
     signal_time = time.time() if server_time is None else float(server_time)
     for npc in npc_pedestrians:
@@ -1693,6 +1697,57 @@ def update_npcs(
         # may visually pass through in a crowd instead of forming permanent
         # single-file walls. Cars/horns and signal rules remain authoritative.
         current_surface = GRID_WORLD.collision_at("ground", npc.x, npc.y) if GRID_WORLD is not None else "sidewalk"
+        job_clearance = max(92.0, personal_space * 3.4)
+        nearest_job = min(
+            (
+                (math.hypot(npc.x - role_npc.x, npc.y - role_npc.y), role_npc)
+                for role_npc in job_npcs
+                if role_npc is not npc
+            ),
+            default=(float("inf"), None),
+            key=lambda row: row[0],
+        )
+        if nearest_job[1] is not None and nearest_job[0] < job_clearance and current_surface != "road":
+            role_npc = nearest_job[1]
+            away_x, away_y = npc.x - role_npc.x, npc.y - role_npc.y
+            if nearest_job[0] < 1.0:
+                identity_angle = math.radians(sum(ord(ch) for ch in npc.npc_id) % 360)
+                away_x, away_y = math.cos(identity_angle), math.sin(identity_angle)
+            away_mag = max(1.0, math.hypot(away_x, away_y))
+            away_x, away_y = away_x / away_mag, away_y / away_mag
+            escape_step = min(
+                job_clearance - nearest_job[0] + personal_space,
+                max(18.0, npc.speed * step_dt * 2.2),
+            )
+            candidates = []
+            for turn in (0.0, 0.55, -0.55, 1.05, -1.05):
+                ca, sa = math.cos(turn), math.sin(turn)
+                vx, vy = away_x * ca - away_y * sa, away_x * sa + away_y * ca
+                nx, ny = npc.x + vx * escape_step, npc.y + vy * escape_step
+                surface = GRID_WORLD.collision_at("ground", nx, ny) if GRID_WORLD is not None else "sidewalk"
+                if surface not in {"walk", "sidewalk"}:
+                    continue
+                clearance = min(
+                    (math.hypot(nx - other.x, ny - other.y) for other in job_npcs),
+                    default=job_clearance,
+                )
+                candidates.append((clearance, nx, ny, math.atan2(vy, vx)))
+            if candidates:
+                _clearance, npc.x, npc.y, npc.aim = max(candidates, key=lambda row: row[0])
+                npc.pause_timer = 0.0
+                npc.stuck_time += step_dt
+                # Rejoin beyond the job rather than walking straight back into
+                # the same buyer/supplier on the following tick.
+                for offset in range(1, min(5, len(points)) + 1):
+                    candidate_wp = (npc.next_waypoint + npc.route_direction * offset) % len(points)
+                    wx, wy = points[candidate_wp]
+                    if math.hypot(float(wx) - role_npc.x, float(wy) - role_npc.y) >= job_clearance:
+                        npc.next_waypoint = candidate_wp
+                        break
+                if math.hypot(npc.x - npc.last_progress_x, npc.y - npc.last_progress_y) >= personal_space:
+                    npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
+                    npc.stuck_time = 0.0
+                continue
         road_hazard = None
         road_hazard_distance = 240.0
         if current_surface == "road":
@@ -1738,7 +1793,7 @@ def update_npcs(
         if horn_car is not None or (crowded and current_surface != "road"):
             identity = sum(ord(c) for c in npc.npc_id)
             sx, sy = -uy, ux
-            npc.stuck_time = max(0.0, npc.stuck_time - step_dt)
+            npc.stuck_time += step_dt
             fleeing_horn = horn_car is not None
             moved_aside = False
             if fleeing_horn:
@@ -1772,7 +1827,6 @@ def update_npcs(
                 if clearance < personal_space:
                     continue
                 npc.x, npc.y, npc.aim = nx, ny, math.atan2(forward_y, forward_x)
-                npc.last_progress_x, npc.last_progress_y = nx, ny
                 moved_aside = True
                 break
             if not moved_aside and fallback_candidate is not None:
@@ -1780,13 +1834,14 @@ def update_npcs(
                 # packed cluster, take the safest legal candidate instead of
                 # oscillating route direction forever behind nearby bodies.
                 npc.x, npc.y, npc.aim = fallback_candidate
-                npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
                 moved_aside = True
-            if not moved_aside:
-                # Change route intent instead of waiting forever behind the same
-                # body. The next tick immediately searches in the new direction.
-                npc.route_direction *= -1
+            if npc.stuck_time >= 1.10:
+                # Corner/crowd watchdog: keep the authored route direction and
+                # skip the contested point instead of alternating forever.
                 npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
+                npc.stuck_time = 0.0
+                npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
+            if not moved_aside:
                 npc.pause_timer = 0.0
             continue
 
@@ -1802,6 +1857,12 @@ def update_npcs(
         if math.hypot(npc.x - npc.last_progress_x, npc.y - npc.last_progress_y) >= personal_space * 0.5:
             npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
             npc.stuck_time = 0.0
+        else:
+            npc.stuck_time += step_dt
+            if npc.stuck_time >= 1.25:
+                npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
+                npc.stuck_time = 0.0
+                npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
         if dist <= max(6.0, npc.speed * step_dt * 1.25):
             npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
             npc.step_counter += 1

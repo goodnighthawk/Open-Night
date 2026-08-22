@@ -42,11 +42,19 @@ def main() -> None:
     expected_vectors = {
         "north": (0, -1), "east": (1, 0), "south": (0, 1), "west": (-1, 0),
     }
+    inward_vectors = {
+        "north": (0, 1), "east": (-1, 0), "south": (0, -1), "west": (1, 0),
+    }
     for lamp in lamps:
         width, height = int(lamp["width_px"]), int(lamp["height_px"])
+        expected_size = (int(round(102 * world.cell_px / 256.0)), int(round(384 * world.cell_px / 256.0)))
+        assert (width, height) == expected_size
         base, fixture = v100_runtime_refinement._lamp_anchor_geometry(int(lamp["rotation"]), width, height)
-        assert abs(int(lamp["offset_x_px"]) + base[0] - world.cell_px / 2) <= 1
-        assert abs(int(lamp["offset_y_px"]) + base[1] - world.cell_px / 2) <= 1
+        inward = inward_vectors[str(lamp["road_overhang_direction"])]
+        assert int(lamp.get("sidewalk_inset_px", 0)) == 52
+        inset = int(round(52 * world.cell_px / 256.0))
+        assert abs(int(lamp["offset_x_px"]) + base[0] - (world.cell_px / 2 + inward[0] * inset)) <= 1
+        assert abs(int(lamp["offset_y_px"]) + base[1] - (world.cell_px / 2 + inward[1] * inset)) <= 1
         assert abs(int(lamp["light_offset_x_px"]) - fixture[0]) <= 1
         assert abs(int(lamp["light_offset_y_px"]) - fixture[1]) <= 1
         dx, dy = fixture[0] - base[0], fixture[1] - base[1]

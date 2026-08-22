@@ -376,6 +376,8 @@ class GridRenderer:
         for _z, asset_id, item, world_x, world_y, width, height in self._visible_objects_for_layers(
             (cam_x, cam_y), target.get_width(), target.get_height(), object_layers
         ):
+            if bool(item.get("overhead", False)):
+                continue
             rotation = float(item.get("rotation", 0.0))
             image = self._object_surface(asset_id, width, height, rotation)
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
@@ -384,6 +386,26 @@ class GridRenderer:
             self._apply_ground_night_grade(target)
             self._draw_ground_light_pools(target, (cam_x, cam_y))
         self._draw_proof_compass(target)
+
+    def draw_overhead_objects(
+        self,
+        target: pygame.Surface,
+        camera: tuple[float, float],
+        layer: str = "ground",
+    ) -> int:
+        """Paint walk-under canopies after characters without adding collision."""
+        cam_x, cam_y = map(float, camera)
+        count = 0
+        for _z, asset_id, item, world_x, world_y, width, height in self._visible_objects_for_layers(
+            (cam_x, cam_y), target.get_width(), target.get_height(), (layer,)
+        ):
+            if not bool(item.get("overhead", False)):
+                continue
+            rotation = float(item.get("rotation", 0.0))
+            image = self._object_surface(asset_id, width, height, rotation)
+            target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
+            count += 1
+        return count
 
     def draw_overview(self, target: pygame.Surface, layer: str = "ground") -> tuple[int, int, int]:
         """Render the entire map with integer-size preview cells.
