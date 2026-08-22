@@ -31,10 +31,12 @@ CURB_WORLD_TO_PACK_IMAGE = {
     # The pack includes dedicated rounded corner pieces. Keep the already
     # verified left/right world-to-pack translation while replacing the sharp
     # square curb corners players reported.
-    "curb_tl_outer": "city_block://road_and_pavement_tileset/circle_top_right_outer.png",
-    "curb_tr_outer": "city_block://road_and_pavement_tileset/circle_top_left_outer.png",
-    "curb_bl_outer": "city_block://road_and_pavement_tileset/circle_bottom_right_outer.png",
-    "curb_br_outer": "city_block://road_and_pavement_tileset/circle_bottom_left_outer.png",
+    # World IDs describe the two road-facing sides.  The pack names describe
+    # the pavement quadrant instead, which is diagonally opposite those roads.
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/circle_bottom_right_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/circle_bottom_left_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/circle_top_right_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/circle_top_left_outer.png",
 }
 
 

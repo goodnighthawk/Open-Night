@@ -119,6 +119,28 @@ def _sprite_from_sheet(meta: dict) -> pygame.Surface | None:
     return source
 
 
+def _repair_generated_bus_crop(source: pygame.Surface) -> pygame.Surface:
+    """Complete the cut-off rear edge in the submitted bus exports at runtime."""
+    width, height = source.get_size()
+    if width <= 0 or height <= 0:
+        return source
+    cap_height = max(10, int(round(height * 0.12)))
+    overlap = max(4, cap_height // 2)
+    margin = max(4, int(round(min(width, height) * 0.035)))
+    repaired = pygame.Surface(
+        (width + margin * 2, height + cap_height - overlap + margin * 2),
+        pygame.SRCALPHA,
+    )
+    repaired.blit(source, (margin, margin))
+    # The top end-cap is complete in all three bus variants. Mirroring only
+    # that shallow cap produces a closed rear bumper without inventing a second
+    # vehicle body or materially changing the approved silhouette.
+    top_cap = source.subsurface(pygame.Rect(0, 0, width, cap_height)).copy()
+    top_cap = pygame.transform.flip(top_cap, False, True)
+    repaired.blit(top_cap, (margin, margin + height - overlap))
+    return repaired
+
+
 @lru_cache(maxsize=256)
 def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | None:
     catalog = load_vehicle_catalog()
@@ -132,6 +154,9 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
         source = _load_surface_file(path)
     if source is None or source.get_width() <= 0 or source.get_height() <= 0:
         return None
+
+    if str(meta.get("category", "")).lower() == "bus" and meta.get("art_set") == "generated_vehicle_fleet_2026_08_22":
+        source = _repair_generated_bus_crop(source)
 
     # Player-supplied sheets are allowed to contain a horizontal source sprite;
     # canonical runtime vehicle art always points nose-up before heading rotation.

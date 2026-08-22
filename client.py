@@ -476,7 +476,10 @@ class Launcher:
         self.discovery.start()
         self.last_click_time = 0.0
         self.last_click_uri: str | None = None
-        self.customizing = False
+        # Character choice is an explicit launcher step, not an easy-to-miss
+        # optional button. Joining remains locked until DONE confirms the preview.
+        self.customizing = True
+        self.character_step_confirmed = False
         self.appearance = normalize_character(CHARACTER_DEFAULT)
         self.appearance_changed = False
         # The grungy 90-degree pack uses three independently selectable layers.
@@ -512,6 +515,10 @@ class Launcher:
     def _result(self, uri: str) -> tuple[str, str, str, dict, bool] | None:
         creds = self._credentials()
         if creds is None:
+            return None
+        if not self.character_step_confirmed:
+            self.customizing = True
+            self.message = "Confirm your character with DONE before joining."
             return None
         phone, name = creds
         return uri, phone, name, normalize_character(self.appearance), self.appearance_changed
@@ -561,6 +568,7 @@ class Launcher:
             self.appearance["profile"] = "custom"
         self.appearance = normalize_character(self.appearance)
         self.appearance_changed = True
+        self.character_step_confirmed = False
 
     def _character_modal(self, event: pygame.event.Event | None = None) -> bool:
         w, h = self.screen.get_size()
@@ -576,16 +584,22 @@ class Launcher:
             row_y += 54
 
         if event is not None:
-            if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_KP_ENTER):
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.customizing = False
+                return True
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.character_step_confirmed = True
                 self.customizing = False
                 return True
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if done.collidepoint(event.pos):
+                    self.character_step_confirmed = True
                     self.customizing = False
                     return True
                 if reset.collidepoint(event.pos):
                     self.appearance = normalize_character(CHARACTER_DEFAULT)
                     self.appearance_changed = True
+                    self.character_step_confirmed = False
                     return True
                 for key, left, right, choices in row_buttons:
                     if left.collidepoint(event.pos):
@@ -711,9 +725,10 @@ class Launcher:
                 self.name_field.draw(self.screen, self.font)
                 security = self.small.render("Prototype identity only: phone number is not yet verified by SMS/OTP.", True, (185, 145, 105))
                 self.screen.blit(security, (52, 178))
-                self._button(self.screen, customize_rect, "CUSTOMIZE CHARACTER", self.small)
-                if self.appearance_changed:
-                    changed = self.small.render("changes will be saved", True, (166, 211, 170))
+                character_button = "CHARACTER READY" if self.character_step_confirmed else "CHARACTER REQUIRED"
+                self._button(self.screen, customize_rect, character_button, self.small)
+                if self.character_step_confirmed:
+                    changed = self.small.render("confirmed", True, (166, 211, 170))
                     self.screen.blit(changed, (customize_rect.right + 14, customize_rect.y + 11))
 
                 self.screen.blit(self.font.render(f"AVAILABLE SERVERS ({len(servers)})", True, TEXT_COLOR), (52, 252))
@@ -2166,10 +2181,21 @@ class Game:
         # over the road and the live lamp sits on the traffic-facing end.
         mast_top = (sx, sy + dy * 34)
         lamp = (sx + dx * 54, mast_top[1])
-        pygame.draw.line(self.screen, (46, 50, 49), (sx, sy), mast_top, 5)
-        pygame.draw.line(self.screen, (46, 50, 49), mast_top, lamp, 5)
-        pygame.draw.circle(self.screen, (18, 20, 20), lamp, 11)
-        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), lamp, 7)
+        pygame.draw.line(self.screen, (16, 18, 18), (sx, sy), mast_top, 9)
+        pygame.draw.line(self.screen, (82, 88, 84), (sx, sy), mast_top, 5)
+        pygame.draw.line(self.screen, (16, 18, 18), mast_top, lamp, 9)
+        pygame.draw.line(self.screen, (82, 88, 84), mast_top, lamp, 5)
+        housing = pygame.Rect(0, 0, 25, 39)
+        housing.center = lamp
+        pygame.draw.rect(self.screen, (12, 14, 14), housing, border_radius=6)
+        pygame.draw.rect(self.screen, (104, 109, 103), housing, width=2, border_radius=6)
+        red_pos = (lamp[0], lamp[1] - 9)
+        green_pos = (lamp[0], lamp[1] + 9)
+        pygame.draw.circle(self.screen, (218, 64, 58) if not green else (63, 31, 29), red_pos, 7)
+        pygame.draw.circle(self.screen, (77, 210, 91) if green else (28, 60, 32), green_pos, 7)
+        active_pos = green_pos if green else red_pos
+        active_rgb = (77, 210, 91) if green else (218, 64, 58)
+        pygame.draw.circle(self.screen, active_rgb, active_pos, 11, width=2)
 
     def nearest_interior(self, max_distance: float = 105.0) -> dict | None:
         local = self.players.get(self.local_id or "")
@@ -3787,6 +3813,14 @@ class Game:
                 math.hypot(local.render_x - float(pos[0]), local.render_y - float(pos[1])) <= INTERACT_DISTANCE
                 for pos in supplier_positions
             )
+            fire_escape_target = None
+            if (self.grid_world is not None and not local.interior_id
+                    and not bool(getattr(local, "in_vehicle", False))):
+                transition = self.grid_world.fire_escape_transition(
+                    local.render_x, local.render_y, int(getattr(local, "level", 0))
+                )
+                if transition is not None:
+                    fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
             sales_targets: list[tuple[float, str]] = []
             for player in self.players.values():
                 if player.id == self.local_id or player.in_vehicle or player.interior_id != local.interior_id:
@@ -3801,8 +3835,8 @@ class Game:
                         role = str(getattr(npc, "kind", "pedestrian")).lower()
                         if role != "supplier":
                             sales_targets.append((d, "BUYER" if role == "buyer" else "PEDESTRIAN"))
-            if (near_supplier or sales_targets) and not self.inventory_open:
-                target = "BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}"
+            if (fire_escape_target or near_supplier or sales_targets) and not self.inventory_open:
+                target = fire_escape_target or ("BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}")
                 prompt = self.big_font.render(f"[ E ] {target}", True, LOCAL_COLOR)
                 pr = prompt.get_rect(center=(w // 2, h - 72))
                 pygame.draw.rect(self.screen, (10, 10, 10), pr.inflate(32, 22), border_radius=7)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 import math
 from pathlib import Path
+import re
 
 import pygame
 
@@ -13,6 +14,10 @@ from character_catalog import normalize_character, pack_root
 
 
 TARGET_BASE_HEIGHT = 31
+MASTER_CELL_WIDTH = 160
+MASTER_CELL_HEIGHT = 128
+MASTER_CELL_PAD_X = 12
+COMPOSITE_SIZE = 224
 OUTLINE = (24, 23, 25)
 SHADOW = (0, 0, 0)
 SHADOW_ALPHA = 100
@@ -24,9 +29,20 @@ ANIMATION_ROWS = {
     "crouch": "crouch", "prone": "prone",
 }
 HEAD_SHIFT_Y = {
-    "idle": -29, "walk_left": -27, "walk_right": -27,
-    "run_left": -24, "run_right": -24, "jump": -18,
-    "crouch": -15, "prone": 0,
+    "idle": -24, "walk_left": -28, "walk_right": -34,
+    "run_left": -44, "run_right": -44, "jump": -52,
+    "crouch": -58, "prone": -60,
+}
+
+MASTER_BODY_ROWS = {
+    "idle": 2,
+    "walk_left": 3,
+    "walk_right": 4,
+    "run_left": 5,
+    "run_right": 6,
+    "jump": 7,
+    "crouch": 8,
+    "prone": 9,
 }
 
 
@@ -37,6 +53,8 @@ def reload_character_style() -> None:
     SHADOW = tuple(style.get("shadow", SHADOW))
     SHADOW_ALPHA = max(0, min(220, int(style.get("shadow_alpha", SHADOW_ALPHA))))
     _composed_frame.cache_clear()
+    _load_part.cache_clear()
+    _master_surface.cache_clear()
 
 
 def _part_index(part_id: str, prefix: str) -> int:
@@ -47,18 +65,133 @@ def _part_index(part_id: str, prefix: str) -> int:
     return max(1, min(8, value))
 
 
+@lru_cache(maxsize=1)
+def _master_surface() -> pygame.Surface | None:
+    path = pack_root() / "master_8x10_v2_clean.png"
+    if not path.is_file():
+        return None
+    try:
+        return pygame.image.load(str(path)).convert_alpha()
+    except (pygame.error, OSError):
+        return None
+
+
+def _sanitize_part(source: pygame.Surface) -> pygame.Surface:
+    """Remove transparent-white bleed and isolated extraction artifacts."""
+    clean = source.copy().convert_alpha()
+    width, height = clean.get_size()
+    if width <= 0 or height <= 0:
+        return clean
+
+    # Flood through the transparent exterior and consume only neutral near-white
+    # pixels attached to it. Enclosed pale art details remain untouched.
+    pending = [(x, 0) for x in range(width)] + [(x, height - 1) for x in range(width)]
+    pending += [(0, y) for y in range(1, height - 1)] + [(width - 1, y) for y in range(1, height - 1)]
+    exterior: set[tuple[int, int]] = set()
+    while pending:
+        x, y = pending.pop()
+        if (x, y) in exterior:
+            continue
+        pixel = clean.get_at((x, y))
+        # The source export flattened its antialias edge against a light gray
+        # presentation canvas, so the unwanted fringe ranges well below pure
+        # white. Restrict removal to neutral pixels reachable from the exterior.
+        pale_neutral = min(pixel.r, pixel.g, pixel.b) >= 175 and max(pixel.r, pixel.g, pixel.b) - min(pixel.r, pixel.g, pixel.b) <= 30
+        if pixel.a > 16 and not pale_neutral:
+            continue
+        exterior.add((x, y))
+        clean.set_at((x, y), (0, 0, 0, 0))
+        if x:
+            pending.append((x - 1, y))
+        if x + 1 < width:
+            pending.append((x + 1, y))
+        if y:
+            pending.append((x, y - 1))
+        if y + 1 < height:
+            pending.append((x, y + 1))
+
+    # The clean master contains a handful of one-pixel guide fragments. They are
+    # disconnected from the character and should never become visible at 4x zoom.
+    seen: set[tuple[int, int]] = set()
+    components: list[list[tuple[int, int]]] = []
+    for start_y in range(height):
+        for start_x in range(width):
+            if (start_x, start_y) in seen or clean.get_at((start_x, start_y)).a <= 16:
+                continue
+            component: list[tuple[int, int]] = []
+            component_pending = [(start_x, start_y)]
+            while component_pending:
+                x, y = component_pending.pop()
+                if (x, y) in seen or clean.get_at((x, y)).a <= 16:
+                    continue
+                seen.add((x, y))
+                component.append((x, y))
+                if x:
+                    component_pending.append((x - 1, y))
+                if x + 1 < width:
+                    component_pending.append((x + 1, y))
+                if y:
+                    component_pending.append((x, y - 1))
+                if y + 1 < height:
+                    component_pending.append((x, y + 1))
+            components.append(component)
+    # Logical cells can overrun horizontally by a few pixels, but padding may
+    # also catch a disconnected sliver from the neighboring column. Every layer
+    # is authored as one connected silhouette, so retain only that main component.
+    if components:
+        main_component = max(components, key=len)
+        for component in components:
+            if component is main_component:
+                continue
+            for x, y in component:
+                clean.set_at((x, y), (0, 0, 0, 0))
+    return clean
+
+
+def _master_part(relative: str) -> pygame.Surface | None:
+    normalized = str(relative).replace("\\", "/")
+    row = None
+    match = re.search(r"hats/hat_(\d{2})\.png$", normalized)
+    if match:
+        column, row = int(match.group(1)) - 1, 0
+    else:
+        match = re.search(r"heads/head_(\d{2})\.png$", normalized)
+        if match:
+            column, row = int(match.group(1)) - 1, 1
+        else:
+            match = re.search(r"bodies/body_(\d{2})_([a-z_]+)\.png$", normalized)
+            if not match or match.group(2) not in MASTER_BODY_ROWS:
+                return None
+            column, row = int(match.group(1)) - 1, MASTER_BODY_ROWS[match.group(2)]
+    master = _master_surface()
+    if master is None or not (0 <= column < 8):
+        return None
+    origin_x = column * MASTER_CELL_WIDTH - MASTER_CELL_PAD_X
+    origin_y = row * MASTER_CELL_HEIGHT
+    size = (MASTER_CELL_WIDTH + MASTER_CELL_PAD_X * 2, MASTER_CELL_HEIGHT)
+    part = pygame.Surface(size, pygame.SRCALPHA)
+    clipped = pygame.Rect(origin_x, origin_y, *size).clip(master.get_rect())
+    if clipped.width <= 0 or clipped.height <= 0:
+        return None
+    part.blit(master, (clipped.x - origin_x, clipped.y - origin_y), clipped)
+    return _sanitize_part(part)
+
+
 @lru_cache(maxsize=256)
 def _load_part(relative: str) -> pygame.Surface:
+    master_part = _master_part(relative)
+    if master_part is not None:
+        return master_part
     path = pack_root() / relative
-    if not path.is_file():
-        # Missing replacement art is deliberately visible; never fall back to
-        # the retired master_dual_camera pack.
-        missing = pygame.Surface((160, 128), pygame.SRCALPHA)
-        pygame.draw.rect(missing, (255, 0, 255), pygame.Rect(58, 42, 44, 44), width=5)
-        pygame.draw.line(missing, (255, 0, 255), (58, 42), (102, 86), 5)
-        pygame.draw.line(missing, (255, 0, 255), (102, 42), (58, 86), 5)
-        return missing
-    return pygame.image.load(str(path)).convert_alpha()
+    if path.is_file():
+        return _sanitize_part(pygame.image.load(str(path)).convert_alpha())
+    # Missing replacement art is deliberately visible; never fall back to
+    # the retired master_dual_camera pack.
+    missing = pygame.Surface((MASTER_CELL_WIDTH, MASTER_CELL_HEIGHT), pygame.SRCALPHA)
+    pygame.draw.rect(missing, (255, 0, 255), pygame.Rect(58, 42, 44, 44), width=5)
+    pygame.draw.line(missing, (255, 0, 255), (58, 42), (102, 86), 5)
+    pygame.draw.line(missing, (255, 0, 255), (102, 42), (58, 86), 5)
+    return missing
 
 
 def _body_state(animation: str, anim_time: float) -> str:
@@ -75,13 +208,23 @@ def _body_state(animation: str, anim_time: float) -> str:
 def _composed_frame(hat: str, head: str, body: str, state: str) -> pygame.Surface:
     body_index = _part_index(body, "body")
     head_index = _part_index(head, "head")
-    canvas = pygame.Surface((160, 128), pygame.SRCALPHA)
-    canvas.blit(_load_part(f"bodies/body_{body_index:02d}_{state}.png"), (0, 0))
+    canvas = pygame.Surface((COMPOSITE_SIZE, COMPOSITE_SIZE), pygame.SRCALPHA)
+    body_surface = _load_part(f"bodies/body_{body_index:02d}_{state}.png")
+    head_surface = _load_part(f"heads/head_{head_index:02d}.png")
+    origin_x, origin_y = 20, 60
+    body_rect = body_surface.get_bounding_rect(min_alpha=10)
+    head_rect = head_surface.get_bounding_rect(min_alpha=10)
+    body_center_x = body_rect.centerx if body_rect.width else body_surface.get_width() // 2
+    head_center_x = head_rect.centerx if head_rect.width else head_surface.get_width() // 2
+    canvas.blit(body_surface, (origin_x, origin_y))
     shift_y = HEAD_SHIFT_Y.get(state, HEAD_SHIFT_Y["idle"])
-    canvas.blit(_load_part(f"heads/head_{head_index:02d}.png"), (0, shift_y))
+    canvas.blit(head_surface, (origin_x + body_center_x - head_center_x, origin_y + shift_y))
     if hat != "none":
         hat_index = _part_index(hat, "hat")
-        canvas.blit(_load_part(f"hats/hat_{hat_index:02d}.png"), (0, shift_y))
+        hat_surface = _load_part(f"hats/hat_{hat_index:02d}.png")
+        hat_rect = hat_surface.get_bounding_rect(min_alpha=10)
+        hat_center_x = hat_rect.centerx if hat_rect.width else hat_surface.get_width() // 2
+        canvas.blit(hat_surface, (origin_x + body_center_x - hat_center_x, origin_y + shift_y))
     return canvas
 
 

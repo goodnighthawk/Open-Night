@@ -320,8 +320,11 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
 def _lamp_anchor_geometry(rotation: int, source_w: int, source_h: int) -> tuple[tuple[int, int], tuple[int, int]]:
     """Return transformed (base, light-head) anchors for clockwise rotation."""
     rotation = int(rotation) % 360
-    original_base = (source_w // 2, int(source_h * .90))
-    original_fixture = (source_w // 2, int(source_h * .10))
+    # In street_lamp.png the round sidewalk mount is at the top and the
+    # rectangular luminaire is at the bottom.  Keeping those semantic anchors
+    # explicit prevents the fixture from pointing away from its registered pool.
+    original_base = (source_w // 2, int(source_h * .10))
+    original_fixture = (source_w // 2, int(source_h * .90))
     if rotation == 0:
         return original_base, original_fixture
     if rotation == 90:
@@ -560,7 +563,8 @@ def apply_world_refinement(world):
             raise RuntimeError(f"streetlamp has no nearby sidewalk placement: {lighting_id}")
         _, gy, gx, road_direction = min(candidates)
         item["gx"], item["gy"] = gx, gy
-        rotation = {"north": 0, "east": 90, "south": 180, "west": 270}[road_direction]
+        # The source fixture points south. Rotate that end over the adjacent road.
+        rotation = {"north": 180, "east": 270, "south": 0, "west": 90}[road_direction]
         item["rotation"] = rotation
         source_w, source_h = 204, 768
         base, fixture = _lamp_anchor_geometry(rotation, source_w, source_h)

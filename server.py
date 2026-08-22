@@ -1405,6 +1405,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             break
 
     # Phase 3: commit + wait-age/stuck recovery.
+    recovery_now = time.monotonic()
     for car in traffic_vehicles:
         prop = proposals.get(car.vehicle_id)
         if prop is None:
@@ -1422,7 +1423,18 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             car.speed = max(0.0, car.speed - TRAFFIC_BRAKE_DECEL * dt)
             car.wait_age = min(float(TRAFFIC_AI.get("max_wait_priority", 15.0)), car.wait_age + dt)
             car.stuck_time += dt
-            if not red_light and car.stuck_time >= float(TRAFFIC_AI.get("visible_stall_recovery_seconds", 3.0)):
+            if not red_light and car.stuck_time >= 0.65:
+                # Ask the blocking vehicle for room before any recovery nudge.
+                # A stable left/right indicator makes that intent visible to the
+                # player even on a geometrically straight route segment.
+                if recovery_now >= float(car.horn_until):
+                    car.horn_until = recovery_now + 0.80
+                car.turn_signal = -1 if sum(ord(ch) for ch in car.vehicle_id) % 2 == 0 else 1
+            recovery_after = min(
+                1.8,
+                max(1.0, float(TRAFFIC_AI.get("visible_stall_recovery_seconds", 2.2))),
+            )
+            if not red_light and car.stuck_time >= recovery_after:
                 _recover_visible_stall(car, routes[car.route_index % len(routes)])
             _try_recycle_stuck_car(car, routes, sessions)
             continue
@@ -1697,13 +1709,18 @@ def update_npcs(
                 horn_car = car
                 horn_distance = distance
 
-        if horn_car is not None:
+        neighbours = nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1)
+        crowded = any(
+            other is not npc
+            and (other.x - npc.x) ** 2 + (other.y - npc.y) ** 2 < personal_space ** 2
+            for other in neighbours
+        )
+        if horn_car is not None or crowded:
             identity = sum(ord(c) for c in npc.npc_id)
             sx, sy = -uy, ux
             npc.stuck_time = max(0.0, npc.stuck_time - step_dt)
             fleeing_horn = horn_car is not None
             moved_aside = False
-            neighbours = nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1)
             if fleeing_horn:
                 away_x, away_y = npc.x - horn_car.x, npc.y - horn_car.y
                 away_mag = max(1.0, math.hypot(away_x, away_y))
@@ -1713,7 +1730,7 @@ def update_npcs(
             directions = ((1.0, -1.0) if identity % 2 == 0 else (-1.0, 1.0))
             for direction in (*directions, 0.0):
                 escape_step = min(personal_space * (1.35 if fleeing_horn else 1.0), max(10.0, npc.speed * step_dt * 1.5))
-                lateral_step = personal_space * (1.25 if npc.stuck_time >= 0.7 else 0.9) * direction
+                lateral_step = personal_space * (1.45 if npc.stuck_time >= 0.7 else 1.15) * direction
                 nx = npc.x + forward_x * escape_step + sx * lateral_step
                 ny = npc.y + forward_y * escape_step + sy * lateral_step
                 surface = GRID_WORLD.collision_at("ground", nx, ny) if GRID_WORLD is not None else "sidewalk"
@@ -2255,6 +2272,13 @@ async def save_and_sync(session: ClientSession) -> None:
 async def process_interaction(session: ClientSession) -> None:
     p = session.player
     pos = (p.x, p.y)
+    fire_escape_level = request_grid_fire_escape(session)
+    if fire_escape_level:
+        await send_json(session.websocket, {
+            "type": "notice",
+            "text": f"Fire escape: {fire_escape_level.upper()} level",
+        })
+        return
     job_locations = ACTIVE_MAP.get("job_locations", []) or []
     supplier_positions = [
         tuple(row.get("pos", [0.0, 0.0]))

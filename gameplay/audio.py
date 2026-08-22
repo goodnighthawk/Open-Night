@@ -18,6 +18,7 @@ class GameAudio:
         self.enabled = False
         self.sounds: dict[str, pygame.mixer.Sound] = {}
         self.engine_channel: pygame.mixer.Channel | None = None
+        self.traffic_engine_channel: pygame.mixer.Channel | None = None
         self.last_step = 0.0
         self.last_skid = 0.0
         self.steering_since = 0.0
@@ -75,6 +76,7 @@ class GameAudio:
             for sound in self.sounds.values():
                 sound.stop()
             self.engine_channel = None
+            self.traffic_engine_channel = None
 
     def toggle_muted(self) -> bool:
         self.set_muted(not self.game_audio_muted)
@@ -143,6 +145,31 @@ class GameAudio:
                 material = "grass" if surface in {"grass", "park"} else "concrete"
                 self._play(f"step_{material}_{variant}", 0.32)
                 self.last_step = now
+
+        # Civilian traffic has its own looping channel so a nearby moving NPC
+        # car remains audible whether the player is walking or driving. Use the
+        # loudest distance/speed candidate and keep the total mix restrained.
+        local_vehicle_id = str(getattr(local, "vehicle_id", "")) if in_vehicle else ""
+        traffic_candidates: list[float] = []
+        for car in game.vehicles.values():
+            if str(getattr(car, "id", "")) == local_vehicle_id or bool(getattr(car, "parked", False)):
+                continue
+            car_speed = abs(float(getattr(car, "speed", 0.0)))
+            if car_speed < 6.0:
+                continue
+            car_x = float(getattr(car, "render_x", getattr(car, "x", 0.0)))
+            car_y = float(getattr(car, "render_y", getattr(car, "y", 0.0)))
+            distance_volume = self._distance_volume(local, car_x, car_y, radius=1400.0)
+            traffic_candidates.append(distance_volume * min(0.58, 0.16 + car_speed / 620.0))
+        traffic_volume = max(traffic_candidates, default=0.0)
+        if traffic_volume > 0.015:
+            if self.traffic_engine_channel is None or not self.traffic_engine_channel.get_busy():
+                self.traffic_engine_channel = self.sounds["engine"].play(loops=-1, fade_ms=160)
+            if self.traffic_engine_channel is not None:
+                self.traffic_engine_channel.set_volume(traffic_volume)
+        elif self.traffic_engine_channel is not None:
+            self.traffic_engine_channel.fadeout(220)
+            self.traffic_engine_channel = None
 
         self.previous_speed = speed
         # A jam can contain dozens of server-honking cars. Play only the nearest
