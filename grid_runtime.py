@@ -9,6 +9,7 @@ from typing import Any
 
 from building_morphology import assign_notches, footprint_for, role_for_cell, transition_anchors
 from road_morphology import apply_road_morphology
+from procedural_block_props import build_procedural_block_props
 
 from grid_world import GridWorld, TileCatalog
 
@@ -456,10 +457,13 @@ def load_ground_grid() -> GridWorld:
     data.pop("layers_ascii", None)
     roof_objects = list(roof_data.get("objects", []))
     data.setdefault("objects", []).extend(roof_objects)
+    block_props = build_procedural_block_props(ground_rows, buildings)
+    data.setdefault("objects", []).extend(block_props)
     data["generation_scope"] = ["ground", "roof"]
     data["external_ground_roof_composite"] = True
     data["external_composite_object_count"] = len(roof_objects)
     data["generated_ground_object_count"] = len(ground_generated)
+    data["procedural_block_prop_count"] = len(block_props)
     data["roof_registration"] = "exact_ground_building_footprint"
     runtime = data.setdefault("runtime", {})
     runtime["external_roofs_visible_on_ground"] = True

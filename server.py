@@ -390,6 +390,9 @@ class TrafficVehicle:
     home_fraction: float = 0.0
     horn_until: float = 0.0
     red_light_waiting: bool = False
+    turn_signal: int = 0
+    headlights: bool = False
+    brake_lights: bool = False
 
     def public_dict(self) -> dict:
         return {
@@ -410,6 +413,9 @@ class TrafficVehicle:
             "passenger_capacity": PASSENGER_CAPACITY,
             "parked": bool(self.parked),
             "horn": time.monotonic() < self.horn_until,
+            "turn_signal": int(self.turn_signal),
+            "headlights": bool(self.headlights),
+            "brake_lights": bool(self.brake_lights),
         }
 
 
@@ -1164,6 +1170,9 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             desired = 0.0
 
         desired_heading = math.atan2(dy, dx) if dist > 1e-6 else car.angle
+        turn_delta = math.atan2(math.sin(desired_heading - car.angle), math.cos(desired_heading - car.angle))
+        car.turn_signal = -1 if turn_delta < -0.18 else (1 if turn_delta > 0.18 else 0)
+        car.headlights = True
         heading = _bounded_traffic_heading(car, desired_heading, dt)
         hx, hy = math.cos(heading), math.sin(heading)
         # Physically motivated but deliberately conservative lookahead.
@@ -1193,6 +1202,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             desired = 0.0
             car.horn_until = max(car.horn_until, time.monotonic() + 0.35)
 
+        car.brake_lights = desired + 2.0 < car.speed
         accel = 95.0 if desired > car.speed else TRAFFIC_BRAKE_DECEL
         speed = min(desired, car.speed + accel * dt) if car.speed < desired else max(desired, car.speed - accel * dt)
         move = min(dist, speed * dt)
@@ -2762,6 +2772,17 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         await process_interaction(session)
     elif msg_type == "car_action":
         await process_car_action(session)
+    elif msg_type == "vehicle_lights":
+        car = next((item for item in traffic_vehicles if item.vehicle_id == session.driving_vehicle_id), None)
+        if car is None:
+            return
+        action = str(message.get("action", ""))
+        if action == "left":
+            car.turn_signal = 0 if car.turn_signal == -1 else -1
+        elif action == "right":
+            car.turn_signal = 0 if car.turn_signal == 1 else 1
+        elif action == "headlights":
+            car.headlights = not car.headlights
     elif msg_type == "interior_enter":
         await process_interior_action(session, "enter", message)
     elif msg_type == "interior_move":
@@ -3148,16 +3169,19 @@ async def simulation_loop() -> None:
                     drag = float(VEHICLE_SETTINGS.get("player_drag_px_s2", 92.0))
 
                     if throttle > 0.05:
+                        car.brake_lights = car.speed < -1.0
                         if car.speed < 0.0:
                             car.speed = min(0.0, car.speed + brake * dt)
                         else:
                             car.speed = min(max_forward, car.speed + accel * throttle * dt)
                     elif throttle < -0.05:
+                        car.brake_lights = car.speed > 1.0
                         if car.speed > 12.0:
                             car.speed = max(0.0, car.speed - brake * (-throttle) * dt)
                         else:
                             car.speed = max(-max_reverse, car.speed - reverse_accel * (-throttle) * dt)
                     else:
+                        car.brake_lights = False
                         if car.speed > 0.0:
                             car.speed = max(0.0, car.speed - drag * dt)
                         elif car.speed < 0.0:

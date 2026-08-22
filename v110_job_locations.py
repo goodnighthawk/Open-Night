@@ -12,7 +12,7 @@ actual GridWorld dimensions and snap each destination to walkable Ground.
 from typing import Any
 
 JOB_KEYS = ("supplier_pos", "customer_pos")
-JOB_NPC_COUNT = 40
+JOB_NPC_COUNT = 20
 
 
 def _point(raw: Any) -> tuple[float, float] | None:

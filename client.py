@@ -1075,6 +1075,9 @@ class RemoteVehicle:
         self.passenger_capacity = int(data.get("passenger_capacity", 3))
         self.parked = bool(data.get("parked", False))
         self.horn = bool(data.get("horn", False))
+        self.turn_signal = int(data.get("turn_signal", 0))
+        self.headlights = bool(data.get("headlights", False))
+        self.brake_lights = bool(data.get("brake_lights", False))
 
     def update(self, data: dict) -> None:
         old_x, old_y = self.target_x, self.target_y
@@ -1107,6 +1110,9 @@ class RemoteVehicle:
         self.passenger_capacity = int(data.get("passenger_capacity", self.passenger_capacity))
         self.parked = bool(data.get("parked", self.parked))
         self.horn = bool(data.get("horn", self.horn))
+        self.turn_signal = int(data.get("turn_signal", self.turn_signal))
+        self.headlights = bool(data.get("headlights", self.headlights))
+        self.brake_lights = bool(data.get("brake_lights", self.brake_lights))
 
     def smooth(self, dt: float) -> None:
         t = 1.0 - math.exp(-12.0 * dt)
@@ -2158,8 +2164,17 @@ class Game:
         # `signal["pos"]` is the authored fixture anchor.  Keep the live
         # synchronized lamp on that exact anchor; the old (+22, -22) offset
         # visually detached the red/green state from its traffic-signal fixture.
-        pygame.draw.circle(self.screen, (18, 20, 20), (sx, sy), 16)
-        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), (sx, sy), 10)
+        orientation = str(signal.get("orientation", "nw")).lower()
+        dx = 1 if "w" in orientation else -1
+        dy = 1 if "n" in orientation else -1
+        # The authored point is the sidewalk mast base. A compact arm projects
+        # over the road and the live lamp sits on the traffic-facing end.
+        mast_top = (sx, sy + dy * 34)
+        lamp = (sx + dx * 54, mast_top[1])
+        pygame.draw.line(self.screen, (46, 50, 49), (sx, sy), mast_top, 5)
+        pygame.draw.line(self.screen, (46, 50, 49), mast_top, lamp, 5)
+        pygame.draw.circle(self.screen, (18, 20, 20), lamp, 11)
+        pygame.draw.circle(self.screen, (77, 210, 91) if green else (218, 64, 58), lamp, 7)
 
     def nearest_interior(self, max_distance: float = 105.0) -> dict | None:
         local = self.players.get(self.local_id or "")
@@ -2666,6 +2681,24 @@ class Game:
         # and collision bodies, and amplified transparent-edge artifacts.
         target_len = int(max(24, car.render_length))
         if draw_car(self.screen, (sx, sy), car.angle, car.sprite_index, target_length=target_len, speed=car.speed):
+            hx, hy = math.cos(car.angle), math.sin(car.angle)
+            sxv, syv = -hy, hx
+            half_l = target_len * 0.42
+            half_w = max(6.0, float(car.collision_width) * 0.38)
+            blink = int(time.monotonic() * 3.0) % 2 == 0
+            if car.headlights:
+                for side in (-1.0, 1.0):
+                    pygame.draw.circle(self.screen, (245, 232, 170),
+                        (int(sx + hx * half_l + sxv * half_w * side), int(sy + hy * half_l + syv * half_w * side)), 3)
+            if car.brake_lights:
+                for side in (-1.0, 1.0):
+                    pygame.draw.circle(self.screen, (245, 48, 39),
+                        (int(sx - hx * half_l + sxv * half_w * side), int(sy - hy * half_l + syv * half_w * side)), 3)
+            if car.turn_signal and blink:
+                side = float(car.turn_signal)
+                for longitudinal in (-half_l, half_l):
+                    pygame.draw.circle(self.screen, (255, 174, 38),
+                        (int(sx + hx * longitudinal + sxv * half_w * side), int(sy + hy * longitudinal + syv * half_w * side)), 3)
             if car.horn:
                 beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
                 self.screen.blit(beep, beep.get_rect(midbottom=(sx, sy - 38)))
@@ -3356,7 +3389,8 @@ class Game:
                 "WASD / arrows    Move / drive", "SHIFT            Sprint / full throttle",
                 "Space            Jump", "C                Crouch (hold)",
                 "Middle mouse     Rotate camera", "Mouse wheel      Zoom",
-                "T                Enter or exit vehicle", "E                Interact",
+                "T                Enter or exit vehicle", "E                Interact / right signal",
+                "Q                Left signal (driving)", "H                Headlamps (driving)",
                 "I or TAB         Inventory", "M                World map",
                 "F2               Messages", "F10 or /bug      Report a bug",
             ]
@@ -3868,8 +3902,19 @@ class Game:
                             if self.inventory_open:
                                 self.network.send({"type": "inventory_request"})
                         elif event.key == pygame.K_e and not self.inventory_open and not self.map_open:
-                            if not self.try_enter_interior():
+                            local = self.players.get(self.local_id or "")
+                            if local is not None and bool(getattr(local, "in_vehicle", False)):
+                                self.network.send({"type": "vehicle_lights", "action": "right"})
+                            elif not self.try_enter_interior():
                                 self.network.send({"type": "interact"})
+                        elif event.key == pygame.K_q and not self.inventory_open and not self.map_open:
+                            local = self.players.get(self.local_id or "")
+                            if local is not None and bool(getattr(local, "in_vehicle", False)):
+                                self.network.send({"type": "vehicle_lights", "action": "left"})
+                        elif event.key == pygame.K_h and not self.inventory_open and not self.map_open:
+                            local = self.players.get(self.local_id or "")
+                            if local is not None and bool(getattr(local, "in_vehicle", False)):
+                                self.network.send({"type": "vehicle_lights", "action": "headlights"})
                         elif event.key == pygame.K_t and not self.inventory_open and not self.map_open:
                             self.network.send({"type": "car_action"})
                         elif self.inventory_open and event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):

@@ -134,7 +134,8 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     # The player-approved civilian sheets are authored nose-down. Normalize
     # those crops to the renderer's nose-up contract; legacy fallback art is
     # already nose-up and is intentionally left unchanged (report #52).
-    if meta.get("sheet_file") and str(meta.get("source_nose", "down")).lower() == "down":
+    source_nose = str(meta.get("source_nose", "down")).lower()
+    if meta.get("sheet_file") and source_nose == "down":
         source = pygame.transform.flip(source, False, True)
 
     length = max(24, int(target_length or meta.get("render_length", 48)))

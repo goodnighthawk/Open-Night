@@ -1,19 +1,11 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title OPEN NIGHT v1.4 - Grid Client
+title OPEN NIGHT v1.8 - Grid Client
 
 if not exist ".venv\Scripts\python.exe" (
   echo Preparing the Open Night Python environment...
   call START_HERE.bat --setup-only
-)
-
-if not exist ".venv\Scripts\python.exe" (
-  echo.
-  echo [ERROR] The Python environment was not created.
-  echo Review the setup error above.
-  pause
-  exit /b 2
 )
 
 ".venv\Scripts\python.exe" -c "import imageio_ffmpeg" >nul 2>&1
@@ -25,6 +17,14 @@ if errorlevel 1 (
     pause
     exit /b 3
   )
+)
+
+if not exist ".venv\Scripts\python.exe" (
+  echo.
+  echo [ERROR] The Python environment was not created.
+  echo Review the setup error above.
+  pause
+  exit /b 2
 )
 
 set "CLIENT_LOG=%~dp0client_crash.log"

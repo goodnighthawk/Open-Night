@@ -122,20 +122,32 @@ class GridRenderer:
         # The art often has transparent padding, so the visible frame is not
         # necessarily on pixel row/column zero. Seed dark pixels bordering that
         # transparent exterior and flood only through contiguous frame ink.
+        # Modular wall caps place the heavy inner frame roughly one sixth of a
+        # tile inward, so the perimeter seed band must cover the outer quarter.
+        edge_band_x = max(2, width // 4)
+        edge_band_y = max(2, height // 4)
         for y in range(height):
             for x in range(width):
                 if not dark[y][x]:
                     continue
                 neighbours = ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
-                if any(not (0 <= nx < width and 0 <= ny < height) or source.get_at((nx, ny)).a <= 24
-                       for nx, ny in neighbours):
+                near_perimeter = (
+                    x < edge_band_x or x >= width - edge_band_x
+                    or y < edge_band_y or y >= height - edge_band_y
+                )
+                if near_perimeter or any(
+                    not (0 <= nx < width and 0 <= ny < height) or source.get_at((nx, ny)).a <= 24
+                    for nx, ny in neighbours
+                ):
                     visited[y][x] = True
                     queue.append((x, y))
 
+        removed: set[tuple[int, int]] = set()
         while queue:
             x, y = queue.popleft()
             color = image.get_at((x, y))
             image.set_at((x, y), (color.r, color.g, color.b, 0))
+            removed.add((x, y))
             for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                 if not (0 <= nx < width and 0 <= ny < height):
                     continue
@@ -143,6 +155,28 @@ class GridRenderer:
                     continue
                 visited[ny][nx] = True
                 queue.append((nx, ny))
+        # Transparent deletion exposes the nearly black ground beneath and still
+        # reads as a frame. Extend the nearest adjacent facade/roof colour across
+        # the removed stroke instead, which also recovers the requested footprint.
+        fill_queue: deque[tuple[int, int, pygame.Color]] = deque()
+        filled: set[tuple[int, int]] = set()
+        for x, y in removed:
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if not (0 <= nx < width and 0 <= ny < height) or (nx, ny) in removed:
+                    continue
+                color = source.get_at((nx, ny))
+                if color.a > 24 and not cls._is_dark_building_outline(color):
+                    fill_queue.append((x, y, color))
+                    filled.add((x, y))
+                    break
+        while fill_queue:
+            x, y, color = fill_queue.popleft()
+            image.set_at((x, y), color)
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if (nx, ny) not in removed or (nx, ny) in filled:
+                    continue
+                filled.add((nx, ny))
+                fill_queue.append((nx, ny, color))
         return image
 
     @staticmethod
@@ -204,6 +238,8 @@ class GridRenderer:
         image = self._load_image(definition.image)
         if image.get_size() != (width, height):
             image = pygame.transform.scale(image, (max(1, width), max(1, height)))
+        if definition.kind == "building":
+            image = self._suppress_building_perimeter_outline(image)
         return image
 
     def _object_surface(self, asset_id: str, width: int, height: int, rotation: float = 0.0) -> pygame.Surface:
