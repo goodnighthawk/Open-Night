@@ -34,7 +34,12 @@ def main() -> None:
         ast.parse((ROOT / filename).read_text(encoding="utf-8"), filename=filename)
 
     run_client = (ROOT / "RUN_CLIENT.bat").read_text(encoding="utf-8")
-    require("portrait_head_client.py" in run_client, "desktop launcher does not use head-selector client")
+    require("v100_client.py" in run_client, "desktop launcher bypasses canonical client")
+    canonical_client = (ROOT / "v100_client.py").read_text(encoding="utf-8")
+    require("import portrait_head_client" in canonical_client,
+            "canonical client does not load the head selector")
+    require("portrait_head_client._install()" in canonical_client,
+            "canonical client does not install the head selector")
     start = (ROOT / "START_OPEN_NIGHT.bat").read_text(encoding="utf-8")
     require("open_night_player_launcher.py" in start, "START_OPEN_NIGHT does not use player launcher")
 
