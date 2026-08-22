@@ -59,12 +59,12 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/v100_building_setback_runtime_audit.py
-      - name: Verify corrective v1.2/v1.3 player reports
+      - name: Verify corrective v1.2-v1.4 player reports
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/audit_v120_player_reports.py
-      - name: Verify v1.3 gameplay audio
+      - name: Verify v1.4 gameplay audio
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
@@ -79,7 +79,7 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/audit_v120_signal_harmony.py
-      - name: Verify v1.3 grunge-neon art consolidation
+      - name: Verify v1.4 grunge-neon art consolidation
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy

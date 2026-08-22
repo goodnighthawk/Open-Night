@@ -38,6 +38,20 @@ def main() -> None:
     refinement = world.data["runtime_refinement"]
     assert refinement["road_art_authority"] == "grunge_neon_clean_junctions_v130"
     assert refinement["junction_clear_cell_count"] == len(junctions)
+    lamps = [row for row in world.objects if row.get("lighting_kind") == "sidewalk_lamp"]
+    expected_vectors = {
+        "north": (0, -1), "east": (1, 0), "south": (0, 1), "west": (-1, 0),
+    }
+    for lamp in lamps:
+        width, height = int(lamp["width_px"]), int(lamp["height_px"])
+        base, fixture = v100_runtime_refinement._lamp_anchor_geometry(int(lamp["rotation"]), width, height)
+        assert abs(int(lamp["offset_x_px"]) + base[0] - world.cell_px / 2) <= 1
+        assert abs(int(lamp["offset_y_px"]) + base[1] - world.cell_px / 2) <= 1
+        assert abs(int(lamp["light_offset_x_px"]) - fixture[0]) <= 1
+        assert abs(int(lamp["light_offset_y_px"]) - fixture[1]) <= 1
+        dx, dy = fixture[0] - base[0], fixture[1] - base[1]
+        wanted = expected_vectors[str(lamp["road_overhang_direction"])]
+        assert (0 if dx == 0 else dx // abs(dx), 0 if dy == 0 else dy // abs(dy)) == wanted
     print(f"V130_ART_CONSOLIDATION_OK junction_cells={len(junctions)} road_lines={len(road_lines)} aprons={len(aprons)}")
 
 

@@ -38,8 +38,8 @@ def main() -> None:
     for key in v110_job_locations.JOB_KEYS:
         assert world.collision_at("ground", *config[key]) in {"walk", "sidewalk"}, f"{key} is still on the road"
     jobs = config.get("job_locations", [])
-    assert len(jobs) == 10 and sum(row["role"] == "supplier" for row in jobs) == 5
-    assert sum(row["role"] == "buyer" for row in jobs) == 5
+    assert len(jobs) == 20 and sum(row["role"] == "supplier" for row in jobs) == 10
+    assert sum(row["role"] == "buyer" for row in jobs) == 10
     assert all(row.get("authoritative_npc") for row in jobs)
     roof_decals = [row for row in world.objects if row.get("composition_pass") == "roof_palette_v1"]
     assert roof_decals and all(int(row.get("width_px", 0)) >= 64 and int(row.get("height_px", 0)) >= 64
@@ -51,9 +51,9 @@ def main() -> None:
     lamp_cells = {(int(row["gx"]), int(row["gy"])) for row in lamps}
     assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
     assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
-               and row.get("placement_policy") == "road_edge_base_anchor_overhang_v13"
+               and row.get("placement_policy") == "road_edge_base_and_fixture_transform_v14"
                and row.get("asset") == "street_item_lamp"
-               and row.get("light_registration") == "three_x_fixture_road_overhang_report57"
+               and row.get("light_registration") == "cardinal_transform_shared_anchors_report60"
                and row.get("road_overhang_direction") in {"north", "east", "south", "west"}
                and int(row.get("width_px", 0)) >= 102
                and int(row.get("height_px", 0)) >= 384

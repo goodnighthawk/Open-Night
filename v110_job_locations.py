@@ -12,7 +12,7 @@ actual GridWorld dimensions and snap each destination to walkable Ground.
 from typing import Any
 
 JOB_KEYS = ("supplier_pos", "customer_pos")
-JOB_NPC_COUNT = 10
+JOB_NPC_COUNT = 20
 
 
 def _point(raw: Any) -> tuple[float, float] | None:
@@ -65,7 +65,7 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
 
     # A map this large needs a distributed job network, not two client-painted
     # icons. Seed the legacy supplier/buyer positions, then use deterministic
-    # farthest-point sampling to spread five of each role over real sidewalks.
+    # farthest-point sampling to spread ten pairs over real sidewalks.
     selected = [tuple(normalized["supplier_pos"]), tuple(normalized["customer_pos"])]
     candidates = sorted(sidewalk_cells, key=lambda point: (point[1], point[0]))
     while candidates and len(selected) < JOB_NPC_COUNT:

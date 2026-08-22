@@ -249,6 +249,25 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
     return {"telephone_box_count": len(telephone_cells), "traffic_cone_count": len(cone_cells)}
 
 
+def _lamp_anchor_geometry(rotation: int, source_w: int, source_h: int) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Return transformed (base, light-head) anchors for clockwise rotation."""
+    rotation = int(rotation) % 360
+    original_base = (source_w // 2, int(source_h * .90))
+    original_fixture = (source_w // 2, int(source_h * .10))
+    if rotation == 0:
+        return original_base, original_fixture
+    if rotation == 90:
+        return ((source_h - original_base[1], original_base[0]),
+                (source_h - original_fixture[1], original_fixture[0]))
+    if rotation == 180:
+        return ((source_w - original_base[0], source_h - original_base[1]),
+                (source_w - original_fixture[0], source_h - original_fixture[1]))
+    if rotation == 270:
+        return ((original_base[1], source_w - original_base[0]),
+                (original_fixture[1], source_w - original_fixture[0]))
+    raise ValueError(f"streetlamp rotation must be cardinal, got {rotation}")
+
+
 def apply_world_refinement(world):
     if getattr(world, "_v100_layout_refined", False):
         return world
@@ -459,14 +478,7 @@ def apply_world_refinement(world):
         rotation = {"north": 0, "east": 90, "south": 180, "west": 270}[road_direction]
         item["rotation"] = rotation
         source_w, source_h = 204, 768
-        if rotation == 0:
-            base, fixture = (source_w // 2, int(source_h * .90)), (source_w // 2, int(source_h * .10))
-        elif rotation == 90:
-            base, fixture = (int(source_h * .90), source_w // 2), (int(source_h * .10), source_w // 2)
-        elif rotation == 180:
-            base, fixture = (source_w // 2, int(source_h * .10)), (source_w // 2, int(source_h * .90))
-        else:
-            base, fixture = (int(source_h * .10), source_w // 2), (int(source_h * .90), source_w // 2)
+        base, fixture = _lamp_anchor_geometry(rotation, source_w, source_h)
         offset_x = world.cell_px // 2 - base[0]
         offset_y = world.cell_px // 2 - base[1]
         light_x, light_y = fixture
@@ -474,7 +486,7 @@ def apply_world_refinement(world):
         item["offset_y_px"] = offset_y
         item["width_px"] = source_w
         item["height_px"] = source_h
-        item["placement_policy"] = "road_edge_base_anchor_overhang_v13"
+        item["placement_policy"] = "road_edge_base_and_fixture_transform_v14"
         item["road_overhang_direction"] = road_direction
         occupied_lamp_cells.add((gx, gy))
         _install_city_block_street_item_defs(world)
@@ -485,7 +497,7 @@ def apply_world_refinement(world):
         item["light_radius_px"] = 720
         item["light_color_rgb"] = [92, 145, 255]
         item["light_intensity"] = 0.28
-        item["light_registration"] = "three_x_fixture_road_overhang_report57"
+        item["light_registration"] = "cardinal_transform_shared_anchors_report60"
         item["fixture_light_sync"] = "same_grid_object_record"
         lamp_count += 1
 
