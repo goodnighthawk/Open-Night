@@ -184,12 +184,16 @@ def draw_car(
     if sprite is None:
         return False
 
-    shadow = pygame.Surface((max(12, sprite.get_width() - 3), max(18, sprite.get_height() - 5)), pygame.SRCALPHA)
-    pygame.draw.ellipse(shadow, (*VEHICLE_SHADOW_RGB, VEHICLE_SHADOW_ALPHA), shadow.get_rect())
     rotation = -90.0 - math.degrees(angle_radians)
-    shadow_rot = _rotate_for_heading(shadow, rotation)
-    motion_offset = min(3, int(abs(speed) / 90.0))
-    target.blit(shadow_rot, shadow_rot.get_rect(center=(center[0] + 2 + motion_offset, center[1] + 3 + motion_offset)))
+    meta = vehicle_meta(int(sprite_index))
+    # Generated sprites already carry painted grounding/outline detail. Adding
+    # the legacy ellipse beneath them reads as a clipped neighboring vehicle.
+    if meta.get("art_set") != "generated_vehicle_fleet_2026_08_22":
+        shadow = pygame.Surface((max(12, sprite.get_width() - 3), max(18, sprite.get_height() - 5)), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (*VEHICLE_SHADOW_RGB, VEHICLE_SHADOW_ALPHA), shadow.get_rect())
+        shadow_rot = _rotate_for_heading(shadow, rotation)
+        motion_offset = min(3, int(abs(speed) / 90.0))
+        target.blit(shadow_rot, shadow_rot.get_rect(center=(center[0] + 2 + motion_offset, center[1] + 3 + motion_offset)))
 
     rotated = _rotate_for_heading(sprite, rotation)
     rect = rotated.get_rect(center=center)

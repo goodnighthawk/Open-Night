@@ -1025,6 +1025,18 @@ def _player_collision_deflection_angle(old_angle: float, requested_offset: float
     return float(old_angle) + bounded
 
 
+def _bounded_traffic_heading(car: TrafficVehicle, desired: float, dt: float) -> float:
+    """Steer toward a route heading without allowing recovery snap-spins."""
+    rates = {
+        "bus": 0.62, "large_truck": 0.52, "tanker": 0.48,
+        "truck": 0.78, "limo": 0.76, "van": 0.92, "pickup": 1.0,
+    }
+    rate = rates.get(str(car.vehicle_class).lower(), 1.28)
+    delta = math.atan2(math.sin(desired - car.angle), math.cos(desired - car.angle))
+    limit = max(math.radians(1.0), rate * max(0.0, float(dt)))
+    return car.angle + max(-limit, min(limit, delta))
+
+
 def _traffic_footprints_conflict(
     car: TrafficVehicle, x: float, y: float, heading: float,
     other: TrafficVehicle, ox: float, oy: float, other_heading: float,
@@ -1151,7 +1163,8 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
         if red_light and dist < 105.0:
             desired = 0.0
 
-        heading = math.atan2(dy, dx) if dist > 1e-6 else car.angle
+        desired_heading = math.atan2(dy, dx) if dist > 1e-6 else car.angle
+        heading = _bounded_traffic_heading(car, desired_heading, dt)
         hx, hy = math.cos(heading), math.sin(heading)
         # Physically motivated but deliberately conservative lookahead.
         braking_distance = (car.speed * car.speed) / max(1.0, 2.0 * TRAFFIC_BRAKE_DECEL)
