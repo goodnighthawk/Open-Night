@@ -16,7 +16,7 @@ STREET_PROPS = (
     ("block_prop_planter_gold_long_soil", 76, 195),
     ("block_prop_patio_umbrella", 184, 140),
     ("block_prop_planter_gold_square_soil", 150, 145),
-    ("block_prop_shrub_round", 166, 178),
+    ("block_prop_shrub_round", 224, 240),
     ("block_prop_planter_gold_long_hedge", 72, 193),
     ("block_prop_planter_wood_square_soil", 150, 145),
     ("block_prop_planter_wood_shrubs", 156, 141),
@@ -86,4 +86,8 @@ def build_procedural_block_props(
                 "placement_zone": "block_edge",
                 "decorative_only": True,
             })
+            if asset == "block_prop_shrub_round":
+                objects[-1]["collision_radius_px"] = 64
+                objects[-1]["decorative_only"] = False
+                objects[-1]["collision_kind"] = "tree"
     return objects

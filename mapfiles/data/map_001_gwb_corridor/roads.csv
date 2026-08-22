@@ -37,6 +37,6 @@ wh_south_connector,Wh South Connector,67.08,67.08,1,42.84,5,0,false,false,reside
 wh_east_connector,Wh East Connector,67.08,67.08,1,42.84,5,0,false,false,residential,0,true
 wh_lower_connector,Wh Lower Connector,67.08,67.08,1,42.84,5,0,false,false,residential,0,true
 gwb_authored,Gwb Authored,192.0,192.0,3,61.88,5,0,true,true,primary,1,true
-ug_broadway_spine,Underground Broadway Service Spine,92.0,92.0,1,0,0,0,false,false,service,-1,true
-ug_181_crosspassage,Underground 181st Cross Passage,84.0,84.0,1,0,0,0,false,false,service,-1,true
-ug_gwb_service_branch,Underground GWB Service Branch,72.0,72.0,1,0,0,0,false,false,service,-1,true
+ug_broadway_spine,Underground Broadway Service Spine,92.0,92.0,1,20,0,0,false,false,service,-1,true
+ug_181_crosspassage,Underground 181st Cross Passage,84.0,84.0,1,20,0,0,false,false,service,-1,true
+ug_gwb_service_branch,Underground GWB Service Branch,72.0,72.0,1,20,0,0,false,false,service,-1,true

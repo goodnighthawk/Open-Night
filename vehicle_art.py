@@ -22,6 +22,11 @@ VEHICLE_PIXELATED = True
 # the one exception to that sheet's usual nose-down convention.
 SOURCE_NOSE_CORRECTIONS = {
     "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#001": "up",
+    # Current reports #133/#135 identify gridcar006 and gridcar009. Their
+    # corresponding sheet cells are already nose-up and must not receive the
+    # sheet-wide nose-down flip.
+    "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#005": "up",
+    "free-pixel-cars-link-in-comments-v0-xs01xj2gvg661.webp#000": "up",
 }
 
 
@@ -119,12 +124,12 @@ def _sprite_from_sheet(meta: dict) -> pygame.Surface | None:
     return source
 
 
-def _repair_generated_bus_crop(source: pygame.Surface) -> pygame.Surface:
-    """Complete the cut-off rear edge in the submitted bus exports at runtime."""
+def _repair_generated_rear_crop(source: pygame.Surface, category: str) -> pygame.Surface:
+    """Complete cut-off rear edges in the submitted heavy/service exports."""
     width, height = source.get_size()
     if width <= 0 or height <= 0:
         return source
-    cap_height = max(10, int(round(height * 0.12)))
+    cap_height = max(10, int(round(height * (0.12 if category == "bus" else 0.10))))
     overlap = max(4, cap_height // 2)
     margin = max(4, int(round(min(width, height) * 0.035)))
     repaired = pygame.Surface(
@@ -132,12 +137,17 @@ def _repair_generated_bus_crop(source: pygame.Surface) -> pygame.Surface:
         pygame.SRCALPHA,
     )
     repaired.blit(source, (margin, margin))
-    # The top end-cap is complete in all three bus variants. Mirroring only
-    # that shallow cap produces a closed rear bumper without inventing a second
-    # vehicle body or materially changing the approved silhouette.
-    top_cap = source.subsurface(pygame.Rect(0, 0, width, cap_height)).copy()
-    top_cap = pygame.transform.flip(top_cap, False, True)
-    repaired.blit(top_cap, (margin, margin + height - overlap))
+    if category == "bus":
+        # The top end-cap is complete in all three bus variants.
+        cap = source.subsurface(pygame.Rect(0, 0, width, cap_height)).copy()
+    else:
+        # Trucks/tankers/pickups have a distinct cargo body, so use their own
+        # lower section instead of duplicating the cab at the rear.
+        cap = source.subsurface(pygame.Rect(0, height - cap_height, width, cap_height)).copy()
+        inset = max(2, int(round(width * 0.025)))
+        cap = pygame.transform.scale(cap, (max(1, width - inset * 2), cap_height))
+    cap = pygame.transform.flip(cap, False, True)
+    repaired.blit(cap, (margin + (width - cap.get_width()) // 2, margin + height - overlap))
     return repaired
 
 
@@ -155,8 +165,9 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     if source is None or source.get_width() <= 0 or source.get_height() <= 0:
         return None
 
-    if str(meta.get("category", "")).lower() == "bus" and meta.get("art_set") == "generated_vehicle_fleet_2026_08_22":
-        source = _repair_generated_bus_crop(source)
+    generated_heavy = meta.get("art_set") == "generated_vehicle_fleet_2026_08_22" and int(meta.get("index", 999)) <= 34
+    if generated_heavy:
+        source = _repair_generated_rear_crop(source, str(meta.get("category", "")).lower())
 
     # Player-supplied sheets are allowed to contain a horizontal source sprite;
     # canonical runtime vehicle art always points nose-up before heading rotation.
@@ -172,8 +183,14 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
         source = pygame.transform.flip(source, False, True)
 
     length = max(24, int(target_length or meta.get("render_length", 48)))
-    width = max(12, int(round(length * source.get_width() / source.get_height())))
-    return pygame.transform.scale(source, (width, length)) if VEHICLE_PIXELATED else pygame.transform.smoothscale(source, (width, length))
+    visible = source.subsurface(source.get_bounding_rect(min_alpha=10)).copy()
+    margin = max(2, int(round(length * 0.025)))
+    art_length = max(1, length - margin * 2)
+    art_width = max(8, int(round(art_length * visible.get_width() / max(1, visible.get_height()))))
+    scaled = pygame.transform.scale(visible, (art_width, art_length)) if VEHICLE_PIXELATED else pygame.transform.smoothscale(visible, (art_width, art_length))
+    canvas = pygame.Surface((art_width + margin * 2, length), pygame.SRCALPHA)
+    canvas.blit(scaled, (margin, margin))
+    return canvas
 
 
 def _blit_outline(target: pygame.Surface, sprite: pygame.Surface, rect: pygame.Rect) -> None:

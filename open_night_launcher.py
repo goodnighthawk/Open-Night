@@ -122,13 +122,12 @@ class OpenNightLauncher:
     def _layout_buttons(self):
         x, y, w, h, gap = 840, 112, 400, 68, 10
         specs = [
-            ('01', 'MAP GENERATOR', 'semantic map + cosmetics + lighting', self.launch_map_generator),
-            ('02', 'QUICK TEST', 'memory server + protocol gate + client', self.launch_quick_test),
-            ('03', 'START SERVER', 'authoritative server • portable .map + cache', self.launch_server),
-            ('04', 'DESKTOP CLIENT', 'auto-detects Railway internet + LAN servers', self.launch_desktop),
-            ('05', 'WEB CLIENT', 'pygbag browser client on localhost:8000', self.launch_web),
-            ('06', 'MOVEMENT PREVIEW', 'character sprite + camera/action sandbox', self.launch_character_preview),
-            ('07', 'MAP VIEWER', 'open portable .map without starting a server', self.launch_map_viewer),
+            ('01', 'QUICK TEST', 'memory server + protocol gate + client', self.launch_quick_test),
+            ('02', 'START SERVER', 'authoritative server • portable .map + cache', self.launch_server),
+            ('03', 'DESKTOP CLIENT', 'auto-detects Railway internet + LAN servers', self.launch_desktop),
+            ('04', 'WEB CLIENT', 'pygbag browser client on localhost:8000', self.launch_web),
+            ('05', 'MOVEMENT PREVIEW', 'character sprite + camera/action sandbox', self.launch_character_preview),
+            ('06', 'MAP VIEWER', 'open portable .map without starting a server', self.launch_map_viewer),
         ]
         self.buttons = [LaunchButton(self.pg, (x, y+i*(h+gap), w, h), *spec) for i, spec in enumerate(specs)]
 
@@ -154,15 +153,6 @@ class OpenNightLauncher:
         proc = subprocess.Popen([str(py), str(script), *map(str, args)], cwd=str(self.root), creationflags=flags)
         self.spawned.append(proc)
         return proc
-
-    def launch_map_generator(self):
-        try:
-            env = os.environ.copy()
-            env['OPEN_NIGHT_GAME_ROOT'] = str(self.root)
-            self._new_console(self.root/'dev_tools'/'map_generator'/'MAP_GENERATOR.bat', env=env)
-            self._set_status('MAP GENERATOR v0.5.1 // screenshot traces // night + street lamps // portable .map')
-        except Exception as exc:
-            self._set_status(f'MAP GENERATOR FAILED // {exc}', 'error')
 
     def launch_update(self):
         try:

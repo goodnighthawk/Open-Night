@@ -15,10 +15,9 @@ class PlayerLauncher(base.OpenNightLauncher):
     def _layout_buttons(self):
         x, w = 840, 400
         specs = [
-            ("01", "MAP GENERATOR", "semantic map + cosmetics + lighting", self.launch_map_generator),
-            ("02", "QUICK TEST", "memory server + protocol gate + client", self.launch_quick_test),
-            ("03", "START SERVER", "authoritative server • portable .map + cache", self.launch_server),
-            ("04", "DESKTOP CLIENT", "auto-detects Railway internet + LAN servers", self.launch_desktop),
+            ("01", "QUICK TEST", "memory server + protocol gate + client", self.launch_quick_test),
+            ("02", "START SERVER", "authoritative server • portable .map + cache", self.launch_server),
+            ("03", "DESKTOP CLIENT", "auto-detects Railway internet + LAN servers", self.launch_desktop),
         ]
         update = base.LaunchButton(
             self.pg,

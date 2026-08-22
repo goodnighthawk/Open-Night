@@ -15,17 +15,19 @@ separation and the recovery watchdog absorb the extra physical footprint.
 
 import v110_traffic_recovery
 
-# A 48 px legacy sedan becomes ~144 px of server render metadata and ~199 px on
-# the client after draw_vehicle's retained 1.38 multiplier. Against the ~58 px
-# GridWorld player this is ~3.43:1, giving cars readable real-world visual mass.
+# A 48 px legacy sedan becomes ~144 px in both server render metadata and the
+# client. Against the ~58 px GridWorld player, cars retain readable world scale.
 RENDER_META_SCALE = 3.00
-# Keep at least ~78% of the visible longitudinal body authoritative. The previous
-# 2.65 value fell to 66% after the visual enlargement and failed the runtime gate.
-# The player fleet's shortest compact body is 38/44 of its authored render
-# length, so 3.75 keeps even that worst case above the 78% runtime contract.
-COLLISION_LENGTH_META_SCALE = 4.00
+# Keep the complete painted longitudinal body authoritative without recreating
+# the former overlong invisible nose/tail box.
+# A small longitudinal safety inset keeps the authoritative box aligned with
+# painted bumpers while preserving stable traffic reservations at junctions.
+COLLISION_LENGTH_META_SCALE = 3.25
+# Width stays slightly more conservative than length. This preserves lane-side
+# awareness for narrow sheet crops while the reduced longitudinal scale removes
+# the oversized nose/tail box reported by players.
 COLLISION_WIDTH_META_SCALE = 3.35
-CLIENT_RENDER_MULTIPLIER = 1.65
+CLIENT_RENDER_MULTIPLIER = 1.00
 GROUND_PLAYER_TARGET_HEIGHT_PX = 58.0
 MIN_SEDAN_TO_PLAYER_LENGTH_RATIO = 3.25
 MIN_EXPECTED_SEDAN_LENGTH_PX = GROUND_PLAYER_TARGET_HEIGHT_PX * MIN_SEDAN_TO_PLAYER_LENGTH_RATIO
@@ -34,6 +36,9 @@ MIN_EXPECTED_SEDAN_LENGTH_PX = GROUND_PLAYER_TARGET_HEIGHT_PX * MIN_SEDAN_TO_PLA
 def scaled_meta(meta: dict) -> dict:
     out = dict(meta)
     out["render_length"] = max(48, int(round(float(out.get("render_length", 48)) * RENDER_META_SCALE)))
+    # Render and collision metadata now share one scale. The catalog's authored
+    # inset ratios are preserved instead of inflating the invisible body beyond
+    # the sprite ends (current report #126).
     out["collision_length"] = max(44.0, float(out.get("collision_length", 42.0)) * COLLISION_LENGTH_META_SCALE)
     out["collision_width"] = max(24.0, float(out.get("collision_width", 18.0)) * COLLISION_WIDTH_META_SCALE)
     out["v110_vehicle_proportions"] = True

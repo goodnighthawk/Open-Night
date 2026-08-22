@@ -28,15 +28,14 @@ CURB_WORLD_TO_PACK_IMAGE = {
     "curb_right": "city_block://road_and_pavement_tileset/curb_left_edge.png",
     "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
     "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
-    # The pack includes dedicated rounded corner pieces. Keep the already
-    # verified left/right world-to-pack translation while replacing the sharp
-    # square curb corners players reported.
-    # World IDs describe the two road-facing sides.  The pack names describe
-    # the pavement quadrant instead, which is diagonally opposite those roads.
-    "curb_tl_outer": "city_block://road_and_pavement_tileset/circle_bottom_right_outer.png",
-    "curb_tr_outer": "city_block://road_and_pavement_tileset/circle_bottom_left_outer.png",
-    "curb_bl_outer": "city_block://road_and_pavement_tileset/circle_top_right_outer.png",
-    "curb_br_outer": "city_block://road_and_pavement_tileset/circle_top_left_outer.png",
+    # These native 256px corner cells match the grid exactly. The 512px
+    # circle_* art is a two-cell plaza curve and must never be squeezed into a
+    # single curb cell. Pack names identify the bright pavement quadrant after
+    # the established left/right translation: TL world -> bottom-right art.
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
 }
 
 
@@ -223,11 +222,41 @@ class GridWorld:
             return False
         if not self.walkable_at(layer, x, y):
             return False
+        if layer == "ground" and self.object_collision_at(x, y, radius):
+            return False
         if radius <= 0.0:
             return True
         diag = radius * 0.7071067811865476
         probes = ((radius,0.0),(-radius,0.0),(0.0,radius),(0.0,-radius),(diag,diag),(diag,-diag),(-diag,diag),(-diag,-diag))
         return all(self.walkable_at(layer, x + ox, y + oy) for ox, oy in probes)
+
+    def object_collision_circles(self) -> tuple[tuple[float, float, float, str], ...]:
+        """Return current collision-enabled prop circles in world coordinates."""
+        cached = getattr(self, "_object_collision_cache", None)
+        if cached is not None and getattr(self, "_object_collision_cache_count", -1) == len(self.objects):
+            return cached
+        circles = []
+        for item in self.objects:
+            radius = max(0.0, float(item.get("collision_radius_px", 0.0)))
+            if radius <= 0.0:
+                continue
+            definition = self.catalog.object(str(item["asset"]))
+            width = float(item.get("width_px", definition.native_width_px))
+            height = float(item.get("height_px", definition.native_height_px))
+            x = int(item["gx"]) * self.cell_px + float(item.get("offset_x_px", 0.0)) + width * 0.5
+            y = int(item["gy"]) * self.cell_px + float(item.get("offset_y_px", 0.0)) + height * 0.5
+            circles.append((x, y, radius, str(item.get("collision_kind", item.get("asset", "prop")))))
+        result = tuple(circles)
+        self._object_collision_cache = result
+        self._object_collision_cache_count = len(self.objects)
+        return result
+
+    def object_collision_at(self, x: float, y: float, radius: float = 0.0) -> bool:
+        radius = max(0.0, float(radius))
+        return any(
+            (float(x) - cx) ** 2 + (float(y) - cy) ** 2 < (radius + prop_radius) ** 2
+            for cx, cy, prop_radius, _kind in self.object_collision_circles()
+        )
 
     def circle_spawnable(self, layer: str, x: float, y: float, radius: float) -> bool:
         """Accept safe pedestrian login surfaces while explicitly rejecting roads."""

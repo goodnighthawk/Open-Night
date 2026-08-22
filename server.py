@@ -175,6 +175,9 @@ def network_map_payload(map_config: dict) -> dict:
         out["map_payload_mode"] = "portable_map_v1"
         out["map_hash"] = str(map_config.get("_portable_map_hash"))
         out["generator_version"] = str(map_config.get("_portable_generator_version", ""))
+        # Global map UI needs every job destination even when static world data
+        # comes from a transferred portable cache.
+        out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
         return out
 
     if bool(map_config.get("chunked", False)):
@@ -192,6 +195,9 @@ def network_map_payload(map_config: dict) -> dict:
         # chunk art. The client must receive the server-generated GridWorld list
         # so the synchronized states in snapshots have visible fixtures to drive.
         out["traffic_signals"] = [dict(signal) for signal in map_config.get("traffic_signals", [])]
+        # The full M map is global UI and cannot infer off-interest job NPCs from
+        # nearby snapshots. Publish the complete compact destination list.
+        out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
         out.update(grid_network_metadata(map_config))
         return out
 
@@ -271,6 +277,8 @@ class ClientSession:
     crouching: bool = False
     crouch_cancel_latched: bool = False
     prone: bool = False
+    forced_prone_until: float = 0.0
+    collision_disabled_until: float = 0.0
     stand_delay_remaining: float = 0.0
     jump_until: float = 0.0
     jump_started_at: float = 0.0
@@ -290,6 +298,8 @@ def reset_on_foot_actions(session: ClientSession) -> None:
     session.crouching = False
     session.crouch_cancel_latched = False
     session.prone = False
+    session.forced_prone_until = 0.0
+    session.collision_disabled_until = 0.0
     session.stand_delay_remaining = 0.0
     session.jump_until = 0.0
     session.jump_started_at = 0.0
@@ -301,6 +311,8 @@ def reset_on_foot_actions(session: ClientSession) -> None:
 def request_player_prone_toggle(session: ClientSession, now: float | None = None) -> bool:
     """Apply the preview's X-to-prone/stand rule on the authoritative server."""
     timestamp = time.monotonic() if now is None else float(now)
+    if timestamp < session.forced_prone_until:
+        return False
     if session.jump_kind and timestamp < session.jump_until:
         return False
     session.prone = not session.prone
@@ -313,6 +325,8 @@ def request_player_prone_toggle(session: ClientSession, now: float | None = None
 def request_player_jump(session: ClientSession, now: float | None = None) -> str:
     """Start, advance, or consume Space according to the movement-preview contract."""
     timestamp = time.monotonic() if now is None else float(now)
+    if timestamp < session.forced_prone_until:
+        return "ignored"
     if session.prone:
         session.prone = False
         session.crouching = False
@@ -929,7 +943,10 @@ def _traffic_should_yield_to_player(car: TrafficVehicle, target: tuple[float, fl
     if mag < 1e-6:
         return False
     hx, hy = dx / mag, dy / mag
+    now = time.monotonic()
     for session in sessions:
+        if now < float(session.collision_disabled_until):
+            continue
         rx = session.player.x - car.x
         ry = session.player.y - car.y
         forward = rx * hx + ry * hy
@@ -1715,7 +1732,10 @@ def update_npcs(
             and (other.x - npc.x) ** 2 + (other.y - npc.y) ** 2 < personal_space ** 2
             for other in neighbours
         )
-        if horn_car is not None or crowded:
+        # Pedestrians already on a crossing are non-blocking; keep following
+        # the authored crossing route instead of trying a sidewalk-only crowd
+        # sidestep and flipping direction forever in the road.
+        if horn_car is not None or (crowded and current_surface != "road"):
             identity = sum(ord(c) for c in npc.npc_id)
             sx, sy = -uy, ux
             npc.stuck_time = max(0.0, npc.stuck_time - step_dt)
@@ -1728,6 +1748,8 @@ def update_npcs(
             else:
                 forward_x, forward_y = ux, uy
             directions = ((1.0, -1.0) if identity % 2 == 0 else (-1.0, 1.0))
+            fallback_candidate = None
+            fallback_clearance = -1.0
             for direction in (*directions, 0.0):
                 escape_step = min(personal_space * (1.35 if fleeing_horn else 1.0), max(10.0, npc.speed * step_dt * 1.5))
                 lateral_step = personal_space * (1.45 if npc.stuck_time >= 0.7 else 1.15) * direction
@@ -1740,13 +1762,26 @@ def update_npcs(
                 allowed = {"walk", "sidewalk"}
                 if surface not in allowed:
                     continue
-                if any(other is not npc and (other.x - nx) ** 2 + (other.y - ny) ** 2 < personal_space ** 2
-                       for other in neighbours):
+                clearance = min(
+                    (math.hypot(other.x - nx, other.y - ny) for other in neighbours if other is not npc),
+                    default=personal_space * 2.0,
+                )
+                if clearance > fallback_clearance:
+                    fallback_candidate = (nx, ny, math.atan2(forward_y, forward_x))
+                    fallback_clearance = clearance
+                if clearance < personal_space:
                     continue
                 npc.x, npc.y, npc.aim = nx, ny, math.atan2(forward_y, forward_x)
                 npc.last_progress_x, npc.last_progress_y = nx, ny
                 moved_aside = True
                 break
+            if not moved_aside and fallback_candidate is not None:
+                # Pedestrians are intentionally non-blocking. In a completely
+                # packed cluster, take the safest legal candidate instead of
+                # oscillating route direction forever behind nearby bodies.
+                npc.x, npc.y, npc.aim = fallback_candidate
+                npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
+                moved_aside = True
             if not moved_aside:
                 # Change route intent instead of waiting forever behind the same
                 # body. The next tick immediately searches in the new direction.
@@ -1785,6 +1820,40 @@ def update_npcs(
 
 def vehicle_speed_mph(speed_px_s: float) -> float:
     return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
+
+
+def update_player_vehicle_impacts(sessions: list[ClientSession], now: float) -> None:
+    """Put struck on-foot players prone while briefly removing traffic blocking."""
+    moving_cars = [
+        car for car in traffic_vehicles
+        if not car.parked and vehicle_speed_mph(car.speed) >= 12.0
+    ]
+    for session in sessions:
+        if (session.driving_vehicle_id or session.passenger_vehicle_id or session.riding_bicycle_id
+                or session.player.interior_id or int(session.player.level) != 0):
+            continue
+        if now < float(session.collision_disabled_until):
+            continue
+        for car in moving_cars:
+            dx, dy = session.player.x - car.x, session.player.y - car.y
+            ca, sa = math.cos(car.angle), math.sin(car.angle)
+            longitudinal = abs(dx * ca + dy * sa)
+            lateral = abs(-dx * sa + dy * ca)
+            if (longitudinal > car.collision_length * 0.5 + PLAYER_RADIUS * 0.55
+                    or lateral > car.collision_width * 0.5 + PLAYER_RADIUS * 0.55):
+                continue
+            session.prone = True
+            session.crouching = False
+            session.crouch_cancel_latched = bool(session.crouch_requested)
+            session.stand_delay_remaining = 0.0
+            session.jump_kind = ""
+            session.jump_until = 0.0
+            session.jump_velocity_x = 0.0
+            session.jump_velocity_y = 0.0
+            session.boost = False
+            session.forced_prone_until = now + 1.10
+            session.collision_disabled_until = now + 1.45
+            break
 
 
 def update_hydrants(now: float) -> None:
@@ -1906,6 +1975,8 @@ def _vehicle_map_blocked(car: TrafficVehicle, x: float, y: float, angle: float) 
         if point_in_water(px, py, ACTIVE_MAP) and not point_near_road(
             px, py, ACTIVE_MAP, extra=0.0, bridge_only=True, level=0
         ):
+            return True
+        if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and GRID_WORLD.object_collision_at(px, py, 4.0):
             return True
     rects = collision_buildings_near(x, y, ACTIVE_MAP) if ACTIVE_MAP.get("chunked") else ACTIVE_MAP.get("buildings", [])
     for rx, ry, rw, rh in rects:
@@ -3305,7 +3376,12 @@ async def simulation_loop() -> None:
             input_moving = math.hypot(session.input_x, session.input_y) > 0.05
             airborne = bool(session.jump_kind and current < session.jump_until)
             movement_blocked_for_stand = False
-            if not airborne:
+            if current < session.forced_prone_until:
+                session.prone = True
+                session.crouching = False
+                session.boost = False
+                movement_blocked_for_stand = True
+            elif not airborne:
                 if not session.prone and session.stand_delay_remaining <= 0.0:
                     session.crouching = session.crouch_requested and not session.crouch_cancel_latched
                 if input_moving and (session.prone or session.crouching):
@@ -3387,9 +3463,10 @@ async def simulation_loop() -> None:
 
         signal_time = time.time()
         update_traffic(dt, sessions, signal_time)
+        current_mono = time.monotonic()
+        update_player_vehicle_impacts(sessions, current_mono)
         update_bicycles(dt, sessions)
         update_npcs(dt, sessions, tick_index, signal_time)
-        current_mono = time.monotonic()
         update_npc_runovers(current_mono)
         update_hydrants(current_mono)
         tick_index += 1

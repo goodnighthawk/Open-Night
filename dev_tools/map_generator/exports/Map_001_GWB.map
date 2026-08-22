@@ -61266,14 +61266,14 @@
     {
       "path": "catalogs/atlas_index.csv",
       "role": "catalog",
-      "size_bytes": 3842,
-      "sha256": "f49a6a6a08953663beff56890c41a88d595dca39ed662168b037f44eef44f155"
+      "size_bytes": 3943,
+      "sha256": "c080837f18d7adab8d2007cee8ced0ea402d986f9abb27f326144c86e4b745a4"
     },
     {
       "path": "catalogs/object_catalog.csv",
       "role": "catalog",
-      "size_bytes": 29495,
-      "sha256": "7c2297b08c27d13fee89952f1ed9c984e6af1a8f758fdf8eb49eae3f3b001a7b"
+      "size_bytes": 29596,
+      "sha256": "8373250f6674a44348ae9046e890b8089b336fc98801768fb220daf240eda91e"
     },
     {
       "path": "composition/composition_tiles_v19.zip",

@@ -53,9 +53,10 @@ def main() -> int:
 
     world = v100_server.load_ground_grid()
 
-    # 3: rounded source-pack corners and multiple approved pavement variants.
-    require(all("/circle_" in image for key, image in CURB_WORLD_TO_PACK_IMAGE.items() if "outer" in key),
-            "sharp curb-corner assets remain")
+    # 3: native one-cell rounded corners and multiple approved pavement variants.
+    require(all("/curb_" in image and "/circle_" not in image
+                for key, image in CURB_WORLD_TO_PACK_IMAGE.items() if "outer" in key),
+            "oversized plaza circles remain in one-cell curb corners")
     curb_tiles = Counter(tile for row in world.layers["ground"] for tile in row if tile.startswith("curb_"))
     require(sum(count for tile, count in curb_tiles.items() if "outer" in tile) >= 24,
             f"rounded curb corners were not installed in the live grid: {curb_tiles}")

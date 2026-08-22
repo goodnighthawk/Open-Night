@@ -308,9 +308,14 @@ def _grid_vehicle_blocked(world, car, x: float, y: float, angle: float) -> bool:
     allowed = {"road"}
     # Player-controlled cars may cross painted dividers and mount sidewalks.
     # Ambient traffic remains road-bound so its deterministic flow stays safe.
-    if bool(getattr(car, "controlled_by", "")):
+    player_controlled = bool(getattr(car, "controlled_by", ""))
+    if player_controlled:
         allowed.update({"walk", "sidewalk"})
-    return any(world.collision_at("ground", px, py) not in allowed for px, py in probes)
+    if any(world.collision_at("ground", px, py) not in allowed for px, py in probes):
+        return True
+    # Street props intentionally stay out of deterministic ambient lanes, but a
+    # player-driven vehicle must respect their authored cones/tree collision.
+    return player_controlled and any(world.object_collision_at(px, py, 4.0) for px, py in probes)
 
 
 def install(server_module, world) -> None:

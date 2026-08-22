@@ -8,7 +8,6 @@ checks = {
     "launcher_art": ROOT / "assets" / "launcher" / "open_night_gritty_neon.png",
     "start": ROOT / "START_OPEN_NIGHT.bat",
     "updater": ROOT / "UPDATE_OPEN_NIGHT.bat",
-    "map_generator": ROOT / "dev_tools" / "map_generator" / "MAP_GENERATOR.bat",
     "quick_test": ROOT / "QUICK_LOCAL_TEST.bat",
     "server": ROOT / "RUN_SERVER.bat",
     "desktop": ROOT / "RUN_CLIENT.bat",
@@ -27,12 +26,14 @@ source = checks["launcher"].read_text(encoding="utf-8")
 for token in ("open_night_gritty_neon.png", "NEON_PINK", "NEON_BLUE", "CITY ACCESS TERMINAL"):
     if token not in source:
         raise SystemExit(f"Neon launcher skin integration missing: {token}")
-for token in ("MAP GENERATOR", "QUICK TEST", "START SERVER", "DESKTOP CLIENT", "WEB CLIENT", "MOVEMENT PREVIEW", "MAP VIEWER"):
+for token in ("QUICK TEST", "START SERVER", "DESKTOP CLIENT", "WEB CLIENT", "MOVEMENT PREVIEW", "MAP VIEWER"):
     if token not in source:
         raise SystemExit(f"Launcher action missing: {token}")
 start_source = checks["start"].read_text(encoding="utf-8", errors="replace")
 updater_source = checks["updater"].read_text(encoding="utf-8", errors="replace")
 player_source = checks["player_launcher"].read_text(encoding="utf-8")
+if "MAP GENERATOR" in source or "launch_map_generator" in source or "MAP GENERATOR" in player_source or "launch_map_generator" in player_source:
+    raise SystemExit("Map Generator is still exposed through a launcher")
 if "UPDATE TO LATEST VERSION" not in player_source or "self.launch_update" not in player_source:
     raise SystemExit("Player launcher does not expose its prominent safe update control")
 if "call UPDATE_OPEN_NIGHT.bat" in start_source:
@@ -60,8 +61,5 @@ viewer = checks["map_viewer"].read_text(encoding="utf-8")
 for token in ("DEFAULT_MAP_ID", "default_map_path", "Map_001_GWB.map", "--choose"):
     if token not in viewer:
         raise SystemExit(f"Map Viewer default-map integration missing: {token}")
-map_bat = checks["map_generator"].read_text(encoding="utf-8", errors="replace")
-if "OPEN_NIGHT_GAME_ROOT" not in map_bat:
-    raise SystemExit("Map generator does not recognize the OPEN NIGHT export target")
 print("OPEN NIGHT launcher audit: PASS")
-print("7 developer actions + 1 prominent player update action; approved neon skin and single player entry point are wired.")
+print("6 developer actions + 3 player actions + 1 prominent update action; Map Generator is not launcher-accessible.")

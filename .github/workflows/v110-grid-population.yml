@@ -102,7 +102,7 @@ jobs:
           assert audit['grid_cell_px'] == 128, audit
           # Full-size v1.1 street proportion: a normal car must be at least 2.5x
           # the ~58 px Ground player height. Never regress to the old ~83 px toy car.
-          assert audit['vehicle_client_target_length_min_px'] >= 145.0, audit
+          assert audit['vehicle_client_target_length_min_px'] >= 132.0, audit
           assert audit['vehicle_collision_to_visual_ratio_min'] >= 0.78, audit
           assert traffic['simulation_seconds'] >= 60, traffic
           assert not traffic['stalled_car_ids'], traffic

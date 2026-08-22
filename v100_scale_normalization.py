@@ -18,6 +18,7 @@ _INSTALLED = False
 _PIXEL_FIELDS = (
     "offset_x_px", "offset_y_px", "width_px", "height_px",
     "light_offset_x_px", "light_offset_y_px", "light_radius_px",
+    "collision_radius_px",
 )
 
 
@@ -81,6 +82,12 @@ def apply_world_scale(world):
         "normalized_world_size": [world.world_w, world.world_h],
         "scale_authority": "shared_gridworld_collision_render_network",
     })
+    # Object collision circles are expressed in the pixel-local fields scaled
+    # above. Discard any pre-normalization cache so the next query rebuilds it
+    # from the normalized radii and anchors.
+    for cache_key in ("_object_collision_cache", "_object_collision_cache_count"):
+        if hasattr(world, cache_key):
+            delattr(world, cache_key)
     world._v100_world_scale_normalized = True
     return world
 

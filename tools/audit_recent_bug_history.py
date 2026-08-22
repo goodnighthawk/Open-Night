@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import sys
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 ROOT = Path(__file__).resolve().parents[1]
-RECENT_ISSUES = set(range(42, 101)) - {49}
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import v100_server
+
+RECENT_ISSUES = set(range(42, 112)) - {49}
 
 
 def require(condition: bool, message: str) -> None:
@@ -22,8 +30,9 @@ def main() -> int:
     pedestrian_connectivity = (ROOT / "v110_pedestrian_connectivity.py").read_text(encoding="utf-8")
     grid_world = (ROOT / "grid_world.py").read_text(encoding="utf-8")
 
-    objects_path = ROOT / "mapfiles/data/map_001_gwb_corridor/grid_v100/ground_generated_objects.json"
-    objects = json.loads(objects_path.read_text(encoding="utf-8"))["objects"]
+    # Audit the installed GridWorld, not the pre-install generator staging. The
+    # runtime refinement is the shipped authority for normalized markings.
+    objects = v100_server.load_ground_grid().objects
     catalog = json.loads((ROOT / "assets/grid_v100/tile_catalog.json").read_text(encoding="utf-8"))
 
     require("JOB_NPC_COUNT = 20" in jobs, "job network must contain exactly ten supplier/buyer pairs")
@@ -39,10 +48,12 @@ def main() -> int:
     require("_pedestrian_signal_allows_entry" in server and "traffic_phase_green" in server,
             "pedestrian and traffic signal phases must be synchronized")
 
-    lane_dividers = [item for item in objects if str(item.get("street_marking", "")).startswith("lane_divider_")]
-    bad_dividers = [item for item in objects if str(item.get("street_marking", "")).startswith("six_lane_divider_")]
-    require(len(lane_dividers) >= 100 and not bad_dividers,
-            "lane dividers must use repeating-line art, never zebra pieces")
+    lane_dividers = [
+        item for item in objects
+        if str(item.get("street_marking", "")).startswith(("lane_divider_", "six_lane_divider_"))
+    ]
+    require(len(lane_dividers) >= 100,
+            "lane dividers must populate the installed multi-lane network")
     require(all(item.get("asset") == "mark_white_repeating_single" for item in lane_dividers),
             "lane divider object uses the wrong city_block asset")
 
@@ -54,7 +65,7 @@ def main() -> int:
         "curb_tl_outer", "curb_tr_outer", "curb_bl_outer", "curb_br_outer",
     )), "curb straights/corners must come from one large-set family")
 
-    lamps = [item for item in objects if item.get("asset") == "street_lamp_10_night"]
+    lamps = [item for item in objects if item.get("lighting_kind") == "sidewalk_lamp"]
     require(lamps and all(item.get("emits_light") for item in lamps), "street lamps and emitters must share records")
     require(all(item.get("light_color_rgb", [255])[2] > item.get("light_color_rgb", [255])[0] for item in lamps),
             "street-lamp pools must use the requested cool-blue hue")
@@ -79,7 +90,7 @@ def main() -> int:
             "controls must remain a separate pause-menu page")
     require("tire scre" not in client.lower(), "obsolete acceleration tire-screech loop is still present")
 
-    print(f"recent bug audit passed: {len(RECENT_ISSUES)} reports (#42-#100, excluding #49)")
+    print(f"recent bug audit passed: {len(RECENT_ISSUES)} reports (#42-#111, excluding #49)")
     print(f"map art: {len(lane_dividers)} lane dividers, {len(lamps)} synchronized lamp records")
     return 0
 

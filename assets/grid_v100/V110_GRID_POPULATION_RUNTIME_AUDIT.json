@@ -18,13 +18,13 @@
   "pedestrian_crosswalk_count": 133,
   "pedestrian_crosswalk_road_cell_count": 711,
   "pedestrian_crosswalk_route_count": 18,
-  "pedestrian_distance_median_px": 251.312,
+  "pedestrian_distance_median_px": 262.912,
   "pedestrian_distance_min_px": 0.0,
   "pedestrian_flow_measure_seconds": 5.0,
   "pedestrian_flow_min_distance_px": 20.0,
   "pedestrian_intersection_crosswalk_count": 96,
-  "pedestrian_lawful_signal_wait_count": 25,
-  "pedestrian_lawful_signal_wait_max_seconds": 0.833,
+  "pedestrian_lawful_signal_wait_count": 14,
+  "pedestrian_lawful_signal_wait_max_seconds": 5.0,
   "pedestrian_midblock_crosswalk_count": 37,
   "pedestrian_multiblock_route_count": 18,
   "pedestrian_one_way_cycle_routes": 18,
@@ -35,9 +35,12 @@
   "pedestrians_off_pavement": [],
   "pedestrians_spawned": 216,
   "pedestrians_stalled_after_warmup": [
-    "gridnpc045"
+    "gridnpc008",
+    "gridnpc045",
+    "gridnpc078",
+    "gridnpc085"
   ],
-  "pedestrians_stalled_after_warmup_count": 1,
+  "pedestrians_stalled_after_warmup_count": 4,
   "player_cell": [
     26,
     12
@@ -62,14 +65,15 @@
   "traffic_moved_after_2_5s": 24,
   "traffic_requested": 24,
   "traffic_route_count": 84,
+  "traffic_signal_count": 96,
   "traffic_spawned": 24,
-  "vehicle_client_target_length_max_px": 485.1,
-  "vehicle_client_target_length_min_px": 217.8,
-  "vehicle_collision_length_meta_scale": 4.0,
-  "vehicle_collision_to_visual_ratio_min": 0.8235,
+  "vehicle_client_target_length_max_px": 360.0,
+  "vehicle_client_target_length_min_px": 132.0,
+  "vehicle_collision_length_meta_scale": 3.25,
+  "vehicle_collision_to_visual_ratio_min": 0.9987,
   "vehicle_collision_width_meta_scale": 3.35,
   "vehicle_render_meta_scale": 3.0,
-  "visible_cars_in_proof_window": 5,
+  "visible_cars_in_proof_window": 6,
   "visible_pedestrians_in_proof_window": 16,
   "visual_style": "open_night_grunge_neon"
 }

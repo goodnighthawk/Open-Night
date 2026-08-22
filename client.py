@@ -2707,19 +2707,33 @@ class Game:
             half_l = target_len * 0.42
             half_w = max(6.0, float(car.collision_width) * 0.38)
             blink = int(time.monotonic() * 3.0) % 2 == 0
+            def lamp_point(position: tuple[int, int], color: tuple[int, int, int], core: int = 8, glow_radius: int = 22) -> None:
+                glow = pygame.Surface((glow_radius * 2 + 2, glow_radius * 2 + 2), pygame.SRCALPHA)
+                center = (glow_radius + 1, glow_radius + 1)
+                pygame.draw.circle(glow, (*color, 28), center, glow_radius)
+                pygame.draw.circle(glow, (*color, 56), center, max(core + 3, glow_radius // 2))
+                self.screen.blit(glow, glow.get_rect(center=position), special_flags=pygame.BLEND_RGBA_ADD)
+                pygame.draw.circle(self.screen, color, position, core)
+                pygame.draw.circle(self.screen, (255, 250, 222), position, max(2, core // 3))
             if car.headlights:
                 for side in (-1.0, 1.0):
-                    pygame.draw.circle(self.screen, (245, 232, 170),
-                        (int(sx + hx * half_l + sxv * half_w * side), int(sy + hy * half_l + syv * half_w * side)), 3)
+                    lamp_point(
+                        (int(sx + hx * half_l + sxv * half_w * side), int(sy + hy * half_l + syv * half_w * side)),
+                        (245, 232, 170), 8, 26,
+                    )
             if car.brake_lights:
                 for side in (-1.0, 1.0):
-                    pygame.draw.circle(self.screen, (245, 48, 39),
-                        (int(sx - hx * half_l + sxv * half_w * side), int(sy - hy * half_l + syv * half_w * side)), 3)
+                    lamp_point(
+                        (int(sx - hx * half_l + sxv * half_w * side), int(sy - hy * half_l + syv * half_w * side)),
+                        (245, 48, 39), 7, 18,
+                    )
             if car.turn_signal and blink:
                 side = float(car.turn_signal)
                 for longitudinal in (-half_l, half_l):
-                    pygame.draw.circle(self.screen, (255, 174, 38),
-                        (int(sx + hx * longitudinal + sxv * half_w * side), int(sy + hy * longitudinal + syv * half_w * side)), 3)
+                    lamp_point(
+                        (int(sx + hx * longitudinal + sxv * half_w * side), int(sy + hy * longitudinal + syv * half_w * side)),
+                        (255, 174, 38), 8, 20,
+                    )
             if car.horn:
                 beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
                 self.screen.blit(beep, beep.get_rect(midbottom=(sx, sy - 38)))

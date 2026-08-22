@@ -176,19 +176,49 @@ def main() -> int:
     audio_source = (ROOT / "gameplay" / "audio.py").read_text(encoding="utf-8")
 
     expected_corners = {
-        "curb_tl_outer": "circle_bottom_right_outer.png",
-        "curb_tr_outer": "circle_bottom_left_outer.png",
-        "curb_bl_outer": "circle_top_right_outer.png",
-        "curb_br_outer": "circle_top_left_outer.png",
+        "curb_tl_outer": ("curb_top_right_outer.png", 3),
+        "curb_tr_outer": ("curb_top_left_outer.png", 2),
+        "curb_bl_outer": ("curb_bottom_right_outer.png", 1),
+        "curb_br_outer": ("curb_bottom_left_outer.png", 0),
     }
-    for tile_id, filename in expected_corners.items():
+    for tile_id, (filename, bright_quadrant) in expected_corners.items():
         require(CURB_WORLD_TO_PACK_IMAGE[tile_id].endswith(filename), f"wrong curb transform for {tile_id}")
 
     world = v100_server.load_ground_grid()
     renderer = GridRenderer(world)
     for tile_id in CURB_WORLD_TO_PACK_IMAGE:
-        require(renderer._tile_surface(tile_id).get_size() == (world.cell_px, world.cell_px),
+        rendered = renderer._tile_surface(tile_id)
+        require(rendered.get_size() == (world.cell_px, world.cell_px),
                 f"curb {tile_id} is not normalized to one grid cell")
+        if tile_id not in expected_corners:
+            continue
+        native = renderer._load_image(world.catalog[tile_id].image)
+        straight_native = renderer._load_image(world.catalog["curb_top"].image)
+        require(native.get_size() == straight_native.get_size(),
+                f"curb {tile_id} uses {native.get_size()} plaza art instead of native {straight_native.get_size()} pack-cell art")
+        half = world.cell_px // 2
+        quadrant_counts = []
+        for y0, y1 in ((0, half), (half, world.cell_px)):
+            for x0, x1 in ((0, half), (half, world.cell_px)):
+                quadrant_counts.append(sum(
+                    1 for y in range(y0, y1) for x in range(x0, x1)
+                    if sum(rendered.get_at((x, y))[:3]) > 390
+                ))
+        require(quadrant_counts.index(max(quadrant_counts)) == expected_corners[tile_id][1],
+                f"curb {tile_id} visible pavement is in the wrong quadrant: {quadrant_counts}")
+
+    curb_preview = pygame.Surface((world.cell_px * 3, world.cell_px * 3)).convert()
+    curb_layout = (
+        ("curb_tl_outer", "curb_top", "curb_tr_outer"),
+        ("curb_left", "pavement_small", "curb_right"),
+        ("curb_bl_outer", "curb_bottom", "curb_br_outer"),
+    )
+    for gy, row in enumerate(curb_layout):
+        for gx, tile_id in enumerate(row):
+            curb_preview.blit(renderer._tile_surface(tile_id), (gx * world.cell_px, gy * world.cell_px))
+    curb_preview_path = ROOT / "work" / "v21_curb_orientation_preview.png"
+    curb_preview_path.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(curb_preview, curb_preview_path)
 
     lamps = [item for item in world.objects if item.get("emits_light")]
     require(len(lamps) >= 80, f"expected visible lamp population, got {len(lamps)}")
@@ -236,10 +266,11 @@ def main() -> int:
     print(json.dumps({
         "reports": "#112-#125",
         "curb_tiles": len(CURB_WORLD_TO_PACK_IMAGE),
+        "curb_preview": str(curb_preview_path),
         "lamps": len(lamps),
         "character": character,
         "bus": bus,
-        "release_status": "held",
+        "release_status": "authorized_v2.1",
     }, indent=2, sort_keys=True))
     return 0
 

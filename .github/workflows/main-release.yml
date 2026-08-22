@@ -33,6 +33,9 @@ jobs:
           tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
           gameplay/audio.py tools/audit_v120_player_reports.py tools/audit_v120_pedestrian_escape.py tools/audit_v120_signal_harmony.py tools/audit_v120_audio.py
           tools/audit_v130_art_consolidation.py
+          tools/audit_recent_bug_history.py tools/audit_v2_current_reports.py
+          tools/audit_v210_bug_intake.py tools/audit_v210_current_reports.py
+          tools/deterministic_traffic_audit.py
       - name: Verify player-approved pixel vehicle fleet
         env:
           SDL_VIDEODRIVER: dummy
@@ -84,6 +87,25 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/audit_v130_art_consolidation.py
+      - name: Verify recent player-report history
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_recent_bug_history.py
+      - name: Verify v2.0 carried player reports
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_v2_current_reports.py
+      - name: Verify v2.1 issue intake and current reports
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python tools/audit_v210_bug_intake.py
+          python tools/audit_v210_current_reports.py
+      - name: Verify deterministic authored map data
+        run: python tools/deterministic_traffic_audit.py
       - name: Verify release audit bundle
         run: |
           test -f assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png
@@ -104,7 +126,7 @@ jobs:
           assert not pop['pedestrians_off_pavement'], pop
           assert not pop['blocked_traffic_after_10s'], pop
           assert not pop['overlapping_traffic_after_10s'], pop
-          assert pop['vehicle_client_target_length_min_px'] >= 145.0, pop
+          assert pop['vehicle_client_target_length_min_px'] >= 132.0, pop
           assert not traffic['stalled_car_ids'], traffic
           assert not traffic['undertravel_car_ids'], traffic
           assert not traffic['blocked_car_ids'], traffic

@@ -226,6 +226,16 @@ class GridRenderer:
             image = pygame.transform.scale(image, (self.world.cell_px, self.world.cell_px))
         if tile_id.startswith("bld_") and not tile_id.endswith("_fill"):
             image = self._suppress_building_perimeter_outline(image)
+        if tile_id.startswith("bld_"):
+            # Expand only inside the already-blocked authoritative tile. This
+            # reduces the apparent sidewalk/setback without changing a single
+            # collision cell or building footprint (current report #134).
+            expanded_size = max(self.world.cell_px, int(round(self.world.cell_px * 1.14)))
+            expanded = pygame.transform.scale(image, (expanded_size, expanded_size))
+            crop = expanded.get_rect(center=expanded.get_rect().center)
+            crop.size = (self.world.cell_px, self.world.cell_px)
+            crop.center = expanded.get_rect().center
+            image = expanded.subsurface(crop).copy()
         return image
 
     @lru_cache(maxsize=1024)

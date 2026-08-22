@@ -309,9 +309,10 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
     for index, (gx, gy) in enumerate(cone_cells, 1):
         world.objects.append({
             "asset": "street_item_traffic_cone", "gx": gx, "gy": gy,
-            "offset_x_px": 100, "offset_y_px": 88, "width_px": 56, "height_px": 80,
+            "offset_x_px": 86, "offset_y_px": 68, "width_px": 84, "height_px": 120,
             "street_item_kind": "traffic_cone", "street_item_index": index,
-            "composition_pass": "city_block_street_items_svg_v1", "decorative_only": True,
+            "composition_pass": "city_block_street_items_svg_v1", "decorative_only": False,
+            "collision_radius_px": 22, "collision_kind": "traffic_cone",
             "placement_policy": "spaced_road_edge_cell_report44",
         })
     return {"telephone_box_count": len(telephone_cells), "traffic_cone_count": len(cone_cells)}

@@ -56,6 +56,8 @@ def _advance_population(
     signal_waits: dict[str, float] | None = None,
 ) -> dict[str, float]:
     travelled: dict[str, float] = {}
+    far_hz = max(1.0, float(server.NPC_AI.get("far_update_hz", 5.0)))
+    far_stride = max(1, int(round(server.SERVER_TICK_RATE / far_hz)))
     for tick in range(tick_start, tick_stop):
         before = {
             npc.npc_id: (float(npc.x), float(npc.y))
@@ -71,7 +73,10 @@ def _advance_population(
                 px, py = before[npc.npc_id]
                 travelled[npc.npc_id] = travelled.get(npc.npc_id, 0.0) + math.hypot(npc.x - px, npc.y - py)
                 if signal_waits is not None and npc.signal_waiting:
-                    signal_waits[npc.npc_id] = signal_waits.get(npc.npc_id, 0.0) + dt
+                    # With no player sessions every pedestrian uses the far-NPC
+                    # cadence. Each sampled signal hold represents one complete
+                    # stride, not merely the single server tick on which it ran.
+                    signal_waits[npc.npc_id] = signal_waits.get(npc.npc_id, 0.0) + dt * far_stride
     return travelled
 
 
@@ -182,9 +187,28 @@ def main() -> None:
         raise RuntimeError(f"too few NPCs moved during proof: {moved_npcs}")
     allowed_stalled = max(2, len(pedestrians) // 20)
     if len(stalled_pedestrians) > allowed_stalled:
+        stalled_by_id = {npc.npc_id: npc for npc in pedestrians if npc.npc_id in stalled_pedestrians}
+        stall_details = {
+            npc_id: {
+                "travel": round(pedestrian_travel.get(npc_id, 0.0), 2),
+                "required": round(required_travel[npc_id], 2),
+                "signal_wait": round(pedestrian_signal_waits.get(npc_id, 0.0), 2),
+                "pause": round(stalled_by_id[npc_id].pause_timer, 2),
+                "route": stalled_by_id[npc_id].route_index,
+                "waypoint": stalled_by_id[npc_id].next_waypoint,
+                "speed": round(stalled_by_id[npc_id].speed, 2),
+                "route_len": len(server.ACTIVE_MAP["npc_routes"][stalled_by_id[npc_id].route_index].get("waypoints", [])),
+                "target_distance": round(math.hypot(
+                    float(server.ACTIVE_MAP["npc_routes"][stalled_by_id[npc_id].route_index]["waypoints"][stalled_by_id[npc_id].next_waypoint][0]) - stalled_by_id[npc_id].x,
+                    float(server.ACTIVE_MAP["npc_routes"][stalled_by_id[npc_id].route_index]["waypoints"][stalled_by_id[npc_id].next_waypoint][1]) - stalled_by_id[npc_id].y,
+                ), 2),
+                "surface": game.grid_world.collision_at("ground", stalled_by_id[npc_id].x, stalled_by_id[npc_id].y),
+            }
+            for npc_id in stalled_pedestrians[:8]
+        }
         raise RuntimeError(
             f"pedestrian flow deadlocked after warmup: {len(stalled_pedestrians)}/{len(pedestrians)} "
-            f"under {MIN_FLOW_DISTANCE_5S:.0f}px in five seconds; examples={stalled_pedestrians[:8]}"
+            f"under {MIN_FLOW_DISTANCE_5S:.0f}px in five seconds; examples={stall_details}"
         )
     if off_pavement_pedestrians:
         raise RuntimeError(f"pedestrians left GridWorld pavement: {off_pavement_pedestrians[:8]}")
