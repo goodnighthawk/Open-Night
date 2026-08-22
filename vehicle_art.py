@@ -170,8 +170,12 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     # unconditional repair appended a flipped rear strip to gridcar010, which
     # appeared as a detached/clipped texture behind the truck. Keep the repair
     # available only for a future manifest row that explicitly opts into it.
-    if generated_heavy and bool(meta.get("repair_rear_crop", False)):
-        source = _repair_generated_rear_crop(source, str(meta.get("category", "")).lower())
+    category = str(meta.get("category", "")).lower()
+    # All three generated bus sources end at the same flat rear crop line. Their
+    # complete rounded front cap is safe to mirror into a connected rear end.
+    # Trucks remain opt-in so gridcar010 never regains its detached strip.
+    if generated_heavy and (category == "bus" or bool(meta.get("repair_rear_crop", False))):
+        source = _repair_generated_rear_crop(source, category)
 
     # Player-supplied sheets are allowed to contain a horizontal source sprite;
     # canonical runtime vehicle art always points nose-up before heading rotation.

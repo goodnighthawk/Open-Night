@@ -244,7 +244,7 @@ def main() -> int:
             "client no longer renders every published traffic signal")
     require("red_pos" in client_source and "green_pos" in client_source,
             "traffic fixtures do not visibly show both signal aspects")
-    require("car.horn_until = recovery_now + 0.80" in server_source and "car.turn_signal =" in server_source,
+    require("_activate_traffic_horn(car, 0.8)" in server_source and "car.turn_signal =" in server_source,
             "stuck traffic does not request room with horn and indicator")
     require("not red_light and car.stuck_time >= recovery_after" in server_source,
             "bounded recovery is not guarded against red lights")

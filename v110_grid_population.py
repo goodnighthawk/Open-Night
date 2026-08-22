@@ -125,40 +125,77 @@ def _build_traffic_routes(world) -> list[dict]:
     lane_offsets = tuple(lane_width * ratio for ratio in (0.5, 1.5, 2.5))
     turn_radius = max(24.0, world.cell_px * 0.28)
     speed_limit = max(80.0, world.cell_px * 0.86)
-    for row_index in range(len(rows) - 1):
-        for col_index in range(len(cols) - 1):
-            top, bottom = rows[row_index], rows[row_index + 1]
-            left, right = cols[col_index], cols[col_index + 1]
-            cells = [(left, top), (right, top), (right, bottom), (left, bottom)]
-            points = [world.cell_center(gx, gy) for gx, gy in cells]
-            if not all(_segment_surface(world, points[i], points[(i + 1) % 4], "road") for i in range(4)):
-                continue
-            for direction_name, directed_points in (("cw", points), ("ccw", list(reversed(points)))):
-                for lane_index, lane_offset in enumerate(lane_offsets, start=1):
-                    # Signal every approach. Horizontal traffic uses phase 0;
-                    # vertical traffic uses phase 1. The server remaps these
-                    # authored corner indexes after curve smoothing.
-                    signals = {}
-                    for target_index, target in enumerate(directed_points):
-                        previous = directed_points[(target_index - 1) % len(directed_points)]
-                        horizontal_approach = abs(float(target[0]) - float(previous[0])) >= abs(
-                            float(target[1]) - float(previous[1])
-                        )
-                        signals[str(target_index)] = 0 if horizontal_approach else 1
-                    routes.append({
-                        "id": f"grid_traffic_{row_index:02d}_{col_index:02d}_{direction_name}_lane{lane_index}",
-                        "waypoints": [[round(x, 3), round(y, 3)] for x, y in directed_points],
-                        "speed_limit": speed_limit,
-                        "lane_offset": lane_offset,
-                        "turn_radius": turn_radius,
-                        "grid_native": True,
-                        "six_lane_network": True,
-                        "lane_index": lane_index,
-                        "lane_direction": direction_name,
-                        "signals": signals,
-                    })
-                    if len(routes) >= TRAFFIC_ROUTE_LIMIT:
-                        return routes
+    # Traffic used to circle only one block forever. Build fourteen varied,
+    # multi-block perimeter templates instead. Interleaving full-height, north,
+    # and south row pairs distributes cars across the city while the stable
+    # wide-first ordering gives the requested random-looking circulation without
+    # making release proofs or multiplayer simulation nondeterministic.
+    row_pairs: list[tuple[int, int]] = []
+    for pair in ((0, len(rows) - 1), (0, 1), (len(rows) - 2, len(rows) - 1)):
+        if 0 <= pair[0] < pair[1] < len(rows) and pair not in row_pairs:
+            row_pairs.append(pair)
+    rectangle_groups: list[list[tuple[int, int, int, int]]] = []
+    for pair_index, (top_index, bottom_index) in enumerate(row_pairs):
+        group = [
+            (top_index, bottom_index, left_index, right_index)
+            for left_index in range(len(cols) - 1)
+            for right_index in range(left_index + 1, len(cols))
+        ]
+        group.sort(key=lambda item: (
+            -(item[3] - item[2]),
+            (item[2] * 47 + item[3] * 71 + pair_index * 97) % 1009,
+            item[2], item[3],
+        ))
+        rectangle_groups.append(group)
+    rectangles: list[tuple[int, int, int, int]] = []
+    while len(rectangles) < 14 and any(rectangle_groups):
+        for group in rectangle_groups:
+            if group and len(rectangles) < 14:
+                rectangles.append(group.pop(0))
+
+    for rectangle_index, (top_index, bottom_index, left_index, right_index) in enumerate(rectangles):
+        top, bottom = rows[top_index], rows[bottom_index]
+        left, right = cols[left_index], cols[right_index]
+        cells = (
+            [(cols[index], top) for index in range(left_index, right_index + 1)]
+            + [(right, rows[index]) for index in range(top_index + 1, bottom_index + 1)]
+            + [(cols[index], bottom) for index in range(right_index - 1, left_index - 1, -1)]
+            + [(left, rows[index]) for index in range(bottom_index - 1, top_index, -1)]
+        )
+        points = [world.cell_center(gx, gy) for gx, gy in cells]
+        if not all(
+            _segment_surface(world, points[i], points[(i + 1) % len(points)], "road")
+            for i in range(len(points))
+        ):
+            continue
+        for direction_name, directed_points in (("cw", points), ("ccw", list(reversed(points)))):
+            for lane_index, lane_offset in enumerate(lane_offsets, start=1):
+                # Signal every approach. Horizontal traffic uses phase 0;
+                # vertical traffic uses phase 1. The server remaps these
+                # authored corner indexes after curve smoothing.
+                signals = {}
+                for target_index, target in enumerate(directed_points):
+                    previous = directed_points[(target_index - 1) % len(directed_points)]
+                    horizontal_approach = abs(float(target[0]) - float(previous[0])) >= abs(
+                        float(target[1]) - float(previous[1])
+                    )
+                    signals[str(target_index)] = 0 if horizontal_approach else 1
+                routes.append({
+                    "id": f"grid_circulation_{rectangle_index:02d}_{direction_name}_lane{lane_index}",
+                    "waypoints": [[round(x, 3), round(y, 3)] for x, y in directed_points],
+                    "speed_limit": speed_limit,
+                    "lane_offset": lane_offset,
+                    "turn_radius": turn_radius,
+                    "grid_native": True,
+                    "city_circulation": True,
+                    "circulation_blocks": (right_index - left_index) + (bottom_index - top_index),
+                    "six_lane_network": True,
+                    "lane_index": lane_index,
+                    "lane_direction": direction_name,
+                    "signals": signals,
+                })
+                if len(routes) >= TRAFFIC_ROUTE_LIMIT:
+                    return routes
     return routes
 
 
@@ -260,9 +297,9 @@ def _traffic_starts(routes: list[dict], count: int) -> list[dict]:
         return []
     starts = []
     for index in range(max(0, min(120, int(count)))):
-        route_index = index % len(routes)
+        route_index = (index * 37 + 11) % len(routes)
         lap = index // len(routes)
-        fraction = (0.11 + route_index * 0.071 + lap * 0.29) % 1.0
+        fraction = (0.11 + index * 0.381966 + lap * 0.29) % 1.0
         starts.append({
             "id": f"gridcar{index + 1:03d}",
             "route_id": routes[route_index]["id"],
@@ -315,6 +352,14 @@ def _build_parking_spots(world, traffic_signals: list[dict], limit: int = 18) ->
                 continue
             cx, cy = world.cell_center(gx, gy)
             if any(math.hypot(cx - sx, cy - sy) < world.cell_px * 2.2 for sx, sy in signals):
+                continue
+            ex, ey = {
+                "north": (0.0, -1.0), "east": (1.0, 0.0),
+                "south": (0.0, 1.0), "west": (-1.0, 0.0),
+            }[pavement_edges[0]]
+            parking_x = cx + ex * world.cell_px * 0.18
+            parking_y = cy + ey * world.cell_px * 0.18
+            if world.object_collision_at(parking_x, parking_y, max(90.0, world.cell_px * 0.75)):
                 continue
             candidates.append((gx, gy, pavement_edges[0]))
 
@@ -431,12 +476,28 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     # poison the traffic simulation simply because a catalog car is unusually wide.
     safe_cars = []
     for car in server_module.traffic_vehicles:
-        if _grid_vehicle_blocked(world, car, car.x, car.y, car.angle):
-            continue
-        if any(server_module._oriented_boxes_overlap(
-            car.x, car.y, car.angle, car.collision_length, car.collision_width,
-            other.x, other.y, other.angle, other.collision_length, other.collision_width,
-        ) for other in safe_cars):
+        def pose_clear() -> bool:
+            if _grid_vehicle_blocked(world, car, car.x, car.y, car.angle):
+                return False
+            return not any(server_module._oriented_boxes_overlap(
+                car.x, car.y, car.angle, car.collision_length, car.collision_width,
+                other.x, other.y, other.angle, other.collision_length, other.collision_width,
+            ) for other in safe_cars)
+
+        if not pose_clear() and not car.parked and 0 <= car.route_index < len(traffic_routes):
+            # Long circulation routes share several road segments. If two large
+            # authored vehicles land on the same initial segment, reseat only the
+            # later car by a stable route fraction instead of dropping traffic.
+            route = traffic_routes[car.route_index]
+            for offset in (0.073, 0.149, 0.227, 0.311, 0.419):
+                fraction = (float(car.home_fraction) + offset) % 1.0
+                x, y, next_waypoint, angle = server_module._sample_route(route, fraction)
+                car.x, car.y, car.next_waypoint, car.angle = x, y, next_waypoint, angle
+                car.last_progress_x, car.last_progress_y = x, y
+                car.home_fraction = fraction
+                if pose_clear():
+                    break
+        if not pose_clear():
             continue
         safe_cars.append(car)
     server_module.traffic_vehicles[:] = safe_cars

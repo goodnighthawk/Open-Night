@@ -442,6 +442,7 @@ class TrafficVehicle:
     last_progress_y: float = 0.0
     home_fraction: float = 0.0
     horn_until: float = 0.0
+    horn_sequence: int = 0
     red_light_waiting: bool = False
     turn_signal: int = 0
     headlights: bool = False
@@ -466,6 +467,7 @@ class TrafficVehicle:
             "passenger_capacity": PASSENGER_CAPACITY,
             "parked": bool(self.parked),
             "horn": time.monotonic() < self.horn_until,
+            "horn_sequence": int(self.horn_sequence),
             "turn_signal": int(self.turn_signal),
             "headlights": bool(self.headlights),
             "brake_lights": bool(self.brake_lights),
@@ -473,6 +475,14 @@ class TrafficVehicle:
 
 
 traffic_vehicles: list[TrafficVehicle] = []
+
+
+def _activate_traffic_horn(car: TrafficVehicle, duration: float = 0.8) -> None:
+    """Publish one durable horn event even when a snapshot misses its pulse."""
+    now = time.monotonic()
+    if now >= float(car.horn_until):
+        car.horn_sequence += 1
+    car.horn_until = max(float(car.horn_until), now + max(0.2, float(duration)))
 
 
 @dataclass
@@ -1264,7 +1274,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             desired = 0.0
         if _traffic_should_yield_to_pedestrian(car, heading):
             desired = 0.0
-            car.horn_until = max(car.horn_until, time.monotonic() + 0.35)
+            _activate_traffic_horn(car, 0.8)
 
         car.brake_lights = desired + 2.0 < car.speed
         accel = 95.0 if desired > car.speed else TRAFFIC_BRAKE_DECEL
@@ -1459,7 +1469,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
                 # A stable left/right indicator makes that intent visible to the
                 # player even on a geometrically straight route segment.
                 if recovery_now >= float(car.horn_until):
-                    car.horn_until = recovery_now + 0.80
+                    _activate_traffic_horn(car, 0.8)
                 car.turn_signal = -1 if sum(ord(ch) for ch in car.vehicle_id) % 2 == 0 else 1
             recovery_after = min(
                 1.8,

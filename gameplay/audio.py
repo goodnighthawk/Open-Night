@@ -24,6 +24,8 @@ class GameAudio:
         self.steering_since = 0.0
         self.last_horn: dict[str, float] = {}
         self.last_any_horn = 0.0
+        self.seen_horn_sequence: dict[str, int] = {}
+        self.pending_horn_sequence: dict[str, int] = {}
         self.previous_in_vehicle = False
         self.previous_speed = 0.0
         self.game_audio_muted = False
@@ -194,9 +196,22 @@ class GameAudio:
         # eligible horn and enforce both global and per-car cooldowns so sample
         # attack clicks cannot become a constant machine-gun noise (report #51).
         horn_candidates = []
+        visible_car_ids: set[str] = set()
         for car in game.vehicles.values():
             car_id = str(getattr(car, "id", ""))
-            if not bool(getattr(car, "horn", False)) or now - self.last_horn.get(car_id, 0.0) < 2.5:
+            if not car_id:
+                continue
+            visible_car_ids.add(car_id)
+            sequence = int(getattr(car, "horn_sequence", 0))
+            previous = self.seen_horn_sequence.get(car_id)
+            if previous is None:
+                self.seen_horn_sequence[car_id] = sequence
+                if bool(getattr(car, "horn", False)):
+                    self.pending_horn_sequence[car_id] = sequence
+            elif sequence != previous:
+                self.seen_horn_sequence[car_id] = sequence
+                self.pending_horn_sequence[car_id] = sequence
+            if car_id not in self.pending_horn_sequence or now - self.last_horn.get(car_id, 0.0) < 2.5:
                 continue
             volume = self._distance_volume(local, car.render_x, car.render_y)
             if volume > 0.02:
@@ -206,3 +221,8 @@ class GameAudio:
             self._play("horn", volume)
             self.last_horn[car_id] = now
             self.last_any_horn = now
+            self.pending_horn_sequence.pop(car_id, None)
+        for car_id in set(self.seen_horn_sequence) - visible_car_ids:
+            self.seen_horn_sequence.pop(car_id, None)
+            self.pending_horn_sequence.pop(car_id, None)
+            self.last_horn.pop(car_id, None)

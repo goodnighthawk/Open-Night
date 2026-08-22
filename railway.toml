@@ -2,6 +2,6 @@
 builder = "RAILPACK"
 
 [deploy]
-startCommand = "PYMMO_SHARED_DATA=/tmp/open-night-shared PYMMO_RESET_DB_ON_PATCH=false PYMMO_PATCH_ID=open-night-v2.3 python -u railway_entry.py --host 0.0.0.0 --port $PORT --no-discovery --name \"Open Night Internet Server\""
+startCommand = "PYMMO_SHARED_DATA=/tmp/open-night-shared PYMMO_RESET_DB_ON_PATCH=false PYMMO_PATCH_ID=open-night-v2.4 python -u railway_entry.py --host 0.0.0.0 --port $PORT --no-discovery --name \"Open Night Internet Server\""
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

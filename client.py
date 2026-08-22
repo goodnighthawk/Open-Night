@@ -1085,6 +1085,7 @@ class RemoteVehicle:
         self.passenger_capacity = int(data.get("passenger_capacity", 3))
         self.parked = bool(data.get("parked", False))
         self.horn = bool(data.get("horn", False))
+        self.horn_sequence = int(data.get("horn_sequence", 0))
         self.turn_signal = int(data.get("turn_signal", 0))
         self.headlights = bool(data.get("headlights", False))
         self.brake_lights = bool(data.get("brake_lights", False))
@@ -1120,6 +1121,7 @@ class RemoteVehicle:
         self.passenger_capacity = int(data.get("passenger_capacity", self.passenger_capacity))
         self.parked = bool(data.get("parked", self.parked))
         self.horn = bool(data.get("horn", self.horn))
+        self.horn_sequence = int(data.get("horn_sequence", self.horn_sequence))
         self.turn_signal = int(data.get("turn_signal", self.turn_signal))
         self.headlights = bool(data.get("headlights", self.headlights))
         self.brake_lights = bool(data.get("brake_lights", self.brake_lights))
@@ -2773,9 +2775,6 @@ class Game:
                         (int(sx + hx * longitudinal + sxv * half_w * side), int(sy + hy * longitudinal + syv * half_w * side)),
                         (255, 174, 38), 8, 20,
                     )
-            if car.horn:
-                beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
-                self.screen.blit(beep, beep.get_rect(midbottom=(sx, sy - 38)))
             return
         length = max(24, int(car.collision_length))
         width = max(14, int(car.collision_width))
