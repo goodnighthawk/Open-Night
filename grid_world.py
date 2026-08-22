@@ -224,6 +224,13 @@ class GridWorld:
         probes = ((radius,0.0),(-radius,0.0),(0.0,radius),(0.0,-radius),(diag,diag),(diag,-diag),(-diag,diag),(-diag,-diag))
         return all(self.walkable_at(layer, x + ox, y + oy) for ox, oy in probes)
 
+    def circle_spawnable(self, layer: str, x: float, y: float, radius: float) -> bool:
+        """Accept safe pedestrian login surfaces while explicitly rejecting roads."""
+        if not self.circle_walkable(layer, x, y, radius):
+            return False
+        probes = ((0.0, 0.0), (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius))
+        return all(self.collision_at(layer, x + ox, y + oy) != "road" for ox, oy in probes)
+
     def move_circle(self, layer: str, x: float, y: float, dx: float, dy: float, radius: float, *, max_step: float | None = None) -> tuple[float, float]:
         x, y, dx, dy = map(float, (x, y, dx, dy))
         distance = max(abs(dx), abs(dy))
@@ -263,10 +270,16 @@ class GridWorld:
                 x, y = float(raw[0]), float(raw[1])
             except (TypeError, ValueError, IndexError):
                 continue
-            if self.circle_walkable(layer, x, y, radius):
+            if self.circle_spawnable(layer, x, y, radius):
                 return x, y
-        cx, cy = self.cell_center(self.width // 2, self.height // 2)
-        return self.nearest_walkable(layer, cx, cy, radius)
+        # Prefer the nearest authored sidewalk/pavement cell instead of falling
+        # back to the center of a broad road band.
+        for gy in range(self.height):
+            for gx in range(self.width):
+                cx, cy = self.cell_center(gx, gy)
+                if self.circle_spawnable(layer, cx, cy, radius):
+                    return cx, cy
+        raise RuntimeError("grid map contains no non-road walkable spawn cell")
 
     def visible_cells(self, camera_x: float, camera_y: float, width_px: int, height_px: int):
         gx0 = max(0, int(camera_x // self.cell_px)); gy0 = max(0, int(camera_y // self.cell_px))

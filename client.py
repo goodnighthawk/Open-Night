@@ -2659,7 +2659,10 @@ class Game:
 
     def draw_vehicle(self, car: RemoteVehicle) -> None:
         sx, sy = self.world_to_screen(car.render_x, car.render_y)
-        target_len = int(max(74, car.render_length * 1.65))
+        # Manifest dimensions are authored in world pixels.  The old 1.65x
+        # client multiplier made the generated fleet dwarf both player cars
+        # and collision bodies, and amplified transparent-edge artifacts.
+        target_len = int(max(24, car.render_length))
         if draw_car(self.screen, (sx, sy), car.angle, car.sprite_index, target_length=target_len, speed=car.speed):
             if car.horn:
                 beep = self.tiny_font.render("BEEP!", True, (245, 215, 92))
