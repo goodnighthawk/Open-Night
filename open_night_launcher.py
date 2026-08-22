@@ -15,7 +15,7 @@ APP_TITLE = (
     if os.getenv("OPEN_NIGHT_MAP_PREVIEW", "").strip()
     else f"{version_label()} // Launcher"
 )
-WINDOW = (1120, 820)
+WINDOW = (1280, 800)
 FPS = 60
 
 BG = (12, 13, 11)
@@ -26,6 +26,9 @@ MUTED = (137, 141, 121)
 LIME = (174, 216, 65)
 YELLOW = (238, 197, 59)
 RED = (204, 59, 47)
+NEON_PINK = (255, 72, 137)
+NEON_BLUE = (78, 194, 255)
+NEON_WHITE = (235, 248, 255)
 ROAD = (43, 46, 41)
 ROAD_EDGE = (77, 79, 65)
 BLOCK = (32, 36, 30)
@@ -41,13 +44,14 @@ def port_open(port: int) -> bool:
 
 
 class LaunchButton:
-    def __init__(self, pg, rect, number, title, subtitle, action):
+    def __init__(self, pg, rect, number, title, subtitle, action, accent=None):
         self.pg = pg
         self.rect = pg.Rect(rect)
         self.number = number
         self.title = title
         self.subtitle = subtitle
         self.action = action
+        self.accent = accent or (NEON_PINK if int(number) % 2 else NEON_BLUE)
         self.hover = False
         self.flash_until = 0.0
 
@@ -62,17 +66,26 @@ class LaunchButton:
     def draw(self, screen, fonts):
         pg = self.pg
         hot = self.hover or time.monotonic() < self.flash_until
-        fill = (45, 49, 37) if hot else PANEL_2
-        edge = LIME if hot else (83, 89, 69)
-        pg.draw.rect(screen, fill, self.rect, border_radius=3)
-        pg.draw.rect(screen, edge, self.rect, 2, border_radius=3)
-        pg.draw.rect(screen, YELLOW if hot else (105, 105, 82), (self.rect.x, self.rect.y, 8, self.rect.h))
-        num = fonts['number'].render(self.number, True, YELLOW if hot else MUTED)
-        screen.blit(num, (self.rect.x + 22, self.rect.y + 13))
-        title = fonts['button'].render(self.title, True, CREAM)
-        screen.blit(title, (self.rect.x + 76, self.rect.y + 11))
-        sub = fonts['small'].render(self.subtitle, True, LIME if hot else MUTED)
-        screen.blit(sub, (self.rect.x + 77, self.rect.y + 42))
+        accent = self.accent
+        glow = pg.Surface((self.rect.w + 32, self.rect.h + 32), pg.SRCALPHA)
+        for spread, alpha in ((13, 20), (8, 35), (4, 60)):
+            glow_rect = pg.Rect(16 - spread, 16 - spread, self.rect.w + spread * 2, self.rect.h + spread * 2)
+            pg.draw.rect(glow, (*accent, alpha if hot else alpha // 2), glow_rect, 2, border_radius=12)
+        screen.blit(glow, (self.rect.x - 16, self.rect.y - 16))
+
+        fill = pg.Surface(self.rect.size, pg.SRCALPHA)
+        fill.fill((4, 9, 16, 224 if hot else 205))
+        screen.blit(fill, self.rect.topleft)
+        pg.draw.rect(screen, accent, self.rect, 3 if hot else 2, border_radius=8)
+        pg.draw.line(screen, NEON_WHITE, (self.rect.x + 14, self.rect.y + 3), (self.rect.right - 14, self.rect.y + 3), 1)
+        pg.draw.rect(screen, accent, (self.rect.x, self.rect.y + 9, 6, self.rect.h - 18), border_radius=3)
+
+        num = fonts['number'].render(self.number, True, accent)
+        screen.blit(num, (self.rect.x + 20, self.rect.y + 12))
+        title = fonts['button'].render(self.title, True, NEON_WHITE)
+        screen.blit(title, (self.rect.x + 78, self.rect.y + 11))
+        sub = fonts['small'].render(self.subtitle, True, accent if hot else (153, 172, 190))
+        screen.blit(sub, (self.rect.x + 79, self.rect.y + self.rect.h - 28))
 
 
 class OpenNightLauncher:
@@ -83,13 +96,16 @@ class OpenNightLauncher:
         pg.display.set_caption(APP_TITLE)
         self.clock = pg.time.Clock()
         self.fonts = {
-            'logo': pg.font.SysFont('impact', 96),
-            'tag': pg.font.SysFont('consolas', 18, bold=True),
-            'button': pg.font.SysFont('consolas', 23, bold=True),
-            'small': pg.font.SysFont('consolas', 14),
-            'number': pg.font.SysFont('impact', 32),
-            'status': pg.font.SysFont('consolas', 15, bold=True),
+            'logo': pg.font.SysFont('arialblack', 45),
+            'tag': pg.font.SysFont('consolas', 17, bold=True),
+            'button': pg.font.SysFont('consolas', 22, bold=True),
+            'small': pg.font.SysFont('consolas', 13),
+            'number': pg.font.SysFont('arialblack', 27),
+            'status': pg.font.SysFont('consolas', 13, bold=True),
         }
+        art_path = self.root / 'assets' / 'launcher' / 'open_night_gritty_neon.png'
+        self.launcher_art = pg.image.load(str(art_path)).convert()
+        self.launcher_art = pg.transform.smoothscale(self.launcher_art, (800, 800))
         self.status = "READY // choose a system"
         self.status_kind = 'ok'
         self.status_until = 0.0
@@ -104,7 +120,7 @@ class OpenNightLauncher:
         self.web_online = False
 
     def _layout_buttons(self):
-        x, y, w, h, gap = 596, 126, 480, 78, 12
+        x, y, w, h, gap = 840, 112, 400, 68, 10
         specs = [
             ('01', 'MAP GENERATOR', 'semantic map + cosmetics + lighting', self.launch_map_generator),
             ('02', 'QUICK TEST', 'memory server + protocol gate + client', self.launch_quick_test),
@@ -121,11 +137,11 @@ class OpenNightLauncher:
         self.status_kind = kind
         self.status_until = time.monotonic() + seconds
 
-    def _new_console(self, bat: Path, env=None):
+    def _new_console(self, bat: Path, *args, env=None):
         if not bat.is_file():
             raise FileNotFoundError(bat)
         flags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
-        cmd = ['cmd.exe', '/c', str(bat)] if os.name == 'nt' else ['bash', str(bat)]
+        cmd = ['cmd.exe', '/c', str(bat), *map(str, args)] if os.name == 'nt' else ['bash', str(bat), *map(str, args)]
         proc = subprocess.Popen(cmd, cwd=str(bat.parent), env=env, creationflags=flags)
         self.spawned.append(proc)
         return proc
@@ -147,6 +163,13 @@ class OpenNightLauncher:
             self._set_status('MAP GENERATOR v0.5.1 // screenshot traces // night + street lamps // portable .map')
         except Exception as exc:
             self._set_status(f'MAP GENERATOR FAILED // {exc}', 'error')
+
+    def launch_update(self):
+        try:
+            self._new_console(self.root / 'UPDATE_OPEN_NIGHT.bat', '--launcher')
+            self._set_status('UPDATE // checking main for the latest playable version; restart when complete', seconds=18)
+        except Exception as exc:
+            self._set_status(f'UPDATE FAILED // {exc}', 'error')
 
     def launch_quick_test(self):
         try:
@@ -245,45 +268,45 @@ class OpenNightLauncher:
 
     def _draw_logo(self, surf):
         pg = self.pg
-        logo = self.fonts['logo'].render('OPEN NIGHT', True, CREAM)
-        shadow = self.fonts['logo'].render('OPEN NIGHT', True, RED)
-        x, y = 42, 80
-        surf.blit(shadow, (x+7,y+7)); surf.blit(logo,(x,y))
-        # grime/glitch cuts through the word to evoke a rough late-90s crime-game UI without copying a logo.
-        for yy, ww in ((128,140),(162,220),(198,105)):
-            pg.draw.rect(surf, BG, (x+28, yy, ww, 3))
-        tag = self.fonts['tag'].render('// CITY SYSTEM CONTROL', True, LIME)
-        surf.blit(tag,(48,202))
-        pg.draw.rect(surf, YELLOW, (48,238,290,4))
-        pg.draw.rect(surf, RED, (345,238,62,4))
+        open_text = self.fonts['logo'].render('OPEN', True, NEON_PINK)
+        night_text = self.fonts['logo'].render('NIGHT', True, NEON_BLUE)
+        surf.blit(open_text, (840, 28))
+        surf.blit(night_text, (840 + open_text.get_width() + 13, 28))
+        tag = self.fonts['tag'].render('// CITY ACCESS TERMINAL', True, NEON_WHITE)
+        surf.blit(tag, (843, 82))
+        pg.draw.rect(surf, NEON_PINK, (840, 103, 166, 3), border_radius=2)
+        pg.draw.rect(surf, NEON_BLUE, (1013, 103, 227, 3), border_radius=2)
 
     def _draw_status(self, surf):
         pg = self.pg
         w,h = surf.get_size()
-        box = pg.Rect(34, h-66, w-68, 40)
-        pg.draw.rect(surf, PANEL, box)
-        pg.draw.rect(surf, (68,73,58), box, 1)
-        col = RED if self.status_kind == 'error' else LIME
+        box = pg.Rect(824, h - 61, 432, 43)
+        pg.draw.rect(surf, (3, 8, 14), box, border_radius=6)
+        pg.draw.rect(surf, NEON_PINK if self.status_kind == 'error' else NEON_BLUE, box, 1, border_radius=6)
+        col = NEON_PINK if self.status_kind == 'error' else NEON_BLUE
         msg = self.fonts['status'].render(self.status, True, col)
-        surf.blit(msg,(box.x+15,box.y+11))
-        online = f"SERVER {'ONLINE' if self.server_online else 'OFF'}   WEB {'ONLINE' if self.web_online else 'OFF'}"
+        surf.blit(msg, (box.x + 12, box.y + 7))
+        online = f"SERVER {'ONLINE' if self.server_online else 'OFF'}  //  WEB {'ONLINE' if self.web_online else 'OFF'}"
         osurf = self.fonts['small'].render(online, True, CREAM)
-        surf.blit(osurf,(box.right-osurf.get_width()-14, box.y+12))
+        surf.blit(osurf, (box.x + 12, box.y + 24))
 
     def draw(self):
         w,h = self.screen.get_size()
         canvas = self.pg.Surface(WINDOW)
-        self._draw_city(canvas, time.monotonic())
-        # main right control slab
-        self.pg.draw.rect(canvas, (12,13,11,225), (565,72,530,590))
-        self.pg.draw.rect(canvas, (83,89,69), (565,72,530,590), 2)
-        head = self.fonts['tag'].render('OPEN NIGHT // DEVELOPMENT LAUNCHER', True, YELLOW)
-        canvas.blit(head,(596,90))
+        canvas.blit(self.launcher_art, (0, 0))
+        # The approved square artwork remains intact at left; controls occupy a
+        # dedicated glassy terminal slab instead of obscuring the neon sign.
+        self.pg.draw.rect(canvas, (2, 6, 12), (800, 0, 480, 800))
+        for x, color, alpha in ((800, NEON_PINK, 90), (804, NEON_BLUE, 55)):
+            glow = self.pg.Surface((16, 800), self.pg.SRCALPHA)
+            glow.fill((*color, alpha))
+            canvas.blit(glow, (x - 8, 0))
+        self.pg.draw.line(canvas, NEON_WHITE, (801, 0), (801, 800), 1)
         self._draw_logo(canvas)
         for b in self.buttons: b.draw(canvas,self.fonts)
         self._draw_status(canvas)
-        hint = self.fonts['small'].render('ESC quits launcher // launched systems keep running', True, MUTED)
-        canvas.blit(hint,(42,260))
+        hint = self.fonts['small'].render('ESC CLOSES TERMINAL // LAUNCHED SYSTEMS KEEP RUNNING', True, (111, 132, 151))
+        canvas.blit(hint, (840, 706))
         if (w,h) != WINDOW:
             canvas = self.pg.transform.smoothscale(canvas,(w,h))
         self.screen.blit(canvas,(0,0))

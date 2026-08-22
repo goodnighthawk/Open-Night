@@ -4,6 +4,8 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 checks = {
     "launcher": ROOT / "open_night_launcher.py",
+    "player_launcher": ROOT / "open_night_player_launcher.py",
+    "launcher_art": ROOT / "assets" / "launcher" / "open_night_gritty_neon.png",
     "start": ROOT / "START_OPEN_NIGHT.bat",
     "updater": ROOT / "UPDATE_OPEN_NIGHT.bat",
     "map_generator": ROOT / "dev_tools" / "map_generator" / "MAP_GENERATOR.bat",
@@ -22,13 +24,19 @@ missing = [f"{name}: {path}" for name, path in checks.items() if not path.is_fil
 if missing:
     raise SystemExit("Missing OPEN NIGHT launcher targets:\n" + "\n".join(missing))
 source = checks["launcher"].read_text(encoding="utf-8")
+for token in ("open_night_gritty_neon.png", "NEON_PINK", "NEON_BLUE", "CITY ACCESS TERMINAL"):
+    if token not in source:
+        raise SystemExit(f"Neon launcher skin integration missing: {token}")
 for token in ("MAP GENERATOR", "QUICK TEST", "START SERVER", "DESKTOP CLIENT", "WEB CLIENT", "MOVEMENT PREVIEW", "MAP VIEWER"):
     if token not in source:
         raise SystemExit(f"Launcher action missing: {token}")
 start_source = checks["start"].read_text(encoding="utf-8", errors="replace")
 updater_source = checks["updater"].read_text(encoding="utf-8", errors="replace")
-if "call UPDATE_OPEN_NIGHT.bat" not in start_source:
-    raise SystemExit("Start launcher does not invoke the safe GitHub updater")
+player_source = checks["player_launcher"].read_text(encoding="utf-8")
+if "UPDATE TO LATEST VERSION" not in player_source or "self.launch_update" not in player_source:
+    raise SystemExit("Player launcher does not expose its prominent safe update control")
+if "call UPDATE_OPEN_NIGHT.bat" in start_source:
+    raise SystemExit("Player entry point still performs a hidden update before opening the launcher")
 for token in ("git.exe", "fetch", "merge-base --is-ancestor", "pull --ff-only", "OPEN_NIGHT_SKIP_UPDATE"):
     if token not in updater_source:
         raise SystemExit(f"Safe GitHub updater contract missing: {token}")
@@ -56,4 +64,4 @@ map_bat = checks["map_generator"].read_text(encoding="utf-8", errors="replace")
 if "OPEN_NIGHT_GAME_ROOT" not in map_bat:
     raise SystemExit("Map generator does not recognize the OPEN NIGHT export target")
 print("OPEN NIGHT launcher audit: PASS")
-print("7 launcher actions present; safe GitHub update, map tools, Railway detection and clients are wired.")
+print("7 developer actions + 1 prominent player update action; approved neon skin and single player entry point are wired.")

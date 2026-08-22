@@ -1,6 +1,6 @@
 # OPEN NIGHT — v0.8.1
 
-Double-click **`START_OPEN_NIGHT.bat`**. The launcher remains open while each subsystem runs in its own process.
+Double-click **`START_OPEN_NIGHT.bat`**. It is the only script a player needs to use. The neon launcher remains open while each subsystem runs in its own process and includes a large **UPDATE TO LATEST VERSION** button for safe updates from `main`.
 
 GitHub clones on `main` automatically check `origin/main` first and apply only safe fast-forward updates. Offline play and ZIP copies still work; local tracked edits cause the updater to skip rather than overwrite anything.
 
