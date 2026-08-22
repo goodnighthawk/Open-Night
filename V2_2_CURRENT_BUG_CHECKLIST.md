@@ -24,4 +24,4 @@ Started from a complete GitHub issue-mirror pull on 2026-08-22. The snapshot con
 - [x] Pull the complete current report mirror and inspect all fourteen attached screenshots.
 - [x] Add focused behavioral checks for #136–#149.
 - [x] Pass the complete main-release, multiplayer, sustained traffic, collision, audio, and visual gates.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub and Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub and Railway production (`c846c1026551e32209353388295680b2225e403f`; deployment `88a5f5af-d923-4afb-afd3-1da20f873704`).
