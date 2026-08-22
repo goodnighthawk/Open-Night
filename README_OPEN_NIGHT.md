@@ -8,13 +8,12 @@ Extracted friend copies use `UPDATE_FRIEND_BUILD.bat`: choose GitHub download, i
 
 ## Launcher
 
-1. **MAP GENERATOR** — bundled v0.5.1 screenshot-reference front end on the approved-layout portable generator. Open Night defaults to **night**, `night_callback` lighting and authored street lamps.
-2. **QUICK TEST** — supervised memory-server/WebSocket/client smoke path.
-3. **START SERVER** — authoritative server control panel with portable `.map` selection.
-4. **DESKTOP CLIENT** — native Pygame client; automatically detects the configured Railway internet server when it is online, with LAN and Direct Connect fallbacks.
-5. **WEB CLIENT** — Pygbag browser client; automatically uses the configured Railway WSS server while retaining a `?server=` override.
-6. **MOVEMENT PREVIEW** — character movement/action sandbox using the same authoritative character pack as the game.
-7. **MAP VIEWER** — opens portable `.map` files directly, including dynamic per-level filtering.
+1. **QUICK TEST** — supervised memory-server/WebSocket/client smoke path.
+2. **START SERVER** — authoritative server control panel with portable `.map` selection.
+3. **DESKTOP CLIENT** — native Pygame client; automatically detects the configured Railway internet server when it is online, with LAN and Direct Connect fallbacks.
+4. **WEB CLIENT** — Pygbag browser client; automatically uses the configured Railway WSS server while retaining a `?server=` override.
+5. **MOVEMENT PREVIEW** — character movement/action sandbox using the same authoritative character pack as the game.
+6. **MAP VIEWER** — opens portable `.map` files directly, including dynamic per-level filtering.
 
 ## New map-source workflow
 
@@ -107,7 +106,6 @@ The game and movement preview use `assets/characters/master_dual_camera` from th
 
 - `UPDATE_OPEN_NIGHT.bat`
 - `UPDATE_FRIEND_BUILD.bat`
-- `RUN_MAP_GENERATOR.bat`
 - `RUN_CHARACTER_PREVIEW.bat`
 - `LOCAL_QA.bat`
 - `REVIEW_BUG_REPORTS.bat`

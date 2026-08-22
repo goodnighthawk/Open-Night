@@ -22,6 +22,8 @@ checks = {
 missing = [f"{name}: {path}" for name, path in checks.items() if not path.is_file()]
 if missing:
     raise SystemExit("Missing OPEN NIGHT launcher targets:\n" + "\n".join(missing))
+if (ROOT / "RUN_MAP_GENERATOR.bat").exists():
+    raise SystemExit("Player-facing RUN_MAP_GENERATOR.bat shortcut still exists")
 source = checks["launcher"].read_text(encoding="utf-8")
 for token in ("open_night_gritty_neon.png", "NEON_PINK", "NEON_BLUE", "CITY ACCESS TERMINAL"):
     if token not in source:
@@ -34,11 +36,14 @@ updater_source = checks["updater"].read_text(encoding="utf-8", errors="replace")
 player_source = checks["player_launcher"].read_text(encoding="utf-8")
 if "MAP GENERATOR" in source or "launch_map_generator" in source or "MAP GENERATOR" in player_source or "launch_map_generator" in player_source:
     raise SystemExit("Map Generator is still exposed through a launcher")
+for token in ("self.update_process = self._new_console", "_restart_after_completed_update", "self._python_process(entry)"):
+    if token not in source:
+        raise SystemExit(f"Launcher does not refresh after an update: {token}")
 if "UPDATE TO LATEST VERSION" not in player_source or "self.launch_update" not in player_source:
     raise SystemExit("Player launcher does not expose its prominent safe update control")
 if "call UPDATE_OPEN_NIGHT.bat" in start_source:
     raise SystemExit("Player entry point still performs a hidden update before opening the launcher")
-for token in ("git.exe", "fetch", "merge-base --is-ancestor", "pull --ff-only", "OPEN_NIGHT_SKIP_UPDATE"):
+for token in ("git.exe", "GIT_TERMINAL_PROMPT=0", "UPDATE_TIMEOUT_SECONDS=30", "WaitForExit", "+main:refs/remotes/origin/main", "merge-base --is-ancestor", "merge --ff-only", "OPEN_NIGHT_SKIP_UPDATE"):
     if token not in updater_source:
         raise SystemExit(f"Safe GitHub updater contract missing: {token}")
 client_source = (ROOT / "client.py").read_text(encoding="utf-8")
@@ -62,4 +67,4 @@ for token in ("DEFAULT_MAP_ID", "default_map_path", "Map_001_GWB.map", "--choose
     if token not in viewer:
         raise SystemExit(f"Map Viewer default-map integration missing: {token}")
 print("OPEN NIGHT launcher audit: PASS")
-print("6 developer actions + 3 player actions + 1 prominent update action; Map Generator is not launcher-accessible.")
+print("6 developer actions + 3 player actions + 1 prominent update action; Map Generator has no public launcher entry point.")

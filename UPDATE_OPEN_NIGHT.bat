@@ -17,6 +17,11 @@ if not defined GIT_EXE (
   call :maybe_pause
   exit /b 0
 )
+set "GIT_TERMINAL_PROMPT=0"
+set "GCM_INTERACTIVE=Never"
+set "GIT_ASKPASS="
+set "UPDATE_TIMEOUT_SECONDS=30"
+set "UPDATE_WORKDIR=%CD%"
 
 set "CURRENT_BRANCH="
 for /f "delims=" %%B in ('"!GIT_EXE!" branch --show-current 2^>nul') do set "CURRENT_BRANCH=%%B"
@@ -39,9 +44,16 @@ if errorlevel 1 (
   exit /b 0
 )
 
-echo [UPDATE] Checking GitHub main...
-"!GIT_EXE!" fetch --quiet origin main
-if errorlevel 1 (
+echo [UPDATE] Checking GitHub main ^(maximum !UPDATE_TIMEOUT_SECONDS! seconds^)...
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ^
+  "$git=$env:GIT_EXE; $gitArgs=@('-c','credential.interactive=never','-c','core.askPass=','-c','http.lowSpeedLimit=1024','-c','http.lowSpeedTime=15','fetch','--quiet','origin','+main:refs/remotes/origin/main'); $proc=Start-Process -FilePath $git -ArgumentList $gitArgs -WorkingDirectory $env:UPDATE_WORKDIR -NoNewWindow -PassThru; if(-not $proc.WaitForExit([int]$env:UPDATE_TIMEOUT_SECONDS * 1000)){ try { $proc.Kill() } catch {}; exit 124 }; exit $proc.ExitCode"
+set "FETCH_EXIT=!ERRORLEVEL!"
+if "!FETCH_EXIT!"=="124" (
+  echo [UPDATE] GitHub check timed out after !UPDATE_TIMEOUT_SECONDS! seconds. Continuing offline.
+  call :maybe_pause
+  exit /b 0
+)
+if not "!FETCH_EXIT!"=="0" (
   echo [UPDATE] GitHub is unavailable. Continuing offline with the installed version.
   call :maybe_pause
   exit /b 0
@@ -69,7 +81,7 @@ if errorlevel 1 (
   exit /b 0
 )
 
-"!GIT_EXE!" pull --ff-only --quiet origin main
+"!GIT_EXE!" merge --ff-only --quiet origin/main
 if errorlevel 1 (
   echo [UPDATE] Update could not be applied safely. Nothing was overwritten; use GitHub Desktop.
   call :maybe_pause

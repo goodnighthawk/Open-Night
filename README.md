@@ -4,7 +4,7 @@
 
 1. In a GitHub clone, click **Fetch/Pull origin** in GitHub Desktop.
 2. Run **`START_OPEN_NIGHT.bat`**.
-3. Use the Open Night launcher for map generation, map viewing, quick test, server, desktop client, web client, or movement preview.
+3. Use the Open Night launcher for updating, quick test, server, or the desktop client.
 
 When this folder is a GitHub clone on the `main` branch, the launcher checks GitHub before setup and applies only a safe fast-forward update. It continues normally when offline, when Git is unavailable, or when local tracked edits would be affected. Set `OPEN_NIGHT_SKIP_UPDATE=1` to disable the check. Friends using extracted ZIP copies can run `UPDATE_FRIEND_BUILD.bat` to download GitHub `main` or import a ZIP without deleting their local environment, logs, or Friends list.
 
@@ -63,7 +63,6 @@ On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relat
 - `START_OPEN_NIGHT.bat` — Open Night development launcher
 - `UPDATE_OPEN_NIGHT.bat` — safe GitHub `main` fast-forward used automatically by the launcher
 - `UPDATE_FRIEND_BUILD.bat` — update an extracted friend copy from GitHub or a shared ZIP
-- `RUN_MAP_GENERATOR.bat` — screenshot-reference map generator
 - `QUICK_LOCAL_TEST.bat` — memory server + desktop client
 - `RUN_CLIENT.bat` — desktop client
 - `RUN_SERVER.bat` — server

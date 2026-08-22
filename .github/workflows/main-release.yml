@@ -21,6 +21,7 @@ jobs:
         run: >-
           python -m py_compile
           main.py railway_entry.py v100_client.py v100_server.py
+          open_night_launcher.py open_night_player_launcher.py
           vehicle_art.py vehicle_catalog.py
           v110_grid_population.py v110_pedestrian_flow.py v110_pedestrian_connectivity.py
           v110_vehicle_proportions.py v110_traffic_recovery.py
@@ -29,6 +30,7 @@ jobs:
           v110_version_client.py versioning.py
           tools/import_player_vehicle_sheets.py tools/audit_player_vehicle_fleet.py
           tools/audit_main_release.py tools/audit_v110_version_authority.py
+          tools/open_night_launcher_audit.py
           tools/audit_v110_bug_delivery.py tools/capture_v110_grid_population.py
           tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
           gameplay/audio.py tools/audit_v120_player_reports.py tools/audit_v120_pedestrian_escape.py tools/audit_v120_signal_harmony.py tools/audit_v120_audio.py
@@ -43,6 +45,8 @@ jobs:
         run: python tools/audit_player_vehicle_fleet.py
       - name: Verify main-only player/update authority
         run: python tools/audit_main_release.py
+      - name: Verify player launcher surface
+        run: python tools/open_night_launcher_audit.py
       - name: Verify client/server version authority
         run: python tools/audit_v110_version_authority.py
       - name: Verify durable bug delivery

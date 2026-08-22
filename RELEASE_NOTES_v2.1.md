@@ -21,7 +21,7 @@ issue #135.
 - Restores fire-escape interaction prompts, explicit character customization,
   clean character transparency, and aligned character layers in every pose.
 - Repairs underground road validation and refreshes the portable map manifest.
-- Keeps the launcher player-focused by removing the developer Map Generator entry.
+- Keeps the launcher player-focused by removing the Map Generator button, public batch shortcut, and player-guide entries; completed updates now refresh the launcher automatically.
 
 Release verification includes focused #112–#135 checks, the recent-history gate,
 the 75-second 28-car traffic simulation, deterministic map validation, character

@@ -26,13 +26,15 @@ def main() -> None:
     # main is the only supported player-update branch. Development branches may
     # remain in GitHub history, but normal players must never depend on them.
     assert 'CURRENT_BRANCH!"=="main"' in updater, "updater does not require main"
-    assert "fetch --quiet origin main" in updater, "updater does not fetch main"
-    assert "pull --ff-only --quiet origin main" in updater, "updater does not fast-forward main"
+    assert "+main:refs/remotes/origin/main" in updater, "updater does not refresh origin/main"
+    assert "UPDATE_TIMEOUT_SECONDS=30" in updater and "WaitForExit" in updater, "updater network check has no timeout"
+    assert "merge --ff-only --quiet origin/main" in updater, "updater does not fast-forward main"
     for stale in ("v1.0-art-overlay", "v1.1-bug-review", "v0.9.0-consolidation"):
         assert stale not in updater, f"player updater still references development branch {stale}"
     assert "open_night_player_launcher.py" in launcher, "player entry does not open the canonical launcher"
     assert "UPDATE TO LATEST VERSION" in player_launcher, "launcher lacks the prominent update action"
     assert "self.launch_update" in player_launcher, "launcher update action is not wired"
+    assert not (ROOT / "RUN_MAP_GENERATOR.bat").exists(), "public Map Generator launcher still ships"
 
     # The promoted main build keeps one exact wire version so stale clients
     # remain incompatible rather than silently connecting across protocol changes.

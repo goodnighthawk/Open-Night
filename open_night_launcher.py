@@ -110,6 +110,7 @@ class OpenNightLauncher:
         self.status_kind = 'ok'
         self.status_until = 0.0
         self.spawned = []
+        self.update_process = None
         self.map_cars = [
             [0.12, 0, 0.16], [0.45, 1, 0.11], [0.77, 0, 0.14], [0.22, 1, 0.18], [0.63, 0, 0.09]
         ]
@@ -156,10 +157,28 @@ class OpenNightLauncher:
 
     def launch_update(self):
         try:
-            self._new_console(self.root / 'UPDATE_OPEN_NIGHT.bat', '--launcher')
-            self._set_status('UPDATE // checking main for the latest playable version; restart when complete', seconds=18)
+            if self.update_process is not None and self.update_process.poll() is None:
+                self._set_status('UPDATE // already checking GitHub main', seconds=8)
+                return
+            self.update_process = self._new_console(self.root / 'UPDATE_OPEN_NIGHT.bat', '--launcher')
+            self._set_status('UPDATE // checking main; launcher will refresh when complete', seconds=35)
         except Exception as exc:
             self._set_status(f'UPDATE FAILED // {exc}', 'error')
+
+    def _restart_after_completed_update(self):
+        proc = self.update_process
+        if proc is None or proc.poll() is None:
+            return False
+        self.update_process = None
+        if proc.returncode != 0:
+            self._set_status(f'UPDATE FAILED // updater exited with code {proc.returncode}', 'error')
+            return False
+        entry = Path(sys.argv[0]).resolve()
+        if not entry.is_file():
+            self._set_status('UPDATE COMPLETE // close and reopen the launcher', seconds=18)
+            return False
+        self._python_process(entry)
+        return True
 
     def launch_quick_test(self):
         try:
@@ -318,6 +337,9 @@ class OpenNightLauncher:
                     for b in self.buttons:
                         action = b.handle(actual_event)
                         if action: action()
+            if self._restart_after_completed_update():
+                running = False
+                continue
             self._update_ports()
             self.draw()
             self.clock.tick(FPS)
