@@ -21,8 +21,9 @@ _PIXEL_FIELDS = (
 )
 
 
-def _scaled_int(value, scale: float, *, minimum: int = 0) -> int:
-    return max(minimum, int(round(float(value) * scale)))
+def _scaled_int(value, scale: float, *, minimum: int | None = None) -> int:
+    result = int(round(float(value) * scale))
+    return result if minimum is None else max(minimum, result)
 
 
 def apply_world_scale(world):
@@ -42,7 +43,11 @@ def apply_world_scale(world):
     for item in world.objects:
         for key in _PIXEL_FIELDS:
             if key in item:
-                item[key] = _scaled_int(item[key], scale, minimum=1 if key in {"width_px", "height_px", "light_radius_px"} else 0)
+                # Offsets are signed coordinates. Clamping negative values to zero
+                # detached north/west lamp heads from their bases and shifted the
+                # outer lane dividers onto one side of the road.
+                minimum = 1 if key in {"width_px", "height_px", "light_radius_px"} else None
+                item[key] = _scaled_int(item[key], scale, minimum=minimum)
 
     # Objects without explicit dimensions inherit catalog-native size, so scale
     # those definitions too. ObjectDef is frozen; replace entries atomically.

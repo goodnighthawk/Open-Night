@@ -188,6 +188,10 @@ def network_map_payload(map_config: dict) -> dict:
         )
         out = {key: map_config.get(key) for key in keys if key in map_config}
         out["map_payload_mode"] = "local_chunked_v1"
+        # Traffic-light fixtures are small dynamic junction metadata, not static
+        # chunk art. The client must receive the server-generated GridWorld list
+        # so the synchronized states in snapshots have visible fixtures to drive.
+        out["traffic_signals"] = [dict(signal) for signal in map_config.get("traffic_signals", [])]
         out.update(grid_network_metadata(map_config))
         return out
 
@@ -360,6 +364,27 @@ def finish_expired_player_jump(session: ClientSession, now: float | None = None)
         session.prone = True
         session.crouching = False
     return landed
+
+
+def request_grid_fire_escape(session: ClientSession) -> str:
+    """Use Space while stationary at a GridWorld fire escape to change levels."""
+    if not GRID_RUNTIME_ACTIVE or GRID_WORLD is None:
+        return ""
+    if session.driving_vehicle_id or session.passenger_vehicle_id or session.riding_bicycle_id:
+        return ""
+    if math.hypot(session.input_x, session.input_y) > 0.05:
+        return ""
+    player = session.player
+    transition = GRID_WORLD.fire_escape_transition(player.x, player.y, int(player.level))
+    if transition is None:
+        return ""
+    next_level, target_x, target_y = transition
+    if next_level == 1 and not GRID_WORLD.circle_roof_walkable(target_x, target_y, PLAYER_RADIUS):
+        return ""
+    reset_on_foot_actions(session)
+    player.level = int(next_level)
+    player.x, player.y = float(target_x), float(target_y)
+    return "roof" if next_level == 1 else "ground"
 
 
 @dataclass
@@ -1166,7 +1191,15 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
         desired = float(route.get("speed_limit", 150.0)) * car.speed_factor
         phase = route.get("_runtime_signals", route.get("signals", {})).get(str(next_waypoint))
         red_light = phase is not None and not traffic_phase_green(int(phase), server_time)
-        if red_light and dist < 105.0:
+        # Start braking before the curve entry rather than waiting until the car
+        # body is already in the junction. The stopping envelope scales with the
+        # live speed and vehicle length.
+        signal_stop_distance = max(
+            150.0,
+            (car.speed * car.speed) / max(1.0, 2.0 * TRAFFIC_BRAKE_DECEL)
+            + car.collision_length * 0.5 + 34.0,
+        )
+        if red_light and dist < signal_stop_distance:
             desired = 0.0
 
         desired_heading = math.atan2(dy, dx) if dist > 1e-6 else car.angle
@@ -2759,7 +2792,14 @@ async def handle_message(session: ClientSession, raw: str) -> None:
             if bool(message.get("prone_toggle", False)):
                 request_player_prone_toggle(session, now)
             if bool(message.get("jump", False)):
-                request_player_jump(session, now)
+                fire_escape_level = request_grid_fire_escape(session)
+                if fire_escape_level:
+                    await send_json(session.websocket, {
+                        "type": "notice",
+                        "text": f"Fire escape: {fire_escape_level.upper()} level",
+                    })
+                else:
+                    request_player_jump(session, now)
             airborne = bool(session.jump_kind and now < session.jump_until)
             if airborne or session.prone or session.stand_delay_remaining > 0.0:
                 session.crouching = False
@@ -3287,10 +3327,13 @@ async def simulation_loop() -> None:
                 dy *= WATER_WALK_SPEED_MULTIPLIER
                 session.boost = False
             movement_start_x, movement_start_y = p.x, p.y
-            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and current_level == 0:
-                p.x, p.y = GRID_WORLD.move_circle(
-                    "ground", p.x, p.y, dx, dy, PLAYER_RADIUS
-                )
+            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and current_level in {0, 1}:
+                if current_level == 1:
+                    p.x, p.y = GRID_WORLD.move_circle_roof(p.x, p.y, dx, dy, PLAYER_RADIUS)
+                else:
+                    p.x, p.y = GRID_WORLD.move_circle(
+                        "ground", p.x, p.y, dx, dy, PLAYER_RADIUS
+                    )
             else:
                 p.x, p.y = move_with_collisions(
                     p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
@@ -3304,10 +3347,10 @@ async def simulation_loop() -> None:
                 previous_x=movement_start_x,
                 previous_y=movement_start_y,
             )
-            if GRID_RUNTIME_ACTIVE and previous_level == 0:
-                # Grid Ground owns its own future transition cells. Do not let the
-                # retired vector connector table switch levels underneath it.
-                next_level = 0
+            if GRID_RUNTIME_ACTIVE and previous_level in {0, 1}:
+                # Grid Ground and roofs own their fire-escape transitions. Do not
+                # let the retired vector connector table switch levels under them.
+                next_level = previous_level
             p.level = next_level
             if next_level != previous_level and LAYER_TRANSITION_JUMP_SECONDS > 0.0:
                 # Optional authored transition pose. v0.9 defaults this to zero so

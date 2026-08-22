@@ -124,8 +124,11 @@ class GridRenderer:
         # transparent exterior and flood only through contiguous frame ink.
         # Modular wall caps place the heavy inner frame roughly one sixth of a
         # tile inward, so the perimeter seed band must cover the outer quarter.
-        edge_band_x = max(2, width // 4)
-        edge_band_y = max(2, height // 4)
+        # Building pieces place some perimeter ink surprisingly far inboard.
+        # Seed most of a non-fill edge tile, then let connectivity (rather than
+        # a broad recolour) distinguish the perimeter frame from roof detail.
+        edge_band_x = max(2, int(round(width * 0.44)))
+        edge_band_y = max(2, int(round(height * 0.44)))
         for y in range(height):
             for x in range(width):
                 if not dark[y][x]:
@@ -324,7 +327,14 @@ class GridRenderer:
             if skip_void and tile_id == "void":
                 continue
             image = self._tile_surface(tile_id)
-            target.blit(image, (int(gx * cell - cam_x), int(gy * cell - cam_y)))
+            position = (int(gx * cell - cam_x), int(gy * cell - cam_y))
+            if layer == "ground" and tile_id.startswith("bld_"):
+                # Modular building edge art contains transparent setback padding.
+                # Without a ground underlay those pixels reveal the renderer's
+                # near-black clear colour, creating the rectangular building
+                # outlines reported by players. The setback is pavement, not void.
+                target.blit(self._tile_surface("pavement_small"), position)
+            target.blit(image, position)
 
     def _visible_objects_for_layers(
         self,

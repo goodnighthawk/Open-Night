@@ -166,8 +166,76 @@ def _move_fire_escapes(world, rows: list[list[str]], buildings: list[dict]) -> i
         item["edge"] = edge
         item["rotation"] = rotation
         item["collision_policy"] = "outside_building_footprint"
+        item["placeholder"] = False
+        item["transition"] = "stationary_jump_ground_to_roof_and_back"
+        item["transition_levels"] = [0, 1]
         moved += 1
     return moved
+
+
+def _install_safe_login_spawns(world) -> list[list[float]]:
+    """Replace legacy road-center starts with distributed interior sidewalks."""
+    inset = 4
+    candidates = []
+    for gy in range(inset, world.height - inset):
+        for gx in range(inset, world.width - inset):
+            cx, cy = world.cell_center(gx, gy)
+            if world.circle_spawnable("ground", cx, cy, 18.0):
+                candidates.append((gx, gy, cx, cy))
+    targets = (
+        (0.22, 0.50), (0.35, 0.23), (0.16, 0.78),
+        (0.72, 0.50), (0.85, 0.23), (0.63, 0.78),
+    )
+    selected: list[tuple[int, int, float, float]] = []
+    for tx, ty in targets:
+        target_x, target_y = world.width * tx, world.height * ty
+        available = [
+            row for row in candidates
+            if all(abs(row[0] - other[0]) + abs(row[1] - other[1]) >= 7 for other in selected)
+        ]
+        if not available:
+            raise RuntimeError("could not distribute safe login spawns across the grid")
+        selected.append(min(available, key=lambda row: ((row[0] - target_x) ** 2 + (row[1] - target_y) ** 2, row[1], row[0])))
+    spawns = [[float(cx), float(cy)] for _gx, _gy, cx, cy in selected]
+    world.login_spawns = spawns
+    world.data["login_spawns"] = spawns
+    return spawns
+
+
+def _install_road_edge_curbs(rows: list[list[str]]) -> dict[str, int]:
+    """Dress pavement/road boundaries with straight and rounded curb tiles."""
+    height, width = len(rows), len(rows[0])
+    source = [list(row) for row in rows]
+    counts: dict[str, int] = defaultdict(int)
+    for gy in range(height):
+        for gx in range(width):
+            if not source[gy][gx].startswith("pavement"):
+                continue
+            north = gy > 0 and source[gy - 1][gx] == "road_fill"
+            east = gx + 1 < width and source[gy][gx + 1] == "road_fill"
+            south = gy + 1 < height and source[gy + 1][gx] == "road_fill"
+            west = gx > 0 and source[gy][gx - 1] == "road_fill"
+            tile_id = None
+            if north and west:
+                tile_id = "curb_tl_outer"
+            elif north and east:
+                tile_id = "curb_tr_outer"
+            elif south and west:
+                tile_id = "curb_bl_outer"
+            elif south and east:
+                tile_id = "curb_br_outer"
+            elif north:
+                tile_id = "curb_top"
+            elif south:
+                tile_id = "curb_bottom"
+            elif west:
+                tile_id = "curb_left"
+            elif east:
+                tile_id = "curb_right"
+            if tile_id is not None:
+                rows[gy][gx] = tile_id
+                counts[tile_id] += 1
+    return dict(counts)
 
 
 def _install_city_block_street_item_defs(world) -> None:
@@ -355,6 +423,21 @@ def apply_world_refinement(world):
         building["layout_refinement"] = "road_bounded_lot_center_v1"
         building["center_shift_cells"] = [dx, dy]
 
+    # Break up large repeated sidewalk fields with deterministic variants from
+    # the same approved city-block pavement set. Collision stays sidewalk-only.
+    pavement_variant_count = 0
+    for gy, row in enumerate(rows):
+        for gx, tile_id in enumerate(row):
+            if tile_id != "pavement_small":
+                continue
+            score = (gx * 37 + gy * 53 + gx * gy * 3) % 65
+            if score in {0, 17, 41}:
+                rows[gy][gx] = "pavement_pattern"
+                pavement_variant_count += 1
+            elif score % 5 == 0:
+                rows[gy][gx] = "pavement_v"
+                pavement_variant_count += 1
+
     refined_footprints = {str(building["building_id"]): _footprint(building) for building in buildings}
     roof_assignment_counts: dict[str, int] = defaultdict(int)
     for item in world.objects:
@@ -432,6 +515,8 @@ def apply_world_refinement(world):
     world.objects.extend(lane_dividers)
     world.data.setdefault("runtime_refinement", {})["six_lane_divider_count"] = len(lane_dividers)
 
+    curb_counts = _install_road_edge_curbs(rows)
+    safe_login_spawns = _install_safe_login_spawns(world)
     fire_escape_count = _move_fire_escapes(world, rows, buildings)
     lamp_count = 0
     seen_lights: set[str] = set()
@@ -515,6 +600,12 @@ def apply_world_refinement(world):
         "building_overlap_cell_count": len(overlap_cells),
         "building_adjacent_pair_count": len(adjacent_pairs),
         "minimum_building_setback_cells": 1,
+        "safe_login_spawn_count": len(safe_login_spawns),
+        "safe_login_spawn_policy": "distributed_interior_sidewalks_v19",
+        "pavement_variant_cell_count": pavement_variant_count,
+        "pavement_variation_policy": "deterministic_city_block_pack_mix_v19",
+        "rounded_road_edge_curb_count": sum(curb_counts.values()),
+        "rounded_curb_corner_count": sum(count for tile, count in curb_counts.items() if "outer" in tile),
         "building_edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
@@ -542,7 +633,15 @@ def _install_outline_refinement() -> None:
         # Only near-black perimeter ink is a frame. The former broad threshold
         # classified legitimate dark-blue/brown roof fills as outlines and made
         # whole building tiles bleed into their neighbours.
-        return maximum < 165 and luminance < 135 and maximum - minimum < 28
+        chroma = maximum - minimum
+        # Neutral dark frame ink may be moderately bright; coloured outline ink
+        # is admitted only when it is genuinely near-black. This preserves dark
+        # blue/brown roof fills and isolated mechanical detail.
+        return (
+            maximum < 170 and luminance < 145 and chroma < 25
+        ) or (
+            maximum < 112 and luminance < 100 and chroma < 62
+        )
 
     # GridRenderer removes only exterior-connected frame ink while preserving
     # source alpha and isolated rooftop detail. Keep the classifier narrow.

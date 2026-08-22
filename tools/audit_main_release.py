@@ -15,6 +15,7 @@ def main() -> None:
     versioning = read("versioning.py")
     updater = read("UPDATE_OPEN_NIGHT.bat")
     launcher = read("START_OPEN_NIGHT.bat")
+    player_launcher = read("open_night_player_launcher.py")
     client_entry = read("main.py")
     railway_entry = read("railway_entry.py")
     run_client = read("RUN_CLIENT.bat")
@@ -27,7 +28,9 @@ def main() -> None:
     assert "pull --ff-only --quiet origin main" in updater, "updater does not fast-forward main"
     for stale in ("v1.0-art-overlay", "v1.1-bug-review", "v0.9.0-consolidation"):
         assert stale not in updater, f"player updater still references development branch {stale}"
-    assert "call UPDATE_OPEN_NIGHT.bat" in launcher, "player launcher bypasses canonical main updater"
+    assert "open_night_player_launcher.py" in launcher, "player entry does not open the canonical launcher"
+    assert "UPDATE TO LATEST VERSION" in player_launcher, "launcher lacks the prominent update action"
+    assert "self.launch_update" in player_launcher, "launcher update action is not wired"
 
     # The promoted main build keeps one exact wire version so stale clients
     # remain incompatible rather than silently connecting across protocol changes.

@@ -126,8 +126,10 @@ def main() -> None:
     pygame.draw.rect(sample, (90, 110, 120, 255), (4, 4, 8, 8))
     pygame.draw.rect(sample, (20, 20, 20, 255), (7, 7, 2, 2))
     cleaned = GridRenderer._suppress_building_perimeter_outline(sample)
-    assert cleaned.get_at((2, 2)).a == 0, "exterior building frame remains visible"
-    assert cleaned.get_at((7, 7)).a == 255, "interior rooftop detail was erased"
+    assert not GridRenderer._is_dark_building_outline(cleaned.get_at((2, 2))), \
+        "exterior building frame remains visible"
+    assert cleaned.get_at((7, 7)).a == 255 and GridRenderer._is_dark_building_outline(cleaned.get_at((7, 7))), \
+        "interior rooftop detail was erased"
 
     client_source = (ROOT / "client.py").read_text(encoding="utf-8")
     updater_source = (ROOT / "UPDATE_OPEN_NIGHT.bat").read_text(encoding="utf-8")
@@ -135,7 +137,8 @@ def main() -> None:
     assert 'self.font.render("GAME PAUSED"' in client_source and client_source.count('"WASD / arrows') == 1
     assert 'draw_character(self.screen, (sx, sy)' in client_source
     assert 'pygame.draw.circle(self.screen, color, (sx, sy), 28' in client_source, "supplier NPC lacks final-space visibility halo"
-    assert 'car.render_length * 1.65' in client_source and 'npc_scale = max(2' in client_source
+    assert 'target_len = int(max(24, car.render_length))' in client_source and 'npc_scale = max(2' in client_source
+    assert 'car.render_length * 1.65' not in client_source, "legacy oversized car multiplier returned"
     server_source = (ROOT / "server.py").read_text(encoding="utf-8")
     assert "_traffic_should_yield_to_pedestrian" in server_source and '"horn": time.monotonic() < self.horn_until' in server_source
     assert "moved_aside" in server_source and 'allowed = {"walk", "sidewalk"}' in server_source

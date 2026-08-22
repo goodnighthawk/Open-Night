@@ -63,6 +63,45 @@ def _major_road_centers(world) -> tuple[list[int], list[int]]:
     return row_centers, col_centers
 
 
+def _build_traffic_signals(world) -> list[dict]:
+    """Place four synchronized, road-facing fixtures at every grid junction."""
+    min_row_coverage = max(4, int(math.ceil(world.width * 0.55)))
+    min_col_coverage = max(4, int(math.ceil(world.height * 0.55)))
+    row_runs = _group_runs([
+        gy for gy in range(world.height)
+        if sum(_is_road(world, gx, gy) for gx in range(world.width)) >= min_row_coverage
+    ])
+    col_runs = _group_runs([
+        gx for gx in range(world.width)
+        if sum(_is_road(world, gx, gy) for gy in range(world.height)) >= min_col_coverage
+    ])
+    signals: list[dict] = []
+    margin = max(10.0, world.cell_px * 0.12)
+    for row_index, row_run in enumerate(row_runs):
+        for col_index, col_run in enumerate(col_runs):
+            north = row_run[0] * world.cell_px - margin
+            south = (row_run[-1] + 1) * world.cell_px + margin
+            west = col_run[0] * world.cell_px - margin
+            east = (col_run[-1] + 1) * world.cell_px + margin
+            junction_id = f"grid_junction_{row_index:02d}_{col_index:02d}"
+            for orientation, pos, phase, axis in (
+                ("nw", (west, north), 0, "east_west"),
+                ("ne", (east, north), 1, "north_south"),
+                ("se", (east, south), 0, "east_west"),
+                ("sw", (west, south), 1, "north_south"),
+            ):
+                signals.append({
+                    "id": f"{junction_id}_{orientation}",
+                    "pos": [round(pos[0], 3), round(pos[1], 3)],
+                    "phase": phase,
+                    "orientation": orientation,
+                    "junction_id": junction_id,
+                    "controls_axis": axis,
+                    "grid_native": True,
+                })
+    return signals
+
+
 def _segment_surface(world, a: tuple[float, float], b: tuple[float, float], collision: str) -> bool:
     dx, dy = b[0] - a[0], b[1] - a[1]
     length = math.hypot(dx, dy)
@@ -302,6 +341,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     traffic_count = max(0, int(getattr(server_module, "TRAFFIC_COUNT", 0)))
     map_config["traffic_routes"] = traffic_routes
     map_config["traffic_starts"] = _traffic_starts(traffic_routes, traffic_count)
+    map_config["traffic_signals"] = _build_traffic_signals(world)
     map_config["npc_routes"] = pedestrian_routes
     map_config["npc_starts"] = _pedestrian_starts(pedestrian_routes)
     map_config["parked_vehicle_spawns"] = []
@@ -340,6 +380,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
         "traffic_route_count": len(traffic_routes),
         "traffic_requested": traffic_count,
         "traffic_spawned": len(server_module.traffic_vehicles),
+        "traffic_signal_count": len(map_config["traffic_signals"]),
         "pedestrian_route_count": len(pedestrian_routes),
         "pedestrians_spawned": sum(1 for npc in server_module.npc_pedestrians if npc.kind == "pedestrian"),
         "dogs_spawned": sum(1 for npc in server_module.npc_pedestrians if npc.kind == "dog"),

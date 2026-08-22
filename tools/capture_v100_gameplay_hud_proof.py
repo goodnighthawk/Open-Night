@@ -139,9 +139,9 @@ def main() -> None:
         raise RuntimeError(f"building setback audit failed: {refinement}")
     if refinement.get("minimum_building_setback_cells") != 1:
         raise RuntimeError(f"building setback contract missing: {refinement}")
-    if refinement.get("building_edge_alpha_policy") != "source_alpha_preserved_outline_ink_recoloured":
+    if refinement.get("building_edge_alpha_policy") != "source_alpha_preserved_exterior_frame_removed":
         raise RuntimeError(f"building edge alpha policy failed: {refinement}")
-    if refinement.get("fire_escape_outside_collision_count") != 25:
+    if refinement.get("fire_escape_outside_collision_count") != len(fires):
         raise RuntimeError(f"fire-escape runtime audit failed: {refinement}")
     if refinement.get("street_lamp_asset_sync_count", 0) < 40:
         raise RuntimeError(f"streetlamp runtime audit failed: {refinement}")

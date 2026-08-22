@@ -334,21 +334,25 @@ def _generated_ground_objects(rows: list[list[str]], buildings: list[dict]) -> l
 
 
 def _wide_road_markings() -> list[dict]:
-    """Sparse city-block markings registered to the new physical road centers."""
+    """Sparse, centered city-block markings for the physical road medians."""
     objects: list[dict] = []
     for center in (11, 29, 44, 58):
-        for gy in range(1, 48, 2):
+        for gy in range(2, 48, 6):
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": center, "gy": gy,
                 "width_px": 18, "height_px": 150, "rotation": 0,
+                "offset_x_px": 119, "offset_y_px": 53,
                 "street_marking": "dashed_center_line_vertical",
+                "registration_policy": "symmetric_road_center_sparse_v19",
             })
     for center in (9, 24, 39):
-        for gx in range(1, 64, 2):
+        for gx in range(2, 64, 6):
             objects.append({
                 "asset": "mark_yellow_repeating_single", "gx": gx, "gy": center,
                 "width_px": 18, "height_px": 150, "rotation": 90,
+                "offset_x_px": 53, "offset_y_px": 119,
                 "street_marking": "dashed_center_line_horizontal",
+                "registration_policy": "symmetric_road_center_sparse_v19",
             })
     return objects
 

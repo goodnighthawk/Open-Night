@@ -28,10 +28,13 @@ CURB_WORLD_TO_PACK_IMAGE = {
     "curb_right": "city_block://road_and_pavement_tileset/curb_left_edge.png",
     "curb_top": "city_block://road_and_pavement_tileset/curb_bottom_center.png",
     "curb_bottom": "city_block://road_and_pavement_tileset/curb_top_center.png",
-    "curb_tl_outer": "city_block://road_and_pavement_tileset/curb_top_right_outer.png",
-    "curb_tr_outer": "city_block://road_and_pavement_tileset/curb_top_left_outer.png",
-    "curb_bl_outer": "city_block://road_and_pavement_tileset/curb_bottom_right_outer.png",
-    "curb_br_outer": "city_block://road_and_pavement_tileset/curb_bottom_left_outer.png",
+    # The pack includes dedicated rounded corner pieces. Keep the already
+    # verified left/right world-to-pack translation while replacing the sharp
+    # square curb corners players reported.
+    "curb_tl_outer": "city_block://road_and_pavement_tileset/circle_top_right_outer.png",
+    "curb_tr_outer": "city_block://road_and_pavement_tileset/circle_top_left_outer.png",
+    "curb_bl_outer": "city_block://road_and_pavement_tileset/circle_bottom_right_outer.png",
+    "curb_br_outer": "city_block://road_and_pavement_tileset/circle_bottom_left_outer.png",
 }
 
 
@@ -265,21 +268,96 @@ class GridWorld:
         raise RuntimeError("grid map contains no walkable spawn cell")
 
     def choose_spawn(self, layer: str = "ground", radius: float = 18.0) -> tuple[float, float]:
+        # A technically walkable corner is still a bad login location: it hides
+        # the city in two directions and was the exact position in report #90.
+        minimum_inset = self.cell_px * 3.0
+
+        def away_from_world_edge(x: float, y: float) -> bool:
+            return (
+                minimum_inset <= x <= self.world_w - minimum_inset
+                and minimum_inset <= y <= self.world_h - minimum_inset
+            )
+
         for raw in self.login_spawns:
             try:
                 x, y = float(raw[0]), float(raw[1])
             except (TypeError, ValueError, IndexError):
                 continue
-            if self.circle_spawnable(layer, x, y, radius):
+            if away_from_world_edge(x, y) and self.circle_spawnable(layer, x, y, radius):
                 return x, y
         # Prefer the nearest authored sidewalk/pavement cell instead of falling
         # back to the center of a broad road band.
-        for gy in range(self.height):
-            for gx in range(self.width):
+        inset_cells = 3
+        for gy in range(inset_cells, self.height - inset_cells):
+            for gx in range(inset_cells, self.width - inset_cells):
                 cx, cy = self.cell_center(gx, gy)
                 if self.circle_spawnable(layer, cx, cy, radius):
                     return cx, cy
         raise RuntimeError("grid map contains no non-road walkable spawn cell")
+
+    def roof_walkable_at(self, x: float, y: float) -> bool:
+        gx, gy = self.world_to_cell(x, y)
+        return self.in_bounds(gx, gy) and self.tile_id("roof", gx, gy).startswith("bld_")
+
+    def circle_roof_walkable(self, x: float, y: float, radius: float) -> bool:
+        radius = max(0.0, float(radius))
+        if x - radius < 0.5 or y - radius < 0.5 or x + radius >= self.world_w - 0.5 or y + radius >= self.world_h - 0.5:
+            return False
+        diag = radius * 0.7071067811865476
+        probes = ((0.0, 0.0), (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius),
+                  (diag, diag), (diag, -diag), (-diag, diag), (-diag, -diag))
+        return all(self.roof_walkable_at(x + ox, y + oy) for ox, oy in probes)
+
+    def move_circle_roof(self, x: float, y: float, dx: float, dy: float, radius: float) -> tuple[float, float]:
+        x, y, dx, dy = map(float, (x, y, dx, dy))
+        steps = max(1, int(math.ceil(max(abs(dx), abs(dy)) / max(8.0, self.cell_px / 4.0))))
+        sx, sy = dx / steps, dy / steps
+        for _ in range(steps):
+            if self.circle_roof_walkable(x + sx, y, radius):
+                x += sx
+            if self.circle_roof_walkable(x, y + sy, radius):
+                y += sy
+        return x, y
+
+    def fire_escape_transition(
+        self, x: float, y: float, current_level: int, max_distance: float | None = None,
+    ) -> tuple[int, float, float] | None:
+        """Return the opposite endpoint of a nearby functional fire escape."""
+        distance_limit = float(max_distance or max(72.0, self.cell_px * 0.82))
+        best: tuple[float, int, float, float] | None = None
+        edge_to_roof_delta = {
+            "east": (-1, 0), "west": (1, 0), "south": (0, -1), "north": (0, 1),
+        }
+        for item in self.objects:
+            if str(item.get("asset", "")) != "placeholder_fire_escape":
+                continue
+            gx, gy = int(item["gx"]), int(item["gy"])
+            ground_x, ground_y = self.cell_center(gx, gy)
+            dx, dy = edge_to_roof_delta.get(str(item.get("edge", "east")), (-1, 0))
+            roof_gx, roof_gy = gx + dx, gy + dy
+            if not self.tile_id("roof", roof_gx, roof_gy).startswith("bld_"):
+                adjacent = [
+                    (nx, ny) for nx, ny in ((gx - 1, gy), (gx + 1, gy), (gx, gy - 1), (gx, gy + 1))
+                    if self.tile_id("roof", nx, ny).startswith("bld_")
+                ]
+                if not adjacent:
+                    continue
+                roof_gx, roof_gy = adjacent[0]
+            roof_x, roof_y = self.cell_center(roof_gx, roof_gy)
+            if int(current_level) == 0:
+                distance = math.hypot(float(x) - ground_x, float(y) - ground_y)
+                candidate = (distance, 1, roof_x, roof_y)
+            elif int(current_level) == 1:
+                distance = math.hypot(float(x) - roof_x, float(y) - roof_y)
+                candidate = (distance, 0, ground_x, ground_y)
+            else:
+                continue
+            if distance <= distance_limit and (best is None or candidate < best):
+                best = candidate
+        if best is None:
+            return None
+        _distance, next_level, target_x, target_y = best
+        return next_level, target_x, target_y
 
     def visible_cells(self, camera_x: float, camera_y: float, width_px: int, height_px: int):
         gx0 = max(0, int(camera_x // self.cell_px)); gy0 = max(0, int(camera_y // self.cell_px))

@@ -2274,7 +2274,7 @@ class Game:
         # and independent of this visual layer.
         local_world_player = self.players.get(self.local_id or "")
         active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
-        if active_world_level == 0 and self.grid_renderer is not None:
+        if active_world_level in {0, 1} and self.grid_renderer is not None:
             self.grid_renderer.draw_view(self.screen, self.camera(), "ground")
         else:
             self.environment.set_active_level(active_world_level)
@@ -3264,6 +3264,49 @@ class Game:
             pygame.Rect(panel.right - 65, panel.y + 31, 38, 38),
         )
 
+    def _main_audio_toggle_layout(self) -> tuple[pygame.Rect, pygame.Rect]:
+        """Always-visible music/game-audio controls inside the main HUD."""
+        return pygame.Rect(276, 42, 40, 40), pygame.Rect(324, 46, 32, 32)
+
+    def _draw_main_audio_icons(self) -> None:
+        music_rect, game_rect = self._main_audio_toggle_layout()
+        ui = self.art_style.get("ui", {})
+        panel2 = tuple(ui.get("panel_2", (38, 41, 40)))
+        accent = tuple(ui.get("accent", INV_SELECTED))
+        for rect in (music_rect, game_rect):
+            pygame.draw.rect(self.screen, panel2, rect, border_radius=6)
+            pygame.draw.rect(self.screen, accent, rect, width=2, border_radius=6)
+
+        color = TEXT_COLOR
+        pygame.draw.line(self.screen, color, (music_rect.x + 23, music_rect.y + 8), (music_rect.x + 23, music_rect.y + 28), 3)
+        pygame.draw.line(self.screen, color, (music_rect.x + 23, music_rect.y + 8), (music_rect.x + 32, music_rect.y + 6), 3)
+        pygame.draw.circle(self.screen, color, (music_rect.x + 17, music_rect.y + 30), 6)
+        if self.radio.music_muted:
+            pygame.draw.line(self.screen, (235, 92, 92), music_rect.topleft, music_rect.bottomright, 3)
+
+        pygame.draw.polygon(self.screen, color, [
+            (game_rect.x + 6, game_rect.y + 13), (game_rect.x + 11, game_rect.y + 13),
+            (game_rect.x + 18, game_rect.y + 8), (game_rect.x + 18, game_rect.y + 24),
+            (game_rect.x + 11, game_rect.y + 19), (game_rect.x + 6, game_rect.y + 19),
+        ])
+        if self.audio.game_audio_muted:
+            pygame.draw.line(self.screen, (235, 92, 92), game_rect.topleft, game_rect.bottomright, 3)
+        else:
+            pygame.draw.arc(self.screen, color, pygame.Rect(game_rect.x + 14, game_rect.y + 8, 12, 16), -1.0, 1.0, 2)
+
+    def handle_main_audio_click(self, pos: tuple[int, int]) -> bool:
+        music_rect, game_rect = self._main_audio_toggle_layout()
+        if music_rect.collidepoint(pos):
+            muted = self.radio.toggle_muted()
+            self.notice = f"Music {'muted' if muted else 'on'}"
+        elif game_rect.collidepoint(pos):
+            muted = self.audio.toggle_muted()
+            self.notice = f"Game audio {'muted' if muted else 'on'}"
+        else:
+            return False
+        self.notice_until = time.monotonic() + 1.5
+        return True
+
     def _radio_slot_layout(self, panel: pygame.Rect) -> list[pygame.Rect]:
         left = panel.x + 42
         top = panel.y + 132
@@ -3775,6 +3818,7 @@ class Game:
         unread = f" SMS:{self.sms_unread}" if self.sms_unread else ""
         players_text = self.small_font.render(f"{map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}{unread}   [F2] messages  [SHIFT] run/boost  [SPACE×2] double jump  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
         self.screen.blit(players_text, (w - players_text.get_width() - 20, 20))
+        self._draw_main_audio_icons()
         self.draw_vehicle_status()
         self.draw_local_minimap()
         self.draw_chunk_debug_overlay()
@@ -3953,6 +3997,9 @@ class Game:
                             if self.handle_pause_click(event.pos) == "quit":
                                 running = False
                             continue
+                        if not self.inventory_open and not self.map_open and not self.interior.active:
+                            if self.handle_main_audio_click(event.pos):
+                                continue
                         if self.inventory_open:
                             slot = self.inventory_slot_at(event.pos)
                             if slot is not None:
@@ -3983,10 +4030,10 @@ class Game:
                     if bool(getattr(local_audio_player, "in_vehicle", False)):
                         desired_station = self.radio.selected_index
                     else:
-                        # Adjacent server regions rotate through the three launch
-                        # stations, giving map areas their own audible identity.
-                        desired_station = sum(ord(char) for char in self.server_region_id) % 3
+                        desired_station = None
                     self.radio.update(desired_station)
+                else:
+                    self.radio.update(None)
                 self.update_camera(dt)
                 self.send_input()
                 if self.interior.active:
@@ -4050,7 +4097,7 @@ class Game:
                     # map levels.  Each elevated deck is redrawn after lower-level
                     # entities and before players standing on that deck.
                     drawables = []
-                    if active_world_level >= 0:
+                    if active_world_level == 0:
                         # Vehicles/NPC traffic and blood are currently a Ground-only
                         # system. Negative-level players are hidden from the surface.
                         drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
@@ -4059,6 +4106,14 @@ class Game:
                         drawables.extend(
                             (self.camera_depth(player.render_x, player.render_y), "player", player)
                             for player in self.players.values() if int(getattr(player, "level", 0)) == 0
+                        )
+                    elif active_world_level == 1 and self.grid_renderer is not None:
+                        # Grid roofs are a real traversable level. Ground traffic
+                        # remains below the composited roof surface and only roof
+                        # occupants are painted into this view.
+                        drawables.extend(
+                            (self.camera_depth(player.render_x, player.render_y), "player", player)
+                            for player in self.players.values() if int(getattr(player, "level", 0)) == 1
                         )
                     else:
                         # Underground players see only players sharing their exact

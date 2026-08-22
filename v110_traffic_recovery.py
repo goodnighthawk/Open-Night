@@ -327,6 +327,7 @@ def install(server_module) -> None:
             (
                 car for car in server_module.traffic_vehicles
                 if not car.controlled_by and not car.parked and car.route_index >= 0
+                and not bool(getattr(car, "red_light_waiting", False))
                 and float(car.stuck_time) >= threshold
             ),
             key=lambda car: (-float(car.stuck_time), str(car.vehicle_id)),

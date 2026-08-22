@@ -33,7 +33,8 @@ def main() -> int:
     for token in (
         "_draw_audio_icons", "_radio_slot_layout", "CAR RADIO",
         "self.radio.toggle_muted()", "self.audio.toggle_muted()",
-        "sum(ord(char) for char in self.server_region_id) % 3",
+        "_draw_main_audio_icons", "handle_main_audio_click",
+        "desired_station = None", "self.radio.update(None)",
     ):
         assert token in client_source, token
     assert "self.game_audio_muted or not self.enabled" in audio_source
@@ -46,7 +47,7 @@ def main() -> int:
     assert "imageio-ffmpeg" in requirements and "python-vlc" not in requirements
 
     print("OPEN NIGHT v1.7 RADIO / AUDIO AUDIT: PASS")
-    print("  3 live stations + 10 car slots + regional rotation + independent mute controls")
+    print("  3 live stations + 10 car slots + vehicle-only playback + visible independent mute controls")
     return 0
 
 

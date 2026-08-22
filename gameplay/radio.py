@@ -77,7 +77,14 @@ class RadioPlayer:
         return self.music_muted
 
     def update(self, desired_index: int | None, volume: int = 62) -> None:
-        if desired_index is None or self.music_muted or not self.available:
+        # The radio belongs to a vehicle, never to the surrounding map region.
+        # Leaving a car must also stop an already-buffered stream; merely skipping
+        # the next update leaves the mixer channel and FFmpeg worker running.
+        if desired_index is None:
+            if self.playing_index is not None or self._thread is not None or self._channel is not None:
+                self.stop()
+            return
+        if self.music_muted or not self.available:
             return
         if not 0 <= desired_index < len(RADIO_STATIONS) or RADIO_STATIONS[desired_index] is None:
             return

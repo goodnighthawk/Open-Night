@@ -18,6 +18,12 @@ VEHICLE_OUTLINE_PX = 1
 VEHICLE_SHADOW_ALPHA = 100
 VEHICLE_PIXELATED = True
 
+# Player report #84 identified the second approved sheet crop (gridcar002) as
+# the one exception to that sheet's usual nose-down convention.
+SOURCE_NOSE_CORRECTIONS = {
+    "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#001": "up",
+}
+
 
 def reload_vehicle_style() -> None:
     global VEHICLE_SHADOW_RGB, VEHICLE_OUTLINE_RGB, VEHICLE_OUTLINE_PX, VEHICLE_SHADOW_ALPHA, VEHICLE_PIXELATED
@@ -135,6 +141,8 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     # those crops to the renderer's nose-up contract; legacy fallback art is
     # already nose-up and is intentionally left unchanged (report #52).
     source_nose = str(meta.get("source_nose", "down")).lower()
+    if not str(meta.get("source_nose", "")).strip():
+        source_nose = SOURCE_NOSE_CORRECTIONS.get(str(meta.get("source_name", "")), source_nose)
     if meta.get("sheet_file") and source_nose == "down":
         source = pygame.transform.flip(source, False, True)
 
