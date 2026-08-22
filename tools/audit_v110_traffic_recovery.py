@@ -122,6 +122,8 @@ def main() -> None:
 
     stationary = {car.vehicle_id: 0.0 for car in cars}
     max_stationary = {car.vehicle_id: 0.0 for car in cars}
+    signal_wait = {car.vehicle_id: 0.0 for car in cars}
+    max_signal_wait = {car.vehicle_id: 0.0 for car in cars}
     distance_after_warmup = {car.vehicle_id: 0.0 for car in cars}
     blocked_seen: set[str] = set()
     overlap_seen: set[tuple[str, str]] = set()
@@ -136,13 +138,22 @@ def main() -> None:
             moved = math.hypot(float(car.x) - old[0], float(car.y) - old[1])
             if tick >= warmup_ticks:
                 distance_after_warmup[car.vehicle_id] = distance_after_warmup.get(car.vehicle_id, 0.0) + moved
-                if moved < 0.15:
+                if moved < 0.15 and bool(getattr(car, "red_light_waiting", False)):
+                    stationary[car.vehicle_id] = 0.0
+                    signal_wait[car.vehicle_id] = signal_wait.get(car.vehicle_id, 0.0) + DT
+                elif moved < 0.15:
                     stationary[car.vehicle_id] = stationary.get(car.vehicle_id, 0.0) + DT
+                    signal_wait[car.vehicle_id] = 0.0
                 else:
                     stationary[car.vehicle_id] = 0.0
+                    signal_wait[car.vehicle_id] = 0.0
                 max_stationary[car.vehicle_id] = max(
                     max_stationary.get(car.vehicle_id, 0.0),
                     stationary[car.vehicle_id],
+                )
+                max_signal_wait[car.vehicle_id] = max(
+                    max_signal_wait.get(car.vehicle_id, 0.0),
+                    signal_wait[car.vehicle_id],
                 )
 
         if tick % CHECK_EVERY_TICKS == 0:
@@ -177,6 +188,7 @@ def main() -> None:
         "lane_offsets_px": route_offsets,
         "max_stationary_allowed_seconds": MAX_STATIONARY_SECONDS,
         "max_stationary_observed_seconds": round(max(max_stationary.values(), default=0.0), 3),
+        "max_lawful_signal_wait_observed_seconds": round(max(max_signal_wait.values(), default=0.0), 3),
         "stalled_car_ids": stalled,
         "min_distance_required_px": MIN_DISTANCE_AFTER_WARMUP_PX,
         "min_distance_observed_px": round(min(distance_after_warmup.values(), default=0.0), 3),

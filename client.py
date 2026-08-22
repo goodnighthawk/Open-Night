@@ -3318,33 +3318,17 @@ class Game:
             self._draw_menu_button(buttons["back"], "BACK")
             return
 
-        self.screen.blit(self.font.render("CONTROLS", True, accent), (panel.x + 32, panel.y + 82))
-        controls = [
-            "WASD / arrows    Move / drive",
-            "SHIFT            Sprint on foot / full throttle in car (up to 88 mph)",
-            "Mouse            Bounded camera look-ahead",
-            "Space            Jump",
-            "C                Crouch (hold)",
-            "Middle mouse     Hold + drag to rotate camera",
-            "Mouse wheel      Zoom world view in / out (0.55x - 2.0x)",
-            "T                Enter/steal/exit car or bicycle",
-            "E                Interact / enter interior",
-            "I or TAB         Inventory",
-            "M                World map",
-            "F2               Friend SMS / messages inbox",
-            "F5               Reload art style + settings",
-            "F6               Rebuild current visual chunk",
-            "F7               Rebuild nearby 3x3 visual chunks",
-            "F8               Clear/rebuild all rendered chunks on demand",
-            "F9               Toggle A1 chunk debug overlay",
-            "F10 or /bug      Save screenshot + next-version feedback",
-            "/mapfeedback     Save screenshot + WIP map feedback",
-            "ESC              Open/close this menu",
-        ]
-        y = panel.y + 122
-        for line in controls:
-            self.screen.blit(self.small_font.render(line, True, TEXT_COLOR), (panel.x + 48, y))
-            y += 27
+        # Report #50: the default Escape page is a clean pause hub. The full
+        # key reference remains available on the dedicated Controls page.
+        self.screen.blit(self.font.render("GAME PAUSED", True, accent), (panel.x + 32, panel.y + 92))
+        self.screen.blit(
+            self.small_font.render("Resume play or choose an option below.", True, TEXT_COLOR),
+            (panel.x + 48, panel.y + 142),
+        )
+        self.screen.blit(
+            self.small_font.render("Controls are available from the separate CONTROLS page.", True, MUTED_TEXT),
+            (panel.x + 48, panel.y + 176),
+        )
         hot = "ON" if self.hot_reload_enabled else "OFF"
         self.screen.blit(self.tiny_font.render(f"Automatic art hot reload: {hot}   •   persistent shared assets/data enabled", True, MUTED_TEXT), (panel.x + 48, panel.bottom - 108))
         self._draw_menu_button(buttons["resume"], "RESUME")

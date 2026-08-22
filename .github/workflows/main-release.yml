@@ -31,7 +31,7 @@ jobs:
           tools/audit_main_release.py tools/audit_v110_version_authority.py
           tools/audit_v110_bug_delivery.py tools/capture_v110_grid_population.py
           tools/audit_v110_traffic_recovery.py tools/v100_building_setback_runtime_audit.py
-          gameplay/audio.py tools/audit_v120_player_reports.py tools/audit_v120_pedestrian_escape.py tools/audit_v120_audio.py
+          gameplay/audio.py tools/audit_v120_player_reports.py tools/audit_v120_pedestrian_escape.py tools/audit_v120_signal_harmony.py tools/audit_v120_audio.py
       - name: Verify player-approved pixel vehicle fleet
         env:
           SDL_VIDEODRIVER: dummy
@@ -73,6 +73,11 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: python tools/audit_v120_pedestrian_escape.py
+      - name: Verify role-aware traffic signal harmony
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_v120_signal_harmony.py
       - name: Verify release audit bundle
         run: |
           test -f assets/grid_v100/V110_POPULATION_RUNTIME_PROOF_1280x720.png

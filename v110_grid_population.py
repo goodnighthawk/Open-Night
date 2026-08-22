@@ -94,6 +94,16 @@ def _build_traffic_routes(world) -> list[dict]:
                 continue
             for direction_name, directed_points in (("cw", points), ("ccw", list(reversed(points)))):
                 for lane_index, lane_offset in enumerate(lane_offsets, start=1):
+                    # Signal every approach. Horizontal traffic uses phase 0;
+                    # vertical traffic uses phase 1. The server remaps these
+                    # authored corner indexes after curve smoothing.
+                    signals = {}
+                    for target_index, target in enumerate(directed_points):
+                        previous = directed_points[(target_index - 1) % len(directed_points)]
+                        horizontal_approach = abs(float(target[0]) - float(previous[0])) >= abs(
+                            float(target[1]) - float(previous[1])
+                        )
+                        signals[str(target_index)] = 0 if horizontal_approach else 1
                     routes.append({
                         "id": f"grid_traffic_{row_index:02d}_{col_index:02d}_{direction_name}_lane{lane_index}",
                         "waypoints": [[round(x, 3), round(y, 3)] for x, y in directed_points],
@@ -104,6 +114,7 @@ def _build_traffic_routes(world) -> list[dict]:
                         "six_lane_network": True,
                         "lane_index": lane_index,
                         "lane_direction": direction_name,
+                        "signals": signals,
                     })
                     if len(routes) >= TRAFFIC_ROUTE_LIMIT:
                         return routes

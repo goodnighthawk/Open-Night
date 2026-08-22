@@ -48,7 +48,10 @@ def main() -> None:
     assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
     assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
                and row.get("placement_policy") == "nearest_free_sidewalk_cell_v12"
-               and row.get("asset") == "street_item_lamp" for row in lamps), \
+               and row.get("asset") == "street_item_lamp"
+               and row.get("light_registration") == "rectangular_fixture_center_report49"
+               and row.get("light_color_rgb") == [112, 176, 255]
+               and int(row.get("light_radius_px", 0)) >= 200 for row in lamps), \
         "streetlamps were not relocated from the expanded road onto sidewalks"
     street_items = [row for row in world.objects if row.get("composition_pass") == "city_block_street_items_svg_v1"]
     assert sum(row.get("street_item_kind") == "telephone_box" for row in street_items) == 16
@@ -117,6 +120,7 @@ def main() -> None:
     client_source = (ROOT / "client.py").read_text(encoding="utf-8")
     updater_source = (ROOT / "UPDATE_OPEN_NIGHT.bat").read_text(encoding="utf-8")
     assert 'self.pause_page == "controls"' in client_source
+    assert 'self.font.render("GAME PAUSED"' in client_source and client_source.count('"WASD / arrows') == 1
     assert 'draw_character(self.screen, (sx, sy)' in client_source
     assert 'pygame.draw.circle(self.screen, color, (sx, sy), 28' in client_source, "supplier NPC lacks final-space visibility halo"
     assert 'car.render_length * 1.65' in client_source and 'npc_scale = max(2' in client_source

@@ -389,6 +389,7 @@ class TrafficVehicle:
     last_progress_y: float = 0.0
     home_fraction: float = 0.0
     horn_until: float = 0.0
+    red_light_waiting: bool = False
 
     def public_dict(self) -> dict:
         return {
@@ -432,6 +433,7 @@ class NPCPedestrian:
     stuck_time: float = 0.0
     last_progress_x: float = 0.0
     last_progress_y: float = 0.0
+    signal_waiting: bool = False
 
     def public_dict(self) -> dict:
         return {
@@ -1352,6 +1354,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
         if prop is None:
             continue
         nx, ny, heading, speed, next_waypoint, _, red_light = prop
+        car.red_light_waiting = bool(red_light and speed < 1.0)
         if car.controlled_by or car.parked or car.route_index < 0:
             continue
         moved = math.hypot(nx - car.x, ny - car.y)
@@ -1501,7 +1504,50 @@ def _npc_near_any_player(npc: NPCPedestrian, sessions: list[ClientSession], radi
     return any((s.player.x - npc.x) ** 2 + (s.player.y - npc.y) ** 2 <= r2 for s in sessions)
 
 
-def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> None:
+def _nearest_sidewalk_escape(world, npc: NPCPedestrian, car: TrafficVehicle) -> tuple[float, float] | None:
+    """Find the closest pavement cell that also increases car clearance."""
+    gx, gy = world.world_to_cell(npc.x, npc.y)
+    candidates = []
+    for radius in range(1, 6):
+        for y in range(gy - radius, gy + radius + 1):
+            for x in range(gx - radius, gx + radius + 1):
+                if not world.in_bounds(x, y):
+                    continue
+                cx, cy = world.cell_center(x, y)
+                if world.collision_at("ground", cx, cy) not in {"walk", "sidewalk"}:
+                    continue
+                distance = math.hypot(cx - npc.x, cy - npc.y)
+                car_clearance = math.hypot(cx - car.x, cy - car.y)
+                candidates.append((distance, -car_clearance, cy, cx))
+        if candidates:
+            break
+    if not candidates:
+        return None
+    _distance, _clearance, cy, cx = min(candidates)
+    return float(cx), float(cy)
+
+
+def _pedestrian_signal_allows_entry(world, x: float, y: float, nx: float, ny: float, server_time: float) -> bool:
+    """Hold pedestrians at the curb while conflicting vehicle traffic is green."""
+    if world is None or world.collision_at("ground", x, y) == "road":
+        return True
+    if world.collision_at("ground", nx, ny) != "road":
+        return True
+    next_cell = world.world_to_cell(nx, ny)
+    for crossing in getattr(world, "_v110_crosswalks", ()):
+        if next_cell not in crossing.road_cells():
+            continue
+        conflicting_vehicle_phase = 1 if crossing.axis == "x" else 0
+        return not traffic_phase_green(conflicting_vehicle_phase, server_time)
+    return False
+
+
+def update_npcs(
+    dt: float,
+    sessions: list[ClientSession],
+    tick_index: int,
+    server_time: float | None = None,
+) -> None:
     routes = ACTIVE_MAP.get("npc_routes", []) or []
     if not routes or not npc_pedestrians:
         return
@@ -1512,7 +1558,9 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
     far_stride = max(1, int(round(SERVER_TICK_RATE / far_hz)))
     grid = build_spatial_grid(npc_pedestrians, max(64.0, personal_space * 3.0))
 
+    signal_time = time.time() if server_time is None else float(server_time)
     for npc in npc_pedestrians:
+        npc.signal_waiting = False
         near_player = _npc_near_any_player(npc, sessions, active_radius)
         if not near_player and tick_index % far_stride != (sum(ord(c) for c in npc.npc_id) % far_stride):
             # Distant pedestrians sleep most ticks. Scale the occasional step so
@@ -1550,6 +1598,30 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
             if 0.0 < forward < personal_space * 1.55 and lateral < personal_space * 0.75:
                 blocked_ahead = True
                 break
+        current_surface = GRID_WORLD.collision_at("ground", npc.x, npc.y) if GRID_WORLD is not None else "sidewalk"
+        road_hazard = None
+        road_hazard_distance = 240.0
+        if current_surface == "road":
+            for car in traffic_vehicles:
+                distance = math.hypot(npc.x - car.x, npc.y - car.y)
+                if distance < road_hazard_distance:
+                    road_hazard, road_hazard_distance = car, distance
+        if road_hazard is not None and GRID_WORLD is not None:
+            escape = _nearest_sidewalk_escape(GRID_WORLD, npc, road_hazard)
+            if escape is not None:
+                ex, ey = escape
+                escape_dx, escape_dy = ex - npc.x, ey - npc.y
+                escape_dist = max(1.0, math.hypot(escape_dx, escape_dy))
+                run_step = min(escape_dist, max(24.0, npc.speed * step_dt * 3.2))
+                nx = npc.x + escape_dx / escape_dist * run_step
+                ny = npc.y + escape_dy / escape_dist * run_step
+                if GRID_WORLD.collision_at("ground", nx, ny) in {"road", "walk", "sidewalk"}:
+                    npc.x, npc.y = nx, ny
+                    npc.aim = math.atan2(escape_dy, escape_dx)
+                    npc.pause_timer = 0.0
+                    npc.stuck_time = max(npc.stuck_time, 0.5)
+                    npc.last_progress_x, npc.last_progress_y = nx, ny
+                    continue
         horn_car = None
         horn_distance = 220.0 if npc.kind == "pedestrian" else 150.0
         for car in traffic_vehicles:
@@ -1602,8 +1674,13 @@ def update_npcs(dt: float, sessions: list[ClientSession], tick_index: int) -> No
             continue
 
         step = min(dist, npc.speed * step_dt)
-        npc.x += ux * step
-        npc.y += uy * step
+        nx, ny = npc.x + ux * step, npc.y + uy * step
+        if not _pedestrian_signal_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny, signal_time):
+            npc.signal_waiting = True
+            npc.pause_timer = 0.0
+            npc.aim = math.atan2(uy, ux)
+            continue
+        npc.x, npc.y = nx, ny
         npc.aim = math.atan2(uy, ux)
         if math.hypot(npc.x - npc.last_progress_x, npc.y - npc.last_progress_y) >= personal_space * 0.5:
             npc.last_progress_x, npc.last_progress_y = npc.x, npc.y
@@ -3185,9 +3262,10 @@ async def simulation_loop() -> None:
                 )
             p.aim = session.aim
 
-        update_traffic(dt, sessions, time.time())
+        signal_time = time.time()
+        update_traffic(dt, sessions, signal_time)
         update_bicycles(dt, sessions)
-        update_npcs(dt, sessions, tick_index)
+        update_npcs(dt, sessions, tick_index, signal_time)
         current_mono = time.monotonic()
         update_npc_runovers(current_mono)
         update_hydrants(current_mono)

@@ -436,13 +436,13 @@ def apply_world_refinement(world):
         item["gx"], item["gy"] = gx, gy
         rotation = int(item.get("rotation", 0)) % 360
         if rotation == 0:
-            offset_x, offset_y, light_x, light_y = 94, 0, 34, 36
+            offset_x, offset_y, light_x, light_y = 94, 0, 34, 215
         elif rotation == 90:
-            offset_x, offset_y, light_x, light_y = 0, 94, 219, 34
+            offset_x, offset_y, light_x, light_y = 0, 94, 40, 34
         elif rotation == 180:
-            offset_x, offset_y, light_x, light_y = 94, 0, 33, 219
+            offset_x, offset_y, light_x, light_y = 94, 0, 33, 40
         else:
-            offset_x, offset_y, light_x, light_y = 0, 94, 36, 33
+            offset_x, offset_y, light_x, light_y = 0, 94, 215, 33
         item["offset_x_px"] = offset_x
         item["offset_y_px"] = offset_y
         item["width_px"] = 68
@@ -454,6 +454,10 @@ def apply_world_refinement(world):
         item["emits_light"] = True
         item["light_offset_x_px"] = light_x
         item["light_offset_y_px"] = light_y
+        item["light_radius_px"] = 420
+        item["light_color_rgb"] = [112, 176, 255]
+        item["light_intensity"] = 0.34
+        item["light_registration"] = "rectangular_fixture_center_report49"
         item["fixture_light_sync"] = "same_grid_object_record"
         lamp_count += 1
 

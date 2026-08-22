@@ -47,7 +47,14 @@ def _distance(a, b) -> float:
     return math.hypot(float(a.x) - float(b.x), float(a.y) - float(b.y))
 
 
-def _advance_population(dt: float, tick_start: int, tick_stop: int, *, track_pedestrians: bool = False) -> dict[str, float]:
+def _advance_population(
+    dt: float,
+    tick_start: int,
+    tick_stop: int,
+    *,
+    track_pedestrians: bool = False,
+    signal_waits: dict[str, float] | None = None,
+) -> dict[str, float]:
     travelled: dict[str, float] = {}
     for tick in range(tick_start, tick_stop):
         before = {
@@ -56,13 +63,15 @@ def _advance_population(dt: float, tick_start: int, tick_stop: int, *, track_ped
             if npc.kind == "pedestrian"
         } if track_pedestrians else {}
         server.update_traffic(dt, [], tick * dt)
-        server.update_npcs(dt, [], tick)
+        server.update_npcs(dt, [], tick, tick * dt)
         if track_pedestrians:
             for npc in server.npc_pedestrians:
                 if npc.kind != "pedestrian" or npc.npc_id not in before:
                     continue
                 px, py = before[npc.npc_id]
                 travelled[npc.npc_id] = travelled.get(npc.npc_id, 0.0) + math.hypot(npc.x - px, npc.y - py)
+                if signal_waits is not None and npc.signal_waiting:
+                    signal_waits[npc.npc_id] = signal_waits.get(npc.npc_id, 0.0) + dt
     return travelled
 
 
@@ -119,17 +128,26 @@ def main() -> None:
     # then deadlock once pedestrians met head-on. Warm the city for five seconds,
     # then measure actual path length during a separate five-second window.
     _advance_population(dt, 150, FLOW_WARMUP_TICKS)
+    pedestrian_signal_waits: dict[str, float] = {}
     pedestrian_travel = _advance_population(
         dt,
         FLOW_WARMUP_TICKS,
         FLOW_WARMUP_TICKS + FLOW_MEASURE_TICKS,
         track_pedestrians=True,
+        signal_waits=pedestrian_signal_waits,
     )
     pedestrians = [npc for npc in server.npc_pedestrians if npc.kind == "pedestrian"]
+    flow_measure_seconds = FLOW_MEASURE_TICKS * dt
+    required_travel = {
+        npc.npc_id: MIN_FLOW_DISTANCE_5S
+        * max(0.0, flow_measure_seconds - pedestrian_signal_waits.get(npc.npc_id, 0.0))
+        / flow_measure_seconds
+        for npc in pedestrians
+    }
     stalled_pedestrians = sorted(
         npc.npc_id
         for npc in pedestrians
-        if pedestrian_travel.get(npc.npc_id, 0.0) < MIN_FLOW_DISTANCE_5S
+        if pedestrian_travel.get(npc.npc_id, 0.0) < required_travel[npc.npc_id]
     )
     off_pavement_pedestrians = sorted(
         npc.npc_id
@@ -296,8 +314,10 @@ def main() -> None:
         "camera_zoom": PROOF_ZOOM,
         "traffic_moved_after_2_5s": moved_cars,
         "npcs_moved_after_2_5s": moved_npcs,
-        "pedestrian_flow_measure_seconds": FLOW_MEASURE_TICKS * dt,
+        "pedestrian_flow_measure_seconds": flow_measure_seconds,
         "pedestrian_flow_min_distance_px": MIN_FLOW_DISTANCE_5S,
+        "pedestrian_lawful_signal_wait_max_seconds": round(max(pedestrian_signal_waits.values(), default=0.0), 3),
+        "pedestrian_lawful_signal_wait_count": sum(value > 0.0 for value in pedestrian_signal_waits.values()),
         "pedestrians_stalled_after_warmup": stalled_pedestrians,
         "pedestrians_stalled_after_warmup_count": len(stalled_pedestrians),
         "pedestrians_off_pavement": off_pavement_pedestrians,

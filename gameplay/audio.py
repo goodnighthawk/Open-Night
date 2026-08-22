@@ -20,6 +20,7 @@ class GameAudio:
         self.engine_channel: pygame.mixer.Channel | None = None
         self.last_step = 0.0
         self.last_horn: dict[str, float] = {}
+        self.last_any_horn = 0.0
         self.previous_in_vehicle = False
         self.previous_speed = 0.0
         if sys.platform == "emscripten":
@@ -118,10 +119,19 @@ class GameAudio:
                 self.last_step = now
 
         self.previous_speed = speed
+        # A jam can contain dozens of server-honking cars. Play only the nearest
+        # eligible horn and enforce both global and per-car cooldowns so sample
+        # attack clicks cannot become a constant machine-gun noise (report #51).
+        horn_candidates = []
         for car in game.vehicles.values():
-            if not bool(getattr(car, "horn", False)) or now - self.last_horn.get(car.id, 0.0) < 0.8:
+            car_id = str(getattr(car, "id", ""))
+            if not bool(getattr(car, "horn", False)) or now - self.last_horn.get(car_id, 0.0) < 2.5:
                 continue
             volume = self._distance_volume(local, car.render_x, car.render_y)
             if volume > 0.02:
-                self._play("horn", volume)
-            self.last_horn[car.id] = now
+                horn_candidates.append((volume, car_id))
+        if horn_candidates and now - self.last_any_horn >= 1.2:
+            volume, car_id = max(horn_candidates)
+            self._play("horn", volume)
+            self.last_horn[car_id] = now
+            self.last_any_horn = now
