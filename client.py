@@ -2275,8 +2275,6 @@ class Game:
             self.draw_traffic_signal(signal)
 
         self.draw_interior_entries()
-        self.draw_location(tuple(self.map_config.get("supplier_pos", SUPPLIER_POS)), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}")
-        self.draw_location(tuple(self.map_config.get("customer_pos", CUSTOMER_POS)), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}")
         self.draw_landmarks()
 
     def draw_landmarks(self) -> None:
@@ -2593,10 +2591,10 @@ class Game:
         # Job-economy locations are client-side map UI, not baked map text. This
         # keeps labels horizontal/readable and makes supplier/buyer destinations
         # visible regardless of camera rotation or nearby-player interest culling.
-        for raw_pos, marker_color, marker_label in (
-            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER"),
-            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER"),
-        ):
+        for job in self._job_locations():
+            raw_pos = job["pos"]
+            marker_label = str(job["role"]).upper()
+            marker_color = SUPPLIER_COLOR if marker_label == "SUPPLIER" else CUSTOMER_COLOR
             try:
                 p = mp_dynamic(float(raw_pos[0]), float(raw_pos[1]))
             except (TypeError, ValueError, IndexError, KeyError):
@@ -2727,6 +2725,10 @@ class Game:
             self.screen.blit(rotated, rotated.get_rect(center=(sx, sy)))
             return
         npc_scale = max(2, int(self.settings.get("render", {}).get("npc_scale", 2)))
+        role = str(getattr(npc, "kind", "pedestrian")).lower()
+        if role in {"supplier", "buyer"}:
+            color = SUPPLIER_COLOR if role == "supplier" else CUSTOMER_COLOR
+            pygame.draw.ellipse(self.screen, color, pygame.Rect(sx - 18, sy + 18, 36, 13), width=3)
         draw_character(
             self.screen, (sx, sy), npc.aim, npc.appearance, scale=npc_scale,
             moving=time.monotonic() < npc.moving_until,
@@ -2819,25 +2821,36 @@ class Game:
         # a floating gameplay area across the road surface.
         pygame.draw.ellipse(self.screen, color, pygame.Rect(sx - 17, sy + 20, 34, 12), width=3)
 
+    def _job_locations(self) -> list[dict]:
+        rows = self.map_config.get("job_locations", [])
+        if isinstance(rows, list) and rows:
+            return [row for row in rows if isinstance(row, dict) and row.get("pos")]
+        return [
+            {"role": "supplier", "pos": self.map_config.get("supplier_pos", SUPPLIER_POS)},
+            {"role": "buyer", "pos": self.map_config.get("customer_pos", CUSTOMER_POS)},
+        ]
+
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""
         local_world_player = self.players.get(self.local_id or "")
         if local_world_player is not None and int(getattr(local_world_player, "level", 0)) < 0:
             return
         w, h = self.screen.get_size()
-        for raw_pos, color, label, sublabel in (
-            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR, "SUPPLIER", f"BUY ${BUY_PRICE}"),
-            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR, "BUYER", f"SELL ${SELL_PRICE}"),
-        ):
+        for npc in self.npcs.values():
+            role = str(getattr(npc, "kind", "")).lower()
+            if role not in {"supplier", "buyer"}:
+                continue
+            raw_pos = (npc.render_x, npc.render_y)
+            color = SUPPLIER_COLOR if role == "supplier" else CUSTOMER_COLOR
+            label = role.upper()
+            sublabel = f"BUY ${BUY_PRICE}" if role == "supplier" else f"SELL ${SELL_PRICE}"
             try:
                 sx, sy = self._world_point_to_display(float(raw_pos[0]), float(raw_pos[1]))
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             if sx < -90 or sy < -90 or sx > w + 90 or sy > h + 90:
                 continue
-            appearance = normalize_character({"preset": 2 if label == "SUPPLIER" else 4})
             pygame.draw.circle(self.screen, color, (sx, sy), 28, width=3)
-            draw_character(self.screen, (sx, sy), 0.0, appearance, scale=3, moving=False, anim_time=0.0)
             title = self.small_font.render(label, True, color)
             sub = self.tiny_font.render(sublabel, True, TEXT_COLOR)
             title_rect = title.get_rect(center=(sx, sy - 52))
@@ -3494,10 +3507,9 @@ class Game:
         pygame.draw.circle(mini, border, (radius,radius), radius-2, width=7)
         # Supplier and buyer are gameplay destinations, so they remain visible
         # on the private/friend-focused minimap whenever they are in local range.
-        for raw_pos, marker_color in (
-            (self.map_config.get("supplier_pos", SUPPLIER_POS), SUPPLIER_COLOR),
-            (self.map_config.get("customer_pos", CUSTOMER_POS), CUSTOMER_COLOR),
-        ):
+        for job in self._job_locations():
+            raw_pos = job["pos"]
+            marker_color = SUPPLIER_COLOR if str(job["role"]).lower() == "supplier" else CUSTOMER_COLOR
             try:
                 dx = float(raw_pos[0]) - local.render_x
                 dy = float(raw_pos[1]) - local.render_y
@@ -3600,8 +3612,11 @@ class Game:
             self.screen.blit(self.big_font.render(f"${local.cash}", True, TEXT_COLOR), (30, 48))
             count = inventory_count(self.inventory, "package")
             self.screen.blit(self.font.render(f"Inventory: {count} package{'s' if count != 1 else ''}   [I]", True, TEXT_COLOR), (30, 83))
-            supplier_pos = self.map_config["supplier_pos"]
-            near_supplier = math.hypot(local.render_x - supplier_pos[0], local.render_y - supplier_pos[1]) <= INTERACT_DISTANCE
+            supplier_positions = [row["pos"] for row in self._job_locations() if str(row["role"]).lower() == "supplier"]
+            near_supplier = any(
+                math.hypot(local.render_x - float(pos[0]), local.render_y - float(pos[1])) <= INTERACT_DISTANCE
+                for pos in supplier_positions
+            )
             sales_targets: list[tuple[float, str]] = []
             for player in self.players.values():
                 if player.id == self.local_id or player.in_vehicle or player.interior_id != local.interior_id:
@@ -3613,7 +3628,9 @@ class Game:
                 for npc in self.npcs.values():
                     d = math.hypot(local.render_x - npc.render_x, local.render_y - npc.render_y)
                     if d <= INTERACT_DISTANCE:
-                        sales_targets.append((d, "PEDESTRIAN"))
+                        role = str(getattr(npc, "kind", "pedestrian")).lower()
+                        if role != "supplier":
+                            sales_targets.append((d, "BUYER" if role == "buyer" else "PEDESTRIAN"))
             if (near_supplier or sales_targets) and not self.inventory_open:
                 target = "BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}"
                 prompt = self.big_font.render(f"[ E ] {target}", True, LOCAL_COLOR)

@@ -1498,6 +1498,25 @@ def initialize_npcs() -> None:
             last_progress_x=x, last_progress_y=y,
         ))
 
+    # Report #53: suppliers and buyers are real, stationary, authoritative NPCs
+    # distributed across the city. They share the normal snapshot/render path
+    # instead of being client-only icons painted at two legacy coordinates.
+    for index, location in enumerate(ACTIVE_MAP.get("job_locations", []) or []):
+        role = str(location.get("role", "")).strip().lower()
+        if role not in {"supplier", "buyer"}:
+            continue
+        try:
+            x, y = map(float, location.get("pos", [0.0, 0.0]))
+        except (TypeError, ValueError):
+            continue
+        appearance_index = int(location.get("appearance_index", 40 + index))
+        npc_pedestrians.append(NPCPedestrian(
+            npc_id=str(location.get("id", f"job_{role}_{index + 1:02d}")),
+            route_index=-1, next_waypoint=0, x=x, y=y, speed=0.0, aim=0.0,
+            appearance=_indexed_character_appearance(appearance_index, preset_only=False),
+            pause_timer=0.0, kind=role, last_progress_x=x, last_progress_y=y,
+        ))
+
 
 def _npc_near_any_player(npc: NPCPedestrian, sessions: list[ClientSession], radius: float) -> bool:
     r2 = radius * radius
@@ -1585,19 +1604,9 @@ def update_npcs(
             continue
         ux, uy = dx / dist, dy / dist
 
-        # Personal-space AI: only inspect the local spatial cell neighborhood.
-        # Pedestrians actively sidestep or reverse on the route network rather
-        # than creating the stationary single-file walls seen in reports 43/45.
-        blocked_ahead = False
-        for other in nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1):
-            if other is npc:
-                continue
-            rx, ry = other.x - npc.x, other.y - npc.y
-            forward = rx * ux + ry * uy
-            lateral = abs(rx * uy - ry * ux)
-            if 0.0 < forward < personal_space * 1.55 and lateral < personal_space * 0.75:
-                blocked_ahead = True
-                break
+        # Report #58: ambient pedestrians are non-blocking to one another. They
+        # may visually pass through in a crowd instead of forming permanent
+        # single-file walls. Cars/horns and signal rules remain authoritative.
         current_surface = GRID_WORLD.collision_at("ground", npc.x, npc.y) if GRID_WORLD is not None else "sidewalk"
         road_hazard = None
         road_hazard_distance = 240.0
@@ -1632,10 +1641,10 @@ def update_npcs(
                 horn_car = car
                 horn_distance = distance
 
-        if blocked_ahead or horn_car is not None:
+        if horn_car is not None:
             identity = sum(ord(c) for c in npc.npc_id)
             sx, sy = -uy, ux
-            npc.stuck_time = npc.stuck_time + step_dt if blocked_ahead else max(0.0, npc.stuck_time - step_dt)
+            npc.stuck_time = max(0.0, npc.stuck_time - step_dt)
             fleeing_horn = horn_car is not None
             moved_aside = False
             neighbours = nearby_from_grid(npc, grid, max(64.0, personal_space * 3.0), 1)
@@ -1762,6 +1771,8 @@ def update_npc_runovers(now: float) -> None:
     moving_cars = [car for car in traffic_vehicles if vehicle_speed_mph(car.speed) >= min_speed_mph]
     victims: list[NPCPedestrian] = []
     for npc in npc_pedestrians:
+        if npc.kind in {"supplier", "buyer"}:
+            continue
         for car in moving_cars:
             dx, dy = npc.x - car.x, npc.y - car.y
             ca, sa = math.cos(car.angle), math.sin(car.angle)
@@ -2188,9 +2199,13 @@ async def save_and_sync(session: ClientSession) -> None:
 async def process_interaction(session: ClientSession) -> None:
     p = session.player
     pos = (p.x, p.y)
-    supplier_pos = tuple(ACTIVE_MAP["supplier_pos"])
+    job_locations = ACTIVE_MAP.get("job_locations", []) or []
+    supplier_positions = [
+        tuple(row.get("pos", [0.0, 0.0]))
+        for row in job_locations if str(row.get("role", "")).lower() == "supplier"
+    ] or [tuple(ACTIVE_MAP["supplier_pos"])]
 
-    if distance(pos, supplier_pos) <= INTERACT_DISTANCE:
+    if any(distance(pos, supplier_pos) <= INTERACT_DISTANCE for supplier_pos in supplier_positions):
         if p.cash < BUY_PRICE:
             text = f"Need ${BUY_PRICE}."
         elif inventory_weight(session.inventory) + float(ITEM_DEFS["package"]["weight_kg"]) > INVENTORY_MAX_WEIGHT_KG + 1e-9:
@@ -2263,7 +2278,10 @@ async def process_interaction(session: ClientSession) -> None:
         for npc in npc_pedestrians:
             d = distance(pos, (npc.x, npc.y))
             if d <= INTERACT_DISTANCE:
-                candidates.append((d, "npc", npc))
+                # Dedicated buyer NPCs win ties over ambient pedestrians so the
+                # job role visible to the player is also the transaction target.
+                priority = 0 if npc.kind == "buyer" else 1
+                candidates.append((d + priority * 0.001, "npc", npc))
 
     if candidates:
         _, kind, target = min(candidates, key=lambda row: row[0])
@@ -2281,7 +2299,8 @@ async def process_interaction(session: ClientSession) -> None:
         p.cash += SELL_PRICE
         try:
             await save_and_sync(session)
-            text = f"Sold 1 package to a pedestrian for ${SELL_PRICE}."
+            target_name = "buyer" if getattr(target, "kind", "") == "buyer" else "pedestrian"
+            text = f"Sold 1 package to a {target_name} for ${SELL_PRICE}."
         except Exception as exc:
             inventory_add(session.inventory, "package", 1)
             p.cash -= SELL_PRICE

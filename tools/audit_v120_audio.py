@@ -47,9 +47,29 @@ def main() -> None:
     audio.update(game)
     audio.update(game)
     assert [key for key, _volume in played].count("horn") == 1, played
+    original_keys = pygame.key.get_pressed
+    try:
+        class Keys:
+            def __init__(self, steering=False): self.steering = steering
+            def __getitem__(self, key): return self.steering and key == pygame.K_a
+        local.in_vehicle = True
+        local.vehicle_id = "player-car"
+        game.vehicles = {"player-car": SimpleNamespace(speed=220.0)}
+        pygame.key.get_pressed = lambda: Keys(False)  # type: ignore[assignment]
+        audio.update(game)
+        assert not any(key == "skid" for key, _volume in played), played
+        pygame.key.get_pressed = lambda: Keys(True)  # type: ignore[assignment]
+        audio.steering_since = time.monotonic() - 1.0
+        audio.last_skid = time.monotonic() - 5.0
+        audio.update(game)
+        assert [key for key, _volume in played].count("skid") == 1, played
+        audio.update(game)
+        assert [key for key, _volume in played].count("skid") == 1, played
+    finally:
+        pygame.key.get_pressed = original_keys  # type: ignore[assignment]
     client = (ROOT / "client.py").read_text(encoding="utf-8")
     assert "self.audio.ui_key(event.key)" in client and "self.audio.update(self)" in client
-    print(f"V120_AUDIO_OK loaded={len(audio.sounds)} source_wavs={len(list(SFX_ROOT.rglob('*.wav')))} jam_horn_burst=1")
+    print(f"V120_AUDIO_OK loaded={len(audio.sounds)} source_wavs={len(list(SFX_ROOT.rglob('*.wav')))} jam_horn_burst=1 sustained_turn_skid=1")
 
 
 if __name__ == "__main__":

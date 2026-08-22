@@ -289,7 +289,9 @@ class GridWorld:
             x += int(item.get("offset_x_px", 0))
             y += int(item.get("offset_y_px", 0))
             width = int(item.get("width_px", definition.native_width_px)); height = int(item.get("height_px", definition.native_height_px))
-            if x < right and y < bottom and x + width > left and y + height > top:
+            rotation = int(item.get("rotation", 0)) % 360
+            visible_width, visible_height = (height, width) if rotation in {90, 270} else (width, height)
+            if x < right and y < bottom and x + visible_width > left and y + visible_height > top:
                 visible.append((definition.z, asset_id, item, x, y, width, height))
         visible.sort(key=lambda row: row[0])
         return visible

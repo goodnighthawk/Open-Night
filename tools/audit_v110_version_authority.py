@@ -15,7 +15,7 @@ from v110_server_launcher_patch import canonicalize_saved_config
 import v110_version_client
 
 
-EXPECTED = "1.2"
+EXPECTED = "1.3"
 
 
 def read(relative: str) -> str:
@@ -63,7 +63,7 @@ def exercise_client_version_gate() -> None:
 
 def main() -> None:
     require(GAME_VERSION == EXPECTED, f"wire version is {GAME_VERSION!r}, expected {EXPECTED!r}")
-    require(version_label() == "Open Night v1.2", version_label())
+    require(version_label() == "Open Night v1.3", version_label())
     require(read("VERSION.txt").strip() == EXPECTED,
             "VERSION.txt does not exactly match the canonical wire version")
 
@@ -98,8 +98,8 @@ def main() -> None:
     exercise_client_version_gate()
 
     railway = read("railway.toml")
-    require("PYMMO_PATCH_ID=open-night-v1.2" in railway,
-            "Railway patch id is not v1.2")
+    require("PYMMO_PATCH_ID=open-night-v1.3" in railway,
+            "Railway patch id is not v1.3")
     require("PYMMO_RESET_DB_ON_PATCH=false" in railway,
             "v1.1 Railway promotion would reset prototype persistence")
     railway_entry = read("railway_entry.py")
@@ -107,12 +107,12 @@ def main() -> None:
             "Railway bypasses the canonical GridWorld server")
 
     server_config = read("server_config.csv")
-    require("server_name,Open Night v1.2" in server_config,
-            "repo-local server default is not v1.2")
-    require("OPEN NIGHT v1.2" in read("RUN_CLIENT.bat"),
+    require("server_name,Open Night v1.3" in server_config,
+            "repo-local server default is not v1.3")
+    require("OPEN NIGHT v1.3" in read("RUN_CLIENT.bat"),
             "desktop client launcher label is stale")
     run_server = read("RUN_SERVER.bat")
-    require("OPEN NIGHT v1.2" in run_server,
+    require("OPEN NIGHT v1.3" in run_server,
             "local server launcher label is stale")
     require("v100_server.py" in run_server,
             "local server launcher bypasses canonical v1.1 server entry")
@@ -127,7 +127,7 @@ def main() -> None:
         "local_server_launcher": "RUN_SERVER.bat -> v100_server.py",
         "server_launcher_child_entry": "v100_server.py",
         "railway_entry": "railway_entry.py -> v100_server.py",
-        "railway_patch_id": "open-night-v1.2",
+        "railway_patch_id": "open-night-v1.3",
         "railway_preserves_persistence": True,
         "discovered_server_exact_version_gate": True,
         "discovered_server_visible_incompatibility_warning": True,

@@ -67,20 +67,20 @@ def main() -> None:
     server.update_npcs(0.1, [player], 0)
     assert fleeing.x > 100.0, fleeing
 
-    # If every local sidestep is obstructed, change route intent immediately;
-    # never enter the old repeated pause/deadlock state.
+    # Report #58: another pedestrian is never a collision blocker. Even when
+    # their bodies overlap, both retain route intent and continue walking.
     leader = npc("gridnpc-leader", 112.0, 100.0)
     jammed = npc("gridnpc-jammed", 100.0, 100.0)
     original_direction = jammed.route_direction
-    server.GRID_WORLD = SurfaceWorld("blocked")
+    server.GRID_WORLD = SurfaceWorld("sidewalk")
     server.npc_pedestrians[:] = [jammed, leader]
     server.traffic_vehicles.clear()
     server.update_npcs(0.1, [player], 0)
-    assert jammed.route_direction == -original_direction, jammed
+    assert jammed.route_direction == original_direction, jammed
     assert jammed.pause_timer == 0.0, jammed
-    assert jammed.stuck_time > 0.0, jammed
+    assert jammed.x > 100.0, jammed
 
-    print("V120_PEDESTRIAN_ESCAPE_OK horn_flee=yes jam_reverse=yes indefinite_pause=no")
+    print("V120_PEDESTRIAN_ESCAPE_OK horn_flee=yes pedestrian_passthrough=yes indefinite_pause=no")
 
 
 if __name__ == "__main__":

@@ -5,11 +5,11 @@ environment,water,47;72;84,color,Water body
 environment,water_line,63;92;103,color,Water edge
 environment,park,70;94;68,color,Park/vegetation fill
 environment,park_dark,54;77;55,color,Vegetation edge
-environment,road,44;47;47,color,Asphalt
-environment,road_grain,55;58;56,color,Asphalt speckle
-environment,lane,205;190;135,color,Lane markings
-environment,curb,126;125;116,color,Curb edge
-environment,sidewalk,103;104;99,color,Sidewalk
+environment,road,31;35;43,color,Cool grunge asphalt
+environment,road_grain,48;53;61,color,Controlled asphalt speckle
+environment,lane,224;188;93,color,Warm sodium lane markings
+environment,curb,96;105;119,color,Cool curb edge
+environment,sidewalk,77;83;94,color,Blue-grey sidewalk
 environment,building_edge,54;53;49,color,Roof outline
 environment,building_shadow,22;24;23,color,Building shadow
 environment,roof_1,124;116;103,color,Roof palette 1

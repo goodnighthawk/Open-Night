@@ -4,7 +4,7 @@
   "camera_zoom": 0.72,
   "dogs_spawned": 6,
   "focus_car": "gridcar002",
-  "focus_npc": "gridnpc189",
+  "focus_npc": "gridnpc010",
   "full_stack_panels": [
     "gameplay_player_hud_population",
     "actual_M_map",
@@ -16,14 +16,14 @@
   "pedestrian_added_zebra_stripe_objects": 78,
   "pedestrian_connected_route_count": 18,
   "pedestrian_crosswalk_count": 133,
-  "pedestrian_crosswalk_road_cell_count": 445,
+  "pedestrian_crosswalk_road_cell_count": 711,
   "pedestrian_crosswalk_route_count": 18,
-  "pedestrian_distance_median_px": 256.0,
+  "pedestrian_distance_median_px": 251.312,
   "pedestrian_distance_min_px": 0.0,
   "pedestrian_flow_measure_seconds": 5.0,
   "pedestrian_flow_min_distance_px": 20.0,
   "pedestrian_intersection_crosswalk_count": 96,
-  "pedestrian_lawful_signal_wait_count": 27,
+  "pedestrian_lawful_signal_wait_count": 25,
   "pedestrian_lawful_signal_wait_max_seconds": 0.833,
   "pedestrian_midblock_crosswalk_count": 37,
   "pedestrian_multiblock_route_count": 18,
@@ -35,12 +35,12 @@
   "pedestrians_off_pavement": [],
   "pedestrians_spawned": 216,
   "pedestrians_stalled_after_warmup": [
-    "gridnpc026"
+    "gridnpc045"
   ],
   "pedestrians_stalled_after_warmup_count": 1,
   "player_cell": [
-    27,
-    10
+    26,
+    12
   ],
   "proof": "v110_grid_native_population_full_stack",
   "road_center_cols": [
@@ -58,6 +58,7 @@
     24,
     39
   ],
+  "sidewalk_infill_asset": "pavement_small",
   "traffic_moved_after_2_5s": 24,
   "traffic_requested": 24,
   "traffic_route_count": 84,
@@ -68,6 +69,7 @@
   "vehicle_collision_to_visual_ratio_min": 0.8235,
   "vehicle_collision_width_meta_scale": 3.35,
   "vehicle_render_meta_scale": 3.0,
-  "visible_cars_in_proof_window": 7,
-  "visible_pedestrians_in_proof_window": 14
+  "visible_cars_in_proof_window": 5,
+  "visible_pedestrians_in_proof_window": 16,
+  "visual_style": "open_night_grunge_neon"
 }

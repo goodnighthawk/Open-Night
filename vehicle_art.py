@@ -131,6 +131,11 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     # canonical runtime vehicle art always points nose-up before heading rotation.
     if source.get_width() > source.get_height():
         source = pygame.transform.rotate(source, 90)
+    # The player-approved civilian sheets are authored nose-down. Normalize
+    # those crops to the renderer's nose-up contract; legacy fallback art is
+    # already nose-up and is intentionally left unchanged (report #52).
+    if meta.get("sheet_file") and str(meta.get("source_nose", "down")).lower() == "down":
+        source = pygame.transform.flip(source, False, True)
 
     length = max(24, int(target_length or meta.get("render_length", 48)))
     width = max(12, int(round(length * source.get_width() / source.get_height())))

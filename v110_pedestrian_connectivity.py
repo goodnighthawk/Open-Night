@@ -185,16 +185,16 @@ def build_crosswalks(world) -> list[Crosswalk]:
 
 
 def _ensure_runtime_object_defs(world) -> None:
-    # Reuse the exact repo-resident pavement textures. These are object aliases
-    # only; no new art or collision type is introduced.
+    # Use the compact pavement swatch for extensions. Stretching the directional
+    # curb strips created the thick white/blue bars reported at road edges.
     if "v110_sidewalk_apron_h" not in world.catalog.objects:
-        tile = world.catalog["pavement_h"]
+        tile = world.catalog["pavement_small"]
         world.catalog.objects["v110_sidewalk_apron_h"] = ObjectDef(
             "v110_sidewalk_apron_h", tile.image, kind="sidewalk_extension",
             layer="ground", z=18, native_width_px=world.cell_px, native_height_px=world.cell_px,
         )
     if "v110_sidewalk_apron_v" not in world.catalog.objects:
-        tile = world.catalog["pavement_v"]
+        tile = world.catalog["pavement_small"]
         world.catalog.objects["v110_sidewalk_apron_v"] = ObjectDef(
             "v110_sidewalk_apron_v", tile.image, kind="sidewalk_extension",
             layer="ground", z=18, native_width_px=world.cell_px, native_height_px=world.cell_px,
@@ -226,14 +226,14 @@ def _add_sidewalk_aprons(world, horizontal: list[RoadBand], vertical: list[RoadB
                     "asset": "v110_sidewalk_apron_h", "gx": x0, "gy": hband.start,
                     "offset_x_px": 0, "offset_y_px": 0, "width_px": width, "height_px": apron,
                     "composition_pass": "v110_pedestrian_connectivity", "sidewalk_extension": "north",
-                    "decorative_only": True,
+                    "decorative_only": True, "visual_style": "grunge_sidewalk_infill_v130",
                 })
             if hband.end + 1 < world.height and _is_sidewalk(world, x0, hband.end + 1):
                 append({
                     "asset": "v110_sidewalk_apron_h", "gx": x0, "gy": hband.end,
                     "offset_x_px": 0, "offset_y_px": cell - apron, "width_px": width, "height_px": apron,
                     "composition_pass": "v110_pedestrian_connectivity", "sidewalk_extension": "south",
-                    "decorative_only": True,
+                    "decorative_only": True, "visual_style": "grunge_sidewalk_infill_v130",
                 })
 
     for vband in vertical:
@@ -248,14 +248,14 @@ def _add_sidewalk_aprons(world, horizontal: list[RoadBand], vertical: list[RoadB
                     "asset": "v110_sidewalk_apron_v", "gx": vband.start, "gy": y0,
                     "offset_x_px": 0, "offset_y_px": 0, "width_px": apron, "height_px": height,
                     "composition_pass": "v110_pedestrian_connectivity", "sidewalk_extension": "west",
-                    "decorative_only": True,
+                    "decorative_only": True, "visual_style": "grunge_sidewalk_infill_v130",
                 })
             if vband.end + 1 < world.width and _is_sidewalk(world, vband.end + 1, y0):
                 append({
                     "asset": "v110_sidewalk_apron_v", "gx": vband.end, "gy": y0,
                     "offset_x_px": cell - apron, "offset_y_px": 0, "width_px": apron, "height_px": height,
                     "composition_pass": "v110_pedestrian_connectivity", "sidewalk_extension": "east",
-                    "decorative_only": True,
+                    "decorative_only": True, "visual_style": "grunge_sidewalk_infill_v130",
                 })
     return added
 
@@ -349,6 +349,8 @@ def apply(world) -> dict:
         "pedestrian_crosswalk_road_cell_count": len(world._v110_crosswalk_cells),
         "pedestrian_sidewalk_apron_count": sidewalk_aprons,
         "pedestrian_added_zebra_stripe_objects": zebra_stripes,
+        "sidewalk_infill_asset": "pavement_small",
+        "visual_style": "open_night_grunge_neon",
     }
     world._v110_pedestrian_connectivity_audit = audit
     return audit

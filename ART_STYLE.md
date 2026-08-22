@@ -1,6 +1,6 @@
-# Art Direction — v1.2
+# Art Direction — v1.3
 
-The approved Fort Lee / GWB top-down scene is the exterior visual target for v1.2. Target-derived surface tiles and approved props are used directly by the renderer so the playable map converges on the same dense illustrated city language rather than a flat traced-map look.
+The approved Fort Lee / GWB top-down scene remains the exterior visual target for v1.3. A deterministic grunge-neon director now enforces cool blue-violet night grading, warm road/sign accents, clean junctions, consistent road-edge furniture, and controlled pavement wear while preserving the source-pack art and authoritative collision grid.
 
 ## Rendering rules
 

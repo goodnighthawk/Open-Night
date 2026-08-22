@@ -200,15 +200,15 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
         building["generated_cells"] = len(footprint)
         building["envelope_cells"] = (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1)
 
-    road_morphology = {"version": 3, "composition_pass": "wide_road_morphology_v120"}
+    road_morphology = {"version": 4, "composition_pass": "wide_road_morphology_v130"}
     vertical_centers = (11, 29, 44, 58)
-    # Player report #46: the first v1.2 widening pass made ordinary streets
-    # seven cells across. Three 256 px cells still provide six 128 px lanes,
-    # while the five-cell centre corridor remains a visibly larger highway.
-    horizontal_bands = ((9, 1), (24, 2), (39, 1))
+    # Reports #46 and #59 require physical clearance, not merely six painted
+    # lanes squeezed into a narrow band. Primary roads are five cells wide and
+    # the central east/west highway is seven, leaving full-size lanes/shoulders.
+    horizontal_bands = ((9, 2), (24, 3), (39, 2))
     for y in range(len(rows)):
         for x in range(len(rows[y])):
-            if any(abs(x - center) <= 1 for center in vertical_centers) or any(
+            if any(abs(x - center) <= 2 for center in vertical_centers) or any(
                 abs(y - center) <= radius for center, radius in horizontal_bands
             ):
                 rows[y][x] = "road_fill"
@@ -232,10 +232,10 @@ def _synthesize_ground_runtime(data: dict) -> tuple[list[list[str]], list[dict]]
     }
     data["road_morphology"] = road_morphology
     data["road_morphology"].update({
-        "physical_primary_road_width_cells": 3,
-        "physical_central_highway_width_cells": 5,
+        "physical_primary_road_width_cells": 5,
+        "physical_central_highway_width_cells": 7,
         "lower_density_block_count": len(buildings),
-        "geometry_authority": "v120_six_lane_roads_and_central_highway_report46",
+        "geometry_authority": "v130_six_lane_clearance_and_central_highway_report59",
     })
     return rows, buildings
 

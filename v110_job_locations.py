@@ -12,6 +12,7 @@ actual GridWorld dimensions and snap each destination to walkable Ground.
 from typing import Any
 
 JOB_KEYS = ("supplier_pos", "customer_pos")
+JOB_NPC_COUNT = 10
 
 
 def _point(raw: Any) -> tuple[float, float] | None:
@@ -24,7 +25,7 @@ def _point(raw: Any) -> tuple[float, float] | None:
 def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[str, list[float]]:
     runtime = map_config.setdefault("runtime", {})
     existing = runtime.get("v110_job_location_normalization")
-    if isinstance(existing, dict) and existing.get("applied"):
+    if isinstance(existing, dict) and existing.get("applied") and len(map_config.get("job_locations", [])) >= JOB_NPC_COUNT:
         return {
             key: list(map_config.get(key, [0.0, 0.0]))
             for key in JOB_KEYS
@@ -43,6 +44,12 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
     normalized: dict[str, list[float]] = {}
     source_points: dict[str, list[float]] = {}
 
+    sidewalk_cells = [
+        world.cell_center(gx, gy)
+        for gy in range(world.height) for gx in range(world.width)
+        if 2 <= gx < world.width - 2 and 2 <= gy < world.height - 2
+        and world.collision_at("ground", *world.cell_center(gx, gy)) in {"walk", "sidewalk"}
+    ]
     for key in JOB_KEYS:
         parsed = _point(map_config.get(key))
         if parsed is None:
@@ -51,15 +58,38 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
         x = max(0.0, min(float(world.world_w), parsed[0] * sx))
         y = max(0.0, min(float(world.world_h), parsed[1] * sy))
         # Job NPCs must stand on pavement, never as floating areas in traffic.
-        sidewalk_cells = [
-            world.cell_center(gx, gy)
-            for gy in range(world.height) for gx in range(world.width)
-            if world.collision_at("ground", *world.cell_center(gx, gy)) in {"walk", "sidewalk"}
-        ]
         if sidewalk_cells:
             x, y = min(sidewalk_cells, key=lambda point: (point[0] - x) ** 2 + (point[1] - y) ** 2)
         map_config[key] = [round(float(x), 3), round(float(y), 3)]
         normalized[key] = list(map_config[key])
+
+    # A map this large needs a distributed job network, not two client-painted
+    # icons. Seed the legacy supplier/buyer positions, then use deterministic
+    # farthest-point sampling to spread five of each role over real sidewalks.
+    selected = [tuple(normalized["supplier_pos"]), tuple(normalized["customer_pos"])]
+    candidates = sorted(sidewalk_cells, key=lambda point: (point[1], point[0]))
+    while candidates and len(selected) < JOB_NPC_COUNT:
+        point = max(
+            candidates,
+            key=lambda candidate: (
+                min((candidate[0] - used[0]) ** 2 + (candidate[1] - used[1]) ** 2 for used in selected),
+                -candidate[1],
+                -candidate[0],
+            ),
+        )
+        selected.append(point)
+        candidates.remove(point)
+    roles = ["supplier", "buyer"] * (JOB_NPC_COUNT // 2)
+    map_config["job_locations"] = [
+        {
+            "id": f"job_{role}_{index // 2 + 1:02d}",
+            "role": role,
+            "pos": [round(float(point[0]), 3), round(float(point[1]), 3)],
+            "appearance_index": 40 + index,
+            "authoritative_npc": True,
+        }
+        for index, (role, point) in enumerate(zip(roles, selected))
+    ]
 
     runtime["v110_job_location_normalization"] = {
         "applied": True,
@@ -69,6 +99,8 @@ def normalize(map_config: dict, world, *, player_radius: float = 18.0) -> dict[s
         "source_points": source_points,
         "normalized_points": normalized,
         "authority": "gridworld_ground_walkable",
+        "job_npc_count": len(map_config["job_locations"]),
+        "job_roles": {role: roles.count(role) for role in set(roles)},
     }
     _install_grid_traffic_signals(map_config, world)
     return normalized

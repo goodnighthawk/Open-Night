@@ -27,8 +27,8 @@ class GridRenderer:
     # assembled authoritative framebuffer rather than baking edits into source
     # sprites, so collision, cell semantics and exact Roof registration remain
     # untouched.  Gameplay actors are drawn later by the client and stay clear.
-    GROUND_NIGHT_MULTIPLY = (105, 115, 145)
-    GROUND_NIGHT_AMBIENT = (2, 4, 8)
+    GROUND_NIGHT_MULTIPLY = (82, 94, 136)
+    GROUND_NIGHT_AMBIENT = (3, 5, 14)
 
     def __init__(self, world: GridWorld):
         self.world = world

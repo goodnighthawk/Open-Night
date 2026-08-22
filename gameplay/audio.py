@@ -19,6 +19,8 @@ class GameAudio:
         self.sounds: dict[str, pygame.mixer.Sound] = {}
         self.engine_channel: pygame.mixer.Channel | None = None
         self.last_step = 0.0
+        self.last_skid = 0.0
+        self.steering_since = 0.0
         self.last_horn: dict[str, float] = {}
         self.last_any_horn = 0.0
         self.previous_in_vehicle = False
@@ -101,10 +103,20 @@ class GameAudio:
             if self.previous_speed > 95.0 and drop > 80.0:
                 self._play("collision_hard" if drop > 150.0 else "collision_soft", 0.72)
             keys = pygame.key.get_pressed()
-            if speed > 90.0 and (keys[pygame.K_a] or keys[pygame.K_d]) and now - self.last_step > 0.8:
-                self._play("skid", min(0.5, speed / 400.0))
-                self.last_step = now
+            steering = bool(keys[pygame.K_a] or keys[pygame.K_d])
+            if steering and self.steering_since <= 0.0:
+                self.steering_since = now
+            elif not steering:
+                self.steering_since = 0.0
+            # Report #54: acceleration itself must never trigger tyre squeal.
+            # Require a sustained high-speed turn and a long independent
+            # cooldown so steering does not produce a repeating sound loop.
+            if (steering and speed > 150.0 and now - self.steering_since >= 0.55
+                    and now - self.last_skid >= 4.0):
+                self._play("skid", min(0.32, speed / 700.0))
+                self.last_skid = now
         else:
+            self.steering_since = 0.0
             if self.engine_channel is not None:
                 self.engine_channel.fadeout(180)
                 self.engine_channel = None

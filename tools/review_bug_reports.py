@@ -69,7 +69,11 @@ def show_report(report: dict) -> None:
     print(f"  Category:  {report.get('category', '')}")
     print(f"  Build:     {report.get('build_version', '')}")
     print(f"  Location:  {report.get('map_name', '')} ({report.get('world_x')}, {report.get('world_y')}) level {report.get('level')}")
+    print(f"  Vehicle:   {report.get('vehicle_id', '')}")
     print(f"  Text:      {report.get('description', '')}")
+    context = report.get("context")
+    if isinstance(context, dict) and context:
+        print(f"  Context:   {json.dumps(context, ensure_ascii=False, sort_keys=True)}")
     note = str(report.get("review_note", ""))
     if note:
         print(f"  Review:    {note}")

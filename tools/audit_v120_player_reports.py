@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Regression gate for the player-visible v1.2 corrective report batch."""
+"""Regression gate for the player-visible v1.2/v1.3 corrective report batches."""
 
 import copy
 import os
@@ -37,6 +37,10 @@ def main() -> None:
     assert {int(row["phase"]) for row in signals} == {0, 1}
     for key in v110_job_locations.JOB_KEYS:
         assert world.collision_at("ground", *config[key]) in {"walk", "sidewalk"}, f"{key} is still on the road"
+    jobs = config.get("job_locations", [])
+    assert len(jobs) == 10 and sum(row["role"] == "supplier" for row in jobs) == 5
+    assert sum(row["role"] == "buyer" for row in jobs) == 5
+    assert all(row.get("authoritative_npc") for row in jobs)
     roof_decals = [row for row in world.objects if row.get("composition_pass") == "roof_palette_v1"]
     assert roof_decals and all(int(row.get("width_px", 0)) >= 64 and int(row.get("height_px", 0)) >= 64
                                and str(row.get("placement_policy", "")).startswith("centered_")
@@ -47,11 +51,13 @@ def main() -> None:
     lamp_cells = {(int(row["gx"]), int(row["gy"])) for row in lamps}
     assert len(lamp_cells) == len(lamps), "streetlamps overlap after road expansion"
     assert all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk"
-               and row.get("placement_policy") == "nearest_free_sidewalk_cell_v12"
+               and row.get("placement_policy") == "road_edge_base_anchor_overhang_v13"
                and row.get("asset") == "street_item_lamp"
-               and row.get("light_registration") == "rectangular_fixture_center_report49"
-               and row.get("light_color_rgb") == [112, 176, 255]
-               and int(row.get("light_radius_px", 0)) >= 200 for row in lamps), \
+               and row.get("light_registration") == "three_x_fixture_road_overhang_report57"
+               and row.get("road_overhang_direction") in {"north", "east", "south", "west"}
+               and int(row.get("width_px", 0)) >= 102
+               and int(row.get("height_px", 0)) >= 384
+               and int(row.get("light_radius_px", 0)) >= 360 for row in lamps), \
         "streetlamps were not relocated from the expanded road onto sidewalks"
     street_items = [row for row in world.objects if row.get("composition_pass") == "city_block_street_items_svg_v1"]
     assert sum(row.get("street_item_kind") == "telephone_box" for row in street_items) == 16
@@ -67,6 +73,8 @@ def main() -> None:
         loaded = pygame.image.load(str(path))
         assert loaded.get_width() > 32 and loaded.get_height() > 32 and loaded.get_flags() & pygame.SRCALPHA
     connectivity = v110_pedestrian_connectivity.apply(world)
+    assert connectivity["sidewalk_infill_asset"] == "pavement_small"
+    assert connectivity["visual_style"] == "open_night_grunge_neon"
     zebra_art = [row for row in world.objects if str(row.get("street_marking", "")).startswith("zebra_")]
     assert zebra_art and len(zebra_art) < 120, "zebra-crossing art is still visually overpopulated"
     assert all(row.get("street_marking") == "zebra_midblock" for row in zebra_art)
@@ -86,14 +94,18 @@ def main() -> None:
     normal_centerlines = [row for row in centerlines if not (str(row.get("street_marking", "")).endswith("horizontal") and int(row.get("gy", -1)) == 24)]
     highway_centerlines = [row for row in centerlines if str(row.get("street_marking", "")).endswith("horizontal") and int(row.get("gy", -1)) == 24]
     assert len(normal_dividers) == len(normal_centerlines) * 4, "primary six-lane dividers are incomplete"
-    assert len(highway_dividers) == len(highway_centerlines) * 6, "eight-lane highway dividers are incomplete"
-    assert len(centerlines) == 384 and len(lane_dividers) == 1664, "scaled wide-road markings are incomplete"
+    assert len(highway_dividers) == len(highway_centerlines) * 4, "highway dividers are incomplete"
+    assert lane_dividers and len(lane_dividers) == len(centerlines) * 4, "six-lane markings are incomplete"
+    horizontal, vertical = v110_pedestrian_connectivity.road_bands(world)
+    junctions = {(gx, gy) for h in horizontal for v in vertical
+                 for gx in range(v.start, v.end + 1) for gy in range(h.start, h.end + 1)}
+    assert all((int(row["gx"]), int(row["gy"])) not in junctions for row in centerlines), \
+        "center/lane art still stacks through junctions"
     morphology = world.data.get("road_morphology", {})
-    assert morphology.get("physical_primary_road_width_cells") == 3, "six-lane primary roads are not three cells wide"
-    assert morphology.get("physical_central_highway_width_cells") == 5, "central highway is not physically wider"
+    assert morphology.get("physical_primary_road_width_cells") == 5, "six-lane primary roads lack physical clearance"
+    assert morphology.get("physical_central_highway_width_cells") == 7, "central highway is not physically wider"
     assert len(world.data.get("building_synthesis", {}).get("buildings", [])) == 28, "building density was not reduced"
     assert all(row.get("asset") == "mark_white_repeating_single" for row in lane_dividers), "lane lines do not use city-block art"
-    assert sum(bool(row.get("highway_lane_network")) for row in lane_dividers) == 384, "highway dividers were not rescaled"
     assert world.width * world.height == 6144 and world.data.get("playable_area_multiplier") == 2, "playable map area is not exact 2x"
     routes = v110_grid_population._build_traffic_routes(world)
     lane_pairs = {(row.get("lane_direction"), int(row.get("lane_index", 0))) for row in routes}
@@ -127,7 +139,8 @@ def main() -> None:
     server_source = (ROOT / "server.py").read_text(encoding="utf-8")
     assert "_traffic_should_yield_to_pedestrian" in server_source and '"horn": time.monotonic() < self.horn_until' in server_source
     assert "moved_aside" in server_source and 'allowed = {"walk", "sidewalk"}' in server_source
-    assert "fleeing_horn" in server_source and "npc.stuck_time" in server_source and "npc.route_direction *= -1" in server_source
+    assert "fleeing_horn" in server_source and "npc.stuck_time" in server_source
+    assert "ambient pedestrians are non-blocking to one another" in server_source
     assert "Install: %CD%" in updater_source and "Commit: !LOCAL_SHA!" in updater_source
     print(f"V120_PLAYER_REPORTS_OK signals={len(signals)} roof_decals={len(roof_decals)} centerlines={len(centerlines)} lane_dividers={len(lane_dividers)} zebras={len(zebra_art)} street_items={len(street_items)+len(lamps)} sidewalk_apron={v110_pedestrian_connectivity.SIDEWALK_APRON_FRACTION:.2f} sidewalk_drive=yes job_npcs=yes controls_tab=yes frames_removed=yes")
 

@@ -77,6 +77,10 @@ def main() -> None:
     import vehicle_catalog
     import vehicle_art
 
+    source = (ROOT / "vehicle_art.py").read_text(encoding="utf-8")
+    if 'meta.get("sheet_file")' not in source or 'pygame.transform.flip(source, False, True)' not in source:
+        fail("player sheet nose-down orientation is not normalized before heading rotation")
+
     vehicle_catalog.reload_vehicle_catalog()
     vehicle_art._base_car.cache_clear()
     vehicle_art._sheet_surface.cache_clear()

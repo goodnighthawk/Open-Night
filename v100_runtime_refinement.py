@@ -258,12 +258,23 @@ def apply_world_refinement(world):
         world._v100_layout_refined = True
         return world
 
-    # Generated files may already contain the six-lane dividers. Rebuild this
-    # derived layer from the authoritative centerlines so runtime and freshly
-    # generated assets cannot stack duplicate markings.
+    from v110_pedestrian_connectivity import road_bands
+    horizontal_roads, vertical_roads = road_bands(world)
+    junction_cells = {
+        (gx, gy)
+        for hband in horizontal_roads for vband in vertical_roads
+        for gx in range(vband.start, vband.end + 1)
+        for gy in range(hband.start, hband.end + 1)
+    }
+    # Rebuild the derived line layer and leave intersections visually clean.
+    # This is the deterministic road-art consolidation authority for #55/#56.
     world.objects[:] = [
         item for item in world.objects
         if not str(item.get("street_marking", "")).startswith("six_lane_divider_")
+        and not (
+            str(item.get("street_marking", "")).startswith("dashed_center_line_")
+            and (int(item.get("gx", -1)), int(item.get("gy", -1))) in junction_cells
+        )
     ]
 
     roof_rows = world.layers.get("roof")
@@ -370,16 +381,18 @@ def apply_world_refinement(world):
             item["offset_y_px"] = (world.cell_px - width) // 2
             item["registration_policy"] = "road_cell_center_v12"
 
-    # Each three-cell primary road is 768 px: six 128 px lanes. Four white
-    # dividers plus the yellow median make all six lanes
-    # visible; the traffic route builder supplies three usable lanes each way.
+    # Four white dividers plus the yellow median describe six full-clearance
+    # lanes. The central highway keeps wider shoulders than primary roads.
     lane_dividers = []
     for item in list(world.objects):
         marking = str(item.get("street_marking", ""))
         if marking not in {"dashed_center_line_vertical", "dashed_center_line_horizontal"}:
             continue
         highway = marking.endswith("horizontal") and int(item.get("gy", -1)) == 24
-        displacements = (-480, -320, -160, 160, 320, 480) if highway else (-256, -128, 128, 256)
+        if highway:
+            displacements = tuple(round(world.cell_px * ratio) for ratio in (-7/3, -7/6, 7/6, 7/3))
+        else:
+            displacements = tuple(round(world.cell_px * ratio) for ratio in (-5/3, -5/6, 5/6, 5/3))
         for divider_index, displacement in enumerate(displacements, start=1):
             divider = dict(item)
             divider["asset"] = "mark_white_repeating_single"
@@ -411,9 +424,8 @@ def apply_world_refinement(world):
         if not lighting_id or lighting_id in seen_lights:
             raise RuntimeError(f"streetlamp emitter record is missing/duplicated: {lighting_id!r}")
         seen_lights.add(lighting_id)
-        # The v1.2 road expansion replaced the old road bands, so the authored
-        # lamp grid coordinates can no longer be trusted. Move the fixture and
-        # its emitter together to the nearest free sidewalk cell.
+        # Anchor the base on the nearest free road-edge sidewalk and point the
+        # fixture over that road. Fixture and emitter share this exact record.
         source_x, source_y = int(item.get("gx", 0)), int(item.get("gy", 0))
         candidates = []
         for radius in range(0, 13):
@@ -427,37 +439,53 @@ def apply_world_refinement(world):
                         continue
                     cx, cy = world.cell_center(gx, gy)
                     if world.collision_at("ground", cx, cy) == "sidewalk":
-                        candidates.append((radius, gy, gx))
+                        road_dirs = []
+                        for direction, (nx, ny) in (
+                            ("north", (gx, gy - 1)), ("east", (gx + 1, gy)),
+                            ("south", (gx, gy + 1)), ("west", (gx - 1, gy)),
+                        ):
+                            if 0 <= nx < world.width and 0 <= ny < world.height:
+                                tx, ty = world.cell_center(nx, ny)
+                                if world.collision_at("ground", tx, ty) == "road":
+                                    road_dirs.append(direction)
+                        if road_dirs:
+                            candidates.append((radius, gy, gx, road_dirs[0]))
             if candidates:
                 break
         if not candidates:
             raise RuntimeError(f"streetlamp has no nearby sidewalk placement: {lighting_id}")
-        _, gy, gx = min(candidates)
+        _, gy, gx, road_direction = min(candidates)
         item["gx"], item["gy"] = gx, gy
-        rotation = int(item.get("rotation", 0)) % 360
+        rotation = {"north": 0, "east": 90, "south": 180, "west": 270}[road_direction]
+        item["rotation"] = rotation
+        source_w, source_h = 204, 768
         if rotation == 0:
-            offset_x, offset_y, light_x, light_y = 94, 0, 34, 215
+            base, fixture = (source_w // 2, int(source_h * .90)), (source_w // 2, int(source_h * .10))
         elif rotation == 90:
-            offset_x, offset_y, light_x, light_y = 0, 94, 40, 34
+            base, fixture = (int(source_h * .90), source_w // 2), (int(source_h * .10), source_w // 2)
         elif rotation == 180:
-            offset_x, offset_y, light_x, light_y = 94, 0, 33, 40
+            base, fixture = (source_w // 2, int(source_h * .10)), (source_w // 2, int(source_h * .90))
         else:
-            offset_x, offset_y, light_x, light_y = 0, 94, 215, 33
+            base, fixture = (int(source_h * .10), source_w // 2), (int(source_h * .90), source_w // 2)
+        offset_x = world.cell_px // 2 - base[0]
+        offset_y = world.cell_px // 2 - base[1]
+        light_x, light_y = fixture
         item["offset_x_px"] = offset_x
         item["offset_y_px"] = offset_y
-        item["width_px"] = 68
-        item["height_px"] = 256
-        item["placement_policy"] = "nearest_free_sidewalk_cell_v12"
+        item["width_px"] = source_w
+        item["height_px"] = source_h
+        item["placement_policy"] = "road_edge_base_anchor_overhang_v13"
+        item["road_overhang_direction"] = road_direction
         occupied_lamp_cells.add((gx, gy))
         _install_city_block_street_item_defs(world)
         item["asset"] = "street_item_lamp"
         item["emits_light"] = True
         item["light_offset_x_px"] = light_x
         item["light_offset_y_px"] = light_y
-        item["light_radius_px"] = 420
-        item["light_color_rgb"] = [112, 176, 255]
-        item["light_intensity"] = 0.34
-        item["light_registration"] = "rectangular_fixture_center_report49"
+        item["light_radius_px"] = 720
+        item["light_color_rgb"] = [92, 145, 255]
+        item["light_intensity"] = 0.28
+        item["light_registration"] = "three_x_fixture_road_overhang_report57"
         item["fixture_light_sync"] = "same_grid_object_record"
         lamp_count += 1
 
@@ -479,6 +507,8 @@ def apply_world_refinement(world):
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
         "fixture_and_emitter_authority": "same_grid_object_record",
+        "junction_clear_cell_count": len(junction_cells),
+        "road_art_authority": "grunge_neon_clean_junctions_v130",
         **street_item_counts,
     })
     world._v100_layout_refined = True
