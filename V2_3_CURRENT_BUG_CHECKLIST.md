@@ -21,4 +21,6 @@ Started from a complete GitHub issue-mirror pull on 2026-08-22. The snapshot con
 - [x] Pull the complete current report mirror and inspect all eleven attached screenshots.
 - [x] Add focused behavioral checks for #150–#160 and render a runtime visual review sheet.
 - [x] Pass the complete carried report, multiplayer, traffic, collision, launcher, version, and visual gates.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+
+Verified release commit `87e339e7a0ec6a2875eca3d668df660d48c7d502`: all GitHub Actions passed, Railway deployment `24655946-bb70-4908-94aa-b751ef6bccb7` succeeded, and the live WebSocket reported version `2.3`.
