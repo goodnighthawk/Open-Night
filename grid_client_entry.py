@@ -215,7 +215,7 @@ def _minimap_tile_color(game: game_client.Game, tile) -> tuple[int, int, int]:
 
 
 def _draw_grid_local_minimap(game: game_client.Game) -> None:
-    """Circular minimap whose geometry comes only from GridWorld cells."""
+    """Square minimap whose geometry comes only from GridWorld cells."""
     if not _grid_map_authority_available(game):
         return
     local = game.players.get(game.local_id or "")
@@ -223,7 +223,9 @@ def _draw_grid_local_minimap(game: game_client.Game) -> None:
         return
 
     ui = game.art_style.get("ui", {})
-    diameter = 194
+    hud_v3 = getattr(game, "hud_v3", None)
+    screen_size = game.screen.get_size()
+    diameter = hud_v3.minimap_diameter(screen_size) if hud_v3 is not None else 194
     radius = diameter // 2
     world_radius = 1050.0 if getattr(local, "in_vehicle", False) else 760.0
     scale = radius / world_radius
@@ -248,16 +250,13 @@ def _draw_grid_local_minimap(game: game_client.Game) -> None:
             rect = pygame.Rect(x0, y0, max(1, x1 - x0 + 1), max(1, y1 - y0 + 1))
             pygame.draw.rect(mini, _minimap_tile_color(game, tile), rect)
 
-    # Circular crop after tile geometry, before dynamic markers.
-    circle_mask = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-    pygame.draw.circle(circle_mask, (255, 255, 255, 255), (radius, radius), radius - 3)
-    mini.blit(circle_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-    pygame.draw.circle(mini, border, (radius, radius), radius - 2, width=7)
+    # HUD 3.0 keeps the complete square tile surface visible.
+    pygame.draw.rect(mini, border, mini.get_rect().inflate(-4, -4), width=5)
 
     def marker_point(x: float, y: float) -> tuple[int, int] | None:
         dx = float(x) - local.render_x
         dy = float(y) - local.render_y
-        if dx * dx + dy * dy > (world_radius * 0.94) ** 2:
+        if max(abs(dx), abs(dy)) > world_radius * 0.94:
             return None
         return int(radius + dx * scale), int(radius + dy * scale)
 
@@ -295,16 +294,22 @@ def _draw_grid_local_minimap(game: game_client.Game) -> None:
     pygame.draw.polygon(mini, (244, 244, 237), [tip, left, right])
     pygame.draw.polygon(mini, border, [tip, left, right], width=1)
 
-    game.screen.blit(mini, (18, game.screen.get_height() - diameter - 58))
+    mini_x, mini_y = (
+        hud_v3.minimap_origin(screen_size, diameter)
+        if hud_v3 is not None
+        else (18, game.screen.get_height() - diameter - 58)
+    )
+    game.screen.blit(mini, (mini_x, mini_y))
     north = game.small_font.render("N", True, game_client.TEXT_COLOR)
-    game.screen.blit(north, (18 + radius - north.get_width() // 2, game.screen.get_height() - diameter - 53))
+    game.screen.blit(north, (mini_x + radius - north.get_width() // 2, mini_y + 5))
 
     # Until names have explicit GridWorld-owned anchors, identify the current
     # authoritative cell. No legacy landmark/district coordinates are read.
     cell_x, cell_y = world.world_to_cell(local.render_x, local.render_y)
     name = f"OPEN NIGHT — GRID {cell_x:02d},{cell_y:02d}"
     label_s = game.small_font.render(str(name).upper()[:28], True, game_client.TEXT_COLOR)
-    box = pygame.Rect(18, game.screen.get_height() - 52, max(194, label_s.get_width() + 28), 38)
+    box_width = max(diameter, label_s.get_width() + 28)
+    box = pygame.Rect(mini_x + diameter - box_width, mini_y + diameter + 6, box_width, 38)
     pygame.draw.rect(game.screen, tuple(ui.get("panel", (28, 31, 31))), box, border_radius=3)
     pygame.draw.rect(game.screen, tuple(ui.get("panel_edge", (92, 92, 84))), box, width=1, border_radius=3)
     game.screen.blit(label_s, label_s.get_rect(center=box.center))

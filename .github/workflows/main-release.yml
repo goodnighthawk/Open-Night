@@ -22,6 +22,7 @@ jobs:
           python -m py_compile
           main.py railway_entry.py v100_client.py v100_server.py
           open_night_launcher.py open_night_player_launcher.py
+          hud_v3.py tools/audit_hud_v3_runtime.py
           vehicle_art.py vehicle_catalog.py
           v110_grid_population.py v110_pedestrian_flow.py v110_pedestrian_connectivity.py
           v110_vehicle_proportions.py v110_traffic_recovery.py
@@ -158,6 +159,11 @@ jobs:
           python tools/audit_v280_bug_intake.py
           python tools/audit_v280_current_reports.py
           python tools/capture_v280_visual_review.py
+      - name: Verify v3.0 HUD shell
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_hud_v3_runtime.py
       - name: Verify deterministic authored map data
         run: python tools/deterministic_traffic_audit.py
       - name: Verify release audit bundle

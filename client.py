@@ -71,6 +71,7 @@ from gameplay.input_controller import movement_vector
 from gameplay.issue_reporter import save_issue_report
 from gameplay.audio import GameAudio
 from gameplay.radio import RADIO_STATIONS, RadioPlayer
+from hud_v3 import HudV3Shell
 from portable_paths import describe as shared_data_description
 from portable_map_runtime import cached_map_hashes, install_transfer_bundle, load_cached_map
 from mapfiles.grid import chunk_label
@@ -1247,6 +1248,7 @@ class Game:
         self.environment = EnvironmentRenderer(self.map_config)
         self.grid_world = load_ground_grid() if ground_grid_enabled(self.map_config) else None
         self.grid_renderer = GridRenderer(self.grid_world) if self.grid_world is not None else None
+        self.hud_v3 = HudV3Shell()
         self.inventory = empty_inventory()
         self.inventory_open = False
         self.map_open = False
@@ -1791,7 +1793,14 @@ class Game:
             dt,
             driving=bool(getattr(local, "in_vehicle", False)),
             view_rotation_degrees=self.camera_rotation_degrees,
-            force_center=bool(self.camera_rotation_dragging or (self.camera_center_player_when_rotated and self.camera_rotation_enabled and abs(self.camera_rotation_degrees % 360.0) > 0.01)),
+            # HUD 3.0 reserves fixed screen-space panels around a strict center
+            # opening, so the local top-down sprite remains visible there.
+            force_center=bool(
+                hasattr(self, "hud_v3")
+                or self.camera_rotation_dragging
+                or (self.camera_center_player_when_rotated and self.camera_rotation_enabled
+                    and abs(self.camera_rotation_degrees % 360.0) > 0.01)
+            ),
         )
 
     def world_to_screen(self, x: float, y: float) -> tuple[int, int]:
@@ -2891,6 +2900,7 @@ class Game:
         if local is None or self.interior.active or self.inventory_open or self.map_open:
             return
         w, h = self.screen.get_size()
+        status_bottom = h - 118 if hasattr(self, "hud_v3") else h - 18
         if getattr(local, "in_vehicle", False):
             kind = getattr(local, "vehicle_kind", "")
             if kind == "bicycle":
@@ -2898,7 +2908,7 @@ class Game:
                 if bike is not None:
                     mph = int(abs(bike.speed) * 0.18)
                     text = self.font.render(f"BICYCLE   {mph:02d} mph   [T] DISMOUNT", True, TEXT_COLOR)
-                    box = text.get_rect(midbottom=(w // 2, h - 18)).inflate(22, 12)
+                    box = text.get_rect(midbottom=(w // 2, status_bottom)).inflate(22, 12)
                     pygame.draw.rect(self.screen, (18,20,21), box, border_radius=5)
                     pygame.draw.rect(self.screen, (84,136,92), box, width=1, border_radius=5)
                     self.screen.blit(text, text.get_rect(center=box.center))
@@ -2912,7 +2922,7 @@ class Game:
                 else:
                     caption = f"DRIVER   {car.vehicle_class.upper()}   {mph:02d} mph   [SPACE] HANDBRAKE   [SHIFT] BOOST   [T] EXIT"
                 text = self.font.render(caption, True, TEXT_COLOR)
-                box = text.get_rect(midbottom=(w // 2, h - 18)).inflate(22, 12)
+                box = text.get_rect(midbottom=(w // 2, status_bottom)).inflate(22, 12)
                 pygame.draw.rect(self.screen, (18,20,21), box, border_radius=5)
                 pygame.draw.rect(self.screen, (100,104,104), box, width=1, border_radius=5)
                 self.screen.blit(text, text.get_rect(center=box.center))
@@ -2935,7 +2945,7 @@ class Game:
             text = self.font.render(f"[{key}] {action} {car.vehicle_class.upper()}", True, LOCAL_COLOR)
         else:
             return
-        box = text.get_rect(midbottom=(w // 2, h - 18)).inflate(22, 12)
+        box = text.get_rect(midbottom=(w // 2, status_bottom)).inflate(22, 12)
         pygame.draw.rect(self.screen, (18,20,21), box, border_radius=5)
         pygame.draw.rect(self.screen, (120,111,63), box, width=1, border_radius=5)
         self.screen.blit(text, text.get_rect(center=box.center))
@@ -3174,19 +3184,32 @@ class Game:
         if not self.chat_active:
             return
         w, h = self.screen.get_size()
-        rect = pygame.Rect(max(18, w // 2 - 360), h - 66, min(720, w - 36), 44)
-        pygame.draw.rect(self.screen, (17, 19, 20), rect, border_radius=6)
-        pygame.draw.rect(self.screen, REMOTE_COLOR, rect, width=2, border_radius=6)
+        hud_v3 = getattr(self, "hud_v3", None)
+        rect = (
+            hud_v3.chat_input_rect((w, h))
+            if hud_v3 is not None
+            else pygame.Rect(max(18, w // 2 - 360), h - 66, min(720, w - 36), 44)
+        )
+        self.chat_input_rect = rect.copy()
+        if hud_v3 is not None:
+            glass = pygame.Surface(rect.size, pygame.SRCALPHA)
+            glass.fill((2, 8, 13, 205))
+            self.screen.blit(glass, rect)
+            pygame.draw.rect(self.screen, (37, 226, 255), rect, width=2, border_radius=3)
+        else:
+            pygame.draw.rect(self.screen, (17, 19, 20), rect, border_radius=6)
+            pygame.draw.rect(self.screen, REMOTE_COLOR, rect, width=2, border_radius=6)
         prompt = self.chat_text + ("_" if int(time.monotonic() * 2) % 2 == 0 else "")
         shown = self.font.render(prompt[-90:], True, TEXT_COLOR)
         if self.chat_select_all and self.chat_text:
             selection = pygame.Rect(rect.x + 10, rect.y + 7, min(shown.get_width() + 7, rect.width - 20), shown.get_height() + 8)
             pygame.draw.rect(self.screen, (54, 82, 105), selection, border_radius=2)
         self.screen.blit(shown, (rect.x + 14, rect.y + 11))
-        bug_hint = self.tiny_font.render("/bug describe what went wrong — saves a screenshot to the human-approval queue", True, INV_SELECTED)
-        command_hint = self.tiny_font.render("/sms FriendName message (TAB completes)   /w whisper   CTRL+A/C/X/V edit", True, MUTED_TEXT)
-        self.screen.blit(bug_hint, (rect.x + 8, rect.y - 34))
-        self.screen.blit(command_hint, (rect.x + 8, rect.y - 18))
+        if hud_v3 is None:
+            bug_hint = self.tiny_font.render("/bug describe what went wrong — saves a screenshot to the human-approval queue", True, INV_SELECTED)
+            command_hint = self.tiny_font.render("/sms FriendName message (TAB completes)   /w whisper   CTRL+A/C/X/V edit", True, MUTED_TEXT)
+            self.screen.blit(bug_hint, (rect.x + 8, rect.y - 34))
+            self.screen.blit(command_hint, (rect.x + 8, rect.y - 18))
 
     def draw_sms_inbox(self) -> None:
         if not self.sms_open:
@@ -3269,6 +3292,11 @@ class Game:
         pygame.draw.line(self.screen, (220, 205, 150), (box.left + 3, box.centery), (box.right - 3, box.centery), 2)
 
     def draw_inventory(self) -> None:
+        # HUD 3.0 renders the combined character/inventory shell from draw_hud.
+        # Keep this legacy implementation available to older entry points, but
+        # never paint its 5x4 panel over the new 10x6 presentation grid.
+        if hasattr(self, "hud_v3"):
+            return
         if not self.inventory_open:
             return
         w, h = self.screen.get_size()
@@ -3734,7 +3762,9 @@ class Game:
             return
         ui = self.art_style.get("ui", {})
         env = self.art_style.get("environment", {})
-        diameter = 194
+        hud_v3 = getattr(self, "hud_v3", None)
+        screen_size = self.screen.get_size()
+        diameter = hud_v3.minimap_diameter(screen_size) if hud_v3 is not None else 194
         radius = diameter // 2
         world_radius = 1050.0 if getattr(local, "in_vehicle", False) else 760.0
         scale = radius / world_radius
@@ -3802,11 +3832,8 @@ class Game:
                     lab = self.tiny_font.render(chunk_label(gx, gy), True, (224, 225, 218))
                     mini.blit(lab, lab.get_rect(center=lp))
 
-        # Darken outside a perfect circular mask.
-        circle_mask = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-        pygame.draw.circle(circle_mask, (255,255,255,255), (radius,radius), radius-3)
-        mini.blit(circle_mask, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
-        pygame.draw.circle(mini, border, (radius,radius), radius-2, width=7)
+        # HUD 3.0 uses the full square surface instead of the retired circular crop.
+        pygame.draw.rect(mini, border, mini.get_rect().inflate(-4, -4), width=5)
         # Collect job markers now and paint them after the local arrow. A buyer
         # at the player's exact position must remain visible instead of being
         # completely covered by the arrow/center dot.
@@ -3820,7 +3847,7 @@ class Game:
                 dy = float(raw_pos[1]) - local.render_y
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
-            if dx * dx + dy * dy <= (world_radius * 0.94) ** 2:
+            if max(abs(dx), abs(dy)) <= world_radius * 0.94:
                 marker_pos = (int(radius + dx * scale), int(radius + dy * scale))
                 minimap_job_markers.append((marker_pos, marker_color, "S" if role == "supplier" else "B"))
 
@@ -3834,7 +3861,7 @@ class Game:
                 dy = float(marker.get("y", 0.0)) - local.render_y
             except (TypeError, ValueError):
                 continue
-            if dx * dx + dy * dy > (world_radius * 0.94) ** 2:
+            if max(abs(dx), abs(dy)) > world_radius * 0.94:
                 continue
             friend_pos = (int(radius + dx * scale), int(radius + dy * scale))
             pygame.draw.circle(mini, (18, 24, 28), friend_pos, 6)
@@ -3851,16 +3878,22 @@ class Game:
             pygame.draw.circle(mini, marker_color, marker_pos, 9, width=3)
             badge = self.tiny_font.render(role_letter, True, marker_color)
             mini.blit(badge, badge.get_rect(center=marker_pos))
-        self.screen.blit(mini, (18, self.screen.get_height() - diameter - 58))
+        mini_x, mini_y = (
+            hud_v3.minimap_origin(screen_size, diameter)
+            if hud_v3 is not None
+            else (18, self.screen.get_height() - diameter - 58)
+        )
+        self.screen.blit(mini, (mini_x, mini_y))
         n = self.small_font.render("N", True, TEXT_COLOR)
-        self.screen.blit(n, (18 + radius - n.get_width()//2, self.screen.get_height() - diameter - 53))
+        self.screen.blit(n, (mini_x + radius - n.get_width()//2, mini_y + 5))
 
         name, _kind = self._nearest_named_map_feature(local)
         label = str(name).upper()
         ccx, ccy = world_to_chunk(local.render_x, local.render_y, self.map_config)
         label = f"{label[:20]}  •  {chunk_label(ccx, ccy)}"
         label_s = self.small_font.render(label[:30], True, TEXT_COLOR)
-        box = pygame.Rect(18, self.screen.get_height()-52, max(194, label_s.get_width()+28), 38)
+        box_width = max(diameter, label_s.get_width() + 28)
+        box = pygame.Rect(mini_x + diameter - box_width, mini_y + diameter + 6, box_width, 38)
         pygame.draw.rect(self.screen, tuple(ui.get("panel", (28,31,31))), box, border_radius=3)
         pygame.draw.rect(self.screen, tuple(ui.get("panel_edge", (92,92,84))), box, width=1, border_radius=3)
         self.screen.blit(label_s, label_s.get_rect(center=box.center))
@@ -3904,9 +3937,114 @@ class Game:
         self.screen.blit(a, (box.x+14, box.y+10))
         self.screen.blit(b, (box.x+14, box.y+34))
 
+    def _draw_hud3_interaction_prompt(self, local) -> None:
+        """Preserve mature world interactions without reviving the legacy HUD."""
+        if local is None or self.inventory_open or self.map_open or self.pause_menu_open:
+            return
+        fire_escape_target = None
+        if self.grid_world is not None and not local.interior_id and not bool(getattr(local, "in_vehicle", False)):
+            transition = self.grid_world.fire_escape_transition(
+                local.render_x, local.render_y, int(getattr(local, "level", 0))
+            )
+            if transition is not None:
+                fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
+
+        near_supplier = False
+        for row in self._job_locations():
+            if str(row.get("role", "")).lower() != "supplier":
+                continue
+            if int(row.get("level", 0)) != int(getattr(local, "level", 0)):
+                continue
+            try:
+                pos = row["pos"]
+                if math.hypot(local.render_x - float(pos[0]), local.render_y - float(pos[1])) <= INTERACT_DISTANCE:
+                    near_supplier = True
+                    break
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+
+        sales_targets: list[tuple[float, str]] = []
+        for player in self.players.values():
+            if (player.id == self.local_id or player.in_vehicle
+                    or player.interior_id != local.interior_id
+                    or int(getattr(player, "level", 0)) != int(getattr(local, "level", 0))):
+                continue
+            distance = math.hypot(local.render_x - player.render_x, local.render_y - player.render_y)
+            if distance <= INTERACT_DISTANCE:
+                sales_targets.append((distance, player.name))
+        if not local.interior_id:
+            for npc in self.npcs.values():
+                if int(getattr(npc, "level", 0)) != int(getattr(local, "level", 0)):
+                    continue
+                distance = math.hypot(local.render_x - npc.render_x, local.render_y - npc.render_y)
+                if distance > INTERACT_DISTANCE:
+                    continue
+                role = str(getattr(npc, "kind", "pedestrian")).lower()
+                if role != "supplier":
+                    sales_targets.append((distance, "BUYER" if role == "buyer" else "PEDESTRIAN"))
+
+        if not (fire_escape_target or near_supplier or sales_targets):
+            return
+        target = fire_escape_target or (
+            "BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}"
+        )
+        prompt = self.font.render(f"[ E ] {target}", True, (37, 226, 255))
+        rect = prompt.get_rect(center=(self.screen.get_width() // 2, self.screen.get_height() - 154))
+        glass = pygame.Surface(rect.inflate(24, 14).size, pygame.SRCALPHA)
+        glass.fill((2, 8, 13, 188))
+        self.screen.blit(glass, rect.inflate(24, 14).topleft)
+        pygame.draw.rect(self.screen, (37, 226, 255), rect.inflate(24, 14), width=1, border_radius=3)
+        self.screen.blit(prompt, rect)
+
+    def _activate_hud3_navigation(self, action: str) -> str | None:
+        """Open the mature pause/message pages from HUD 3.0's top tabs."""
+        self.hud_v3.drag_kind = None
+        if action == "resume":
+            self.inventory_open = False
+            return None
+        if action == "messages":
+            self.inventory_open = False
+            self.sms_open = True
+            self.sms_unread = 0
+            self.network.send({"type": "sms_mark_read"})
+            self.network.send({"type": "sms_request"})
+            for row in self.sms_messages:
+                row["unread"] = False
+            return None
+        if action in {"settings", "radio", "controls", "friends"}:
+            self.inventory_open = False
+            self.pause_menu_open = True
+            self.pause_page = action
+            self.pause_scroll = 0
+            return None
+        if action == "quit":
+            return "quit"
+        return None
+
     def draw_hud(self) -> None:
         w, h = self.screen.get_size()
         local = self.players.get(self.local_id or "")
+        if hasattr(self, "hud_v3"):
+            self.hud_v3.draw(self, overlay_open=self.inventory_open)
+            self.draw_local_minimap()
+            self._draw_hud3_interaction_prompt(local)
+            self.draw_vehicle_status()
+            self.draw_chunk_debug_overlay()
+            if bool(self.settings.get("debug", {}).get("show_camera_lookahead", False)):
+                cx, cy = w // 2, h // 2
+                lx = int(cx + self.camera_controller.look_x)
+                ly = int(cy + self.camera_controller.look_y)
+                pygame.draw.line(self.screen, (120, 170, 210), (cx, cy), (lx, ly), 1)
+                pygame.draw.circle(self.screen, (120, 170, 210), (lx, ly), 4, width=1)
+            if time.monotonic() < self.notice_until:
+                notice = self.small_font.render(self.notice, True, TEXT_COLOR)
+                rect = notice.get_rect(center=(w // 2, h - 132 if self.inventory_open else 34))
+                panel = pygame.Surface(rect.inflate(20, 10).size, pygame.SRCALPHA)
+                panel.fill((2, 8, 13, 205))
+                self.screen.blit(panel, rect.inflate(20, 10).topleft)
+                pygame.draw.rect(self.screen, (255, 47, 217), rect.inflate(20, 10), width=1, border_radius=3)
+                self.screen.blit(notice, rect)
+            return
         ui = self.art_style.get("ui", {})
         panel_rgb = tuple(ui.get("panel", (28,31,31)))
         panel_edge = tuple(ui.get("panel_edge", (92,92,84)))
@@ -4004,6 +4142,7 @@ class Game:
                             if self.sms_open:
                                 self.sms_unread = 0
                                 self.inventory_open = False
+                                self.hud_v3.drag_kind = None
                                 self.map_open = False
                                 self.pause_menu_open = False
                                 self.network.send({"type": "sms_mark_read"})
@@ -4071,11 +4210,25 @@ class Game:
                                 self.map_open = False
                             elif self.inventory_open:
                                 self.inventory_open = False
+                                self.hud_v3.drag_kind = None
                             else:
-                                self.pause_menu_open = True
-                                self.pause_page = "main"
+                                self.inventory_open = True
+                                self.network.send({"type": "inventory_request"})
+                            continue
+                        if self.inventory_open and event.key in (pygame.K_o, pygame.K_j, pygame.K_c, pygame.K_f, pygame.K_q):
+                            action = {
+                                pygame.K_o: "settings",
+                                pygame.K_j: "radio",
+                                pygame.K_c: "controls",
+                                pygame.K_f: "friends",
+                                pygame.K_q: "quit",
+                            }[event.key]
+                            if self._activate_hud3_navigation(action) == "quit":
+                                running = False
                             continue
                         if self.pause_menu_open:
+                            continue
+                        if self.hud_v3.handle_keydown(event, overlay_open=self.inventory_open):
                             continue
                         if event.key == pygame.K_SPACE and not self.inventory_open and not self.map_open:
                             local = self.players.get(self.local_id or "")
@@ -4091,10 +4244,13 @@ class Game:
                             self.map_open = not self.map_open
                             if self.map_open:
                                 self.inventory_open = False
+                                self.hud_v3.drag_kind = None
                         elif event.key in (pygame.K_i, pygame.K_TAB) and not self.map_open:
                             self.inventory_open = not self.inventory_open
                             if self.inventory_open:
                                 self.network.send({"type": "inventory_request"})
+                            else:
+                                self.hud_v3.drag_kind = None
                         elif event.key == pygame.K_e and not self.inventory_open and not self.map_open:
                             local = self.players.get(self.local_id or "")
                             if local is not None and bool(getattr(local, "in_vehicle", False)):
@@ -4115,17 +4271,9 @@ class Game:
                                 self.network.send({"type": "vehicle_lights", "action": "headlights"})
                         elif event.key == pygame.K_t and not self.inventory_open and not self.map_open:
                             self.network.send({"type": "car_action"})
-                        elif self.inventory_open and event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
-                            row, col = divmod(self.selected_slot, INVENTORY_COLS)
-                            if event.key == pygame.K_LEFT:
-                                col = max(0, col - 1)
-                            elif event.key == pygame.K_RIGHT:
-                                col = min(INVENTORY_COLS - 1, col + 1)
-                            elif event.key == pygame.K_UP:
-                                row = max(0, row - 1)
-                            elif event.key == pygame.K_DOWN:
-                                row = min(INVENTORY_ROWS - 1, row + 1)
-                            self.selected_slot = row * INVENTORY_COLS + col
+                    elif event.type == pygame.KEYUP:
+                        if self.hud_v3.handle_keyup(event):
+                            continue
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
                         if self.issue_report_open:
                             continue
@@ -4155,19 +4303,16 @@ class Game:
                             if self.handle_main_audio_click(event.pos):
                                 continue
                         if self.inventory_open:
-                            slot = self.inventory_slot_at(event.pos)
-                            if slot is not None:
-                                self.selected_slot = slot
-                                if self.inventory[slot] is not None:
-                                    self.drag_source = slot
+                            navigation = self.hud_v3.navigation_at(event.pos)
+                            if navigation is not None:
+                                if self._activate_hud3_navigation(navigation) == "quit":
+                                    running = False
+                                continue
+                            self.hud_v3.handle_mouse_down(event.pos)
                     elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.inventory_open:
-                        if self.drag_source is not None:
-                            target = self.inventory_slot_at(event.pos)
-                            if target is not None and target != self.drag_source:
-                                self.network.send({"type": "inventory_move", "source": self.drag_source, "target": target})
-                                self.selected_slot = target
-                            self.drag_source = None
+                        self.hud_v3.handle_mouse_up(event.pos)
 
+                self.hud_v3.update(dt)
                 self.poll_hot_reload()
                 self.process_network()
                 for pid, player in self.players.items():

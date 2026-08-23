@@ -330,7 +330,10 @@ def main() -> int:
         server.memory_accounts.clear()
         server.memory_accounts.update(old_accounts)
 
-    require(results["version"] == "2.8", "release version is not 2.8")
+    require(
+        tuple(int(part) for part in results["version"].split(".")) >= (2, 8),
+        "release version no longer carries v2.8",
+    )
     print("V2.8 CURRENT REPORTS AUDIT: PASS")
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0

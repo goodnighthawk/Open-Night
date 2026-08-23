@@ -81,7 +81,7 @@ from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_met
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v2.8"
+SERVER_NAME = "Open Night v3.0"
 # v2.5 runtime validation replaces this fallback with the exact number of
 # enterable GridWorld buildings. Keep the cold-start/default identity aligned
 # with the current 30-building map so discovery is never advertised as 128.
