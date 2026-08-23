@@ -21,4 +21,4 @@ v2.6 carries the complete verified v2.5 player-report backlog through GitHub iss
 
 - [x] Advance launcher, client, server, public-discovery, and Railway patch authority to version 2.6.
 - [x] Pass the focused v2.6 asset/map release audit and every carried release suite locally.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
