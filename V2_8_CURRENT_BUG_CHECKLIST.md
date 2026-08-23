@@ -26,4 +26,4 @@ v2.8 carries the complete verified report history through GitHub issue #192 and 
 - [x] Run focused simulations for population counts, clustering, traffic overlap, rooftop roles, dog pairs, passenger boarding, vehicle orientation, planter clearance, and bridge placement.
 - [x] Render and inspect a v2.8 visual proof sheet from the runtime assets.
 - [x] Advance launcher, client, server, public-discovery, and Railway patch authority together to v2.8.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
