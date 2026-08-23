@@ -1180,6 +1180,7 @@ class RemoteNPC:
         self.appearance = normalize_character(data.get("appearance"))
         self.kind = str(data.get("kind", "pedestrian"))
         self.companion_id = str(data.get("companion_id", ""))
+        self.level = int(data.get("level", 0) or 0)
         self.moving_until = time.monotonic() + 0.3
         self.anim_epoch = time.monotonic() + random.random() * 4.0
 
@@ -1192,6 +1193,7 @@ class RemoteNPC:
         self.aim = float(data.get("aim", self.aim))
         self.kind = str(data.get("kind", self.kind))
         self.companion_id = str(data.get("companion_id", self.companion_id))
+        self.level = int(data.get("level", self.level) or 0)
         if "appearance" in data:
             self.appearance = normalize_character(data.get("appearance"))
 
@@ -2922,7 +2924,7 @@ class Game:
             action = "TAKE" if bike.rider == "npc" else "RIDE"
             text = self.font.render(f"[T] {action} BICYCLE", True, (108, 202, 126))
         elif car is not None:
-            if car.driver == "player":
+            if car.driver in {"player", "npc"}:
                 action = "RIDE AS PASSENGER" if car.passengers < car.passenger_capacity else "CAR FULL"
                 key = "E"
             else:
@@ -2957,7 +2959,12 @@ class Game:
         for npc in self.npcs.values():
             role = str(getattr(npc, "kind", "")).lower()
             if role in {"supplier", "buyer"}:
-                candidates.append({"role": role, "pos": [npc.render_x, npc.render_y], "id": str(npc.id)})
+                candidates.append({
+                    "role": role,
+                    "pos": [npc.render_x, npc.render_y],
+                    "id": str(npc.id),
+                    "level": int(getattr(npc, "level", 0)),
+                })
         if not candidates:
             candidates.extend((
                 {"role": "supplier", "pos": self.map_config.get("supplier_pos", SUPPLIER_POS)},
@@ -2980,12 +2987,15 @@ class Game:
     def draw_job_location_labels(self) -> None:
         """Draw supplier/buyer labels in final screen space so they stay horizontal."""
         local_world_player = self.players.get(self.local_id or "")
-        if local_world_player is not None and int(getattr(local_world_player, "level", 0)) < 0:
+        active_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
+        if active_level < 0:
             return
         w, h = self.screen.get_size()
         for npc in self.npcs.values():
             role = str(getattr(npc, "kind", "")).lower()
             if role not in {"supplier", "buyer"}:
+                continue
+            if int(getattr(npc, "level", 0)) != active_level:
                 continue
             raw_pos = (npc.render_x, npc.render_y)
             color = SUPPLIER_COLOR if role == "supplier" else CUSTOMER_COLOR
@@ -3904,7 +3914,11 @@ class Game:
             self.screen.blit(self.big_font.render(f"${local.cash}", True, TEXT_COLOR), (30, 48))
             count = inventory_count(self.inventory, "package")
             self.screen.blit(self.font.render(f"Inventory: {count} package{'s' if count != 1 else ''}   [I]", True, TEXT_COLOR), (30, 83))
-            supplier_positions = [row["pos"] for row in self._job_locations() if str(row["role"]).lower() == "supplier"]
+            supplier_positions = [
+                row["pos"] for row in self._job_locations()
+                if str(row["role"]).lower() == "supplier"
+                and int(row.get("level", 0)) == int(getattr(local, "level", 0))
+            ]
             near_supplier = any(
                 math.hypot(local.render_x - float(pos[0]), local.render_y - float(pos[1])) <= INTERACT_DISTANCE
                 for pos in supplier_positions
@@ -3919,13 +3933,17 @@ class Game:
                     fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
             sales_targets: list[tuple[float, str]] = []
             for player in self.players.values():
-                if player.id == self.local_id or player.in_vehicle or player.interior_id != local.interior_id:
+                if (player.id == self.local_id or player.in_vehicle
+                        or player.interior_id != local.interior_id
+                        or int(getattr(player, "level", 0)) != int(getattr(local, "level", 0))):
                     continue
                 d = math.hypot(local.render_x - player.render_x, local.render_y - player.render_y)
                 if d <= INTERACT_DISTANCE:
                     sales_targets.append((d, player.name))
             if not local.interior_id:
                 for npc in self.npcs.values():
+                    if int(getattr(npc, "level", 0)) != int(getattr(local, "level", 0)):
+                        continue
                     d = math.hypot(local.render_x - npc.render_x, local.render_y - npc.render_y)
                     if d <= INTERACT_DISTANCE:
                         role = str(getattr(npc, "kind", "pedestrian")).lower()
@@ -4076,7 +4094,7 @@ class Game:
                                 self.network.send({"type": "vehicle_lights", "action": "right"})
                             else:
                                 car = self.nearest_client_vehicle()
-                                if car is not None and car.driver == "player":
+                                if car is not None and car.driver in {"player", "npc"}:
                                     self.network.send({"type": "passenger_action"})
                                 elif not self.try_enter_interior():
                                     self.network.send({"type": "interact"})
@@ -4231,7 +4249,10 @@ class Game:
                         # system. Negative-level players are hidden from the surface.
                         drawables.extend((self.camera_depth(car.render_x, car.render_y), "car", car) for car in self.vehicles.values())
                         drawables.extend((self.camera_depth(bike.render_x, bike.render_y), "bike", bike) for bike in self.bicycles.values())
-                        drawables.extend((self.camera_depth(npc.render_x, npc.render_y), "npc", npc) for npc in self.npcs.values())
+                        drawables.extend(
+                            (self.camera_depth(npc.render_x, npc.render_y), "npc", npc)
+                            for npc in self.npcs.values() if int(getattr(npc, "level", 0)) == 0
+                        )
                         drawables.extend(
                             (self.camera_depth(player.render_x, player.render_y), "player", player)
                             for player in self.players.values() if int(getattr(player, "level", 0)) == 0
@@ -4243,6 +4264,10 @@ class Game:
                         drawables.extend(
                             (self.camera_depth(player.render_x, player.render_y), "player", player)
                             for player in self.players.values() if int(getattr(player, "level", 0)) == 1
+                        )
+                        drawables.extend(
+                            (self.camera_depth(npc.render_x, npc.render_y), "npc", npc)
+                            for npc in self.npcs.values() if int(getattr(npc, "level", 0)) == 1
                         )
                     else:
                         # Underground players see only players sharing their exact

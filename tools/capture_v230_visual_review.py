@@ -88,7 +88,7 @@ def main() -> int:
 
         signal = config["traffic_signals"][len(config["traffic_signals"]) // 2]
         phone = next(row for row in world.objects if row.get("lighting_kind") == "public_phone")
-        planter = next(row for row in world.objects if row.get("scale_policy") == "reported_tree_planter_scale_4x")
+        planter = next(row for row in world.objects if row.get("scale_policy") == "sidewalk_fit_tree_planter_scale_1_5x_v28")
         empty_parking = next(row for row in config["parking_spots"] if not row["occupied"])
 
         signal_panel = _world_panel(world, config, tuple(map(float, signal["pos"])))
@@ -107,14 +107,14 @@ def main() -> int:
     title = title_font.render("OPEN NIGHT v2.3 — CURRENT REPORT VISUAL REVIEW", True, (237, 220, 149))
     review.blit(title, (34, 24))
     subtitle = small.render(
-        "Runtime GridWorld frames: synchronized signal, lit pavement phone, 4x collidable planter, open parking bay, corrected vehicle/cap art",
+        "Runtime GridWorld frames: synchronized signal, lit pavement phone, sidewalk-fit planter, open parking bay, corrected vehicle/cap art",
         True, (174, 190, 192),
     )
     review.blit(subtitle, (36, 72))
 
     _panel_frame(review, signal_panel, 34, 112, "TRAFFIC SIGNAL FIXTURE", panel_font)
     _panel_frame(review, phone_panel, 550, 112, "PHONE ON PAVEMENT + LIGHT", panel_font)
-    _panel_frame(review, planter_panel, 1066, 112, "4x TREE PLANTER + COLLISION", panel_font)
+    _panel_frame(review, planter_panel, 1066, 112, "SIDEWALK-FIT PLANTER + COLLISION", panel_font)
     _panel_frame(review, parking_panel, 34, 536, "OPEN CURBSIDE PARKING BAY", panel_font)
 
     art_panel = pygame.Surface((1016, 400)).convert()

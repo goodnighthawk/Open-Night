@@ -70,8 +70,14 @@ def build_procedural_block_props(
             continue
         for local_index in range(2):
             asset, width, height = STREET_PROPS[(index * 2 + local_index) % len(STREET_PROPS)]
-            if asset in {"block_prop_shrub_round", "block_prop_planter_wood_shrubs"}:
+            if asset == "block_prop_shrub_round":
                 width, height = width * 4, height * 4
+            elif asset == "block_prop_planter_wood_shrubs":
+                # v2.8 report #190 supersedes the four-times sidewalk planter.
+                # The runtime halves source dimensions into 128 px cells. A
+                # 1.5x source prop therefore lands at 117x106 px: still larger
+                # than the original, but with real player clearance in one cell.
+                width, height = width * 3 // 2, height * 3 // 2
             elif asset == "block_prop_patio_umbrella":
                 width, height = width * 3, height * 3
             pick = (index * 7 + local_index * max(1, len(candidates) // 2)) % len(candidates)
@@ -96,13 +102,13 @@ def build_procedural_block_props(
                 objects[-1]["collision_kind"] = "tree"
                 objects[-1]["scale_policy"] = "reported_tree_scale_4x"
             elif asset == "block_prop_planter_wood_shrubs":
-                # Report #152 points at the multi-shrub wooden planter, not the
-                # round shrub handled by the earlier report. Give the visible
-                # canopy the same four-times scale and a matching solid footprint.
+                # Report #152 keeps the multi-shrub planter visibly enlarged;
+                # v2.8 report #190 adds the single-cell sidewalk-fit ceiling.
                 objects[-1]["collision_radius_px"] = int(round(min(width, height) * 0.30))
                 objects[-1]["decorative_only"] = False
                 objects[-1]["collision_kind"] = "tree_planter"
-                objects[-1]["scale_policy"] = "reported_tree_planter_scale_4x"
+                objects[-1]["scale_policy"] = "sidewalk_fit_tree_planter_scale_1_5x_v28"
+                objects[-1]["placement_policy"] = "single_pavement_cell_clearance_v28"
             elif asset == "block_prop_patio_umbrella":
                 objects[-1]["overhead"] = True
                 objects[-1]["walk_under"] = True

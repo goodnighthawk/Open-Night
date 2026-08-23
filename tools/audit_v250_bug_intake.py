@@ -14,9 +14,11 @@ def main() -> int:
     with snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     by_issue = {int(row["github_issue"]): row for row in rows}
-    assert len(rows) == 164, f"expected 164 pulled issues, found {len(rows)}"
-    assert max(by_issue) == 184
-    assert sum(row["state"] == "open" for row in rows) == 160
+    # This carried gate verifies the v2.5 intake floor while allowing the shared
+    # snapshot to advance for later releases.
+    assert len(rows) >= 164, f"expected at least 164 pulled issues, found {len(rows)}"
+    assert max(by_issue) >= 184
+    assert sum(row["state"] == "open" for row in rows) >= 160
     for number in range(165, 185):
         row = by_issue[number]
         assert row["state"] == "open"
@@ -31,7 +33,10 @@ def main() -> int:
         assert f"issues/{number}" in checklist
     version = tuple(int(part) for part in (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip().split("."))
     assert version >= (2, 5)
-    print("V2.5 BUG INTAKE AUDIT PASSED: 164 total / 160 open / current reports #165-#184")
+    print(
+        f"V2.5 BUG INTAKE AUDIT PASSED: floor #165-#184 preserved in "
+        f"{len(rows)}-issue snapshot"
+    )
     return 0
 
 

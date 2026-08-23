@@ -22,6 +22,9 @@ VEHICLE_PIXELATED = True
 # the one exception to that sheet's usual nose-down convention.
 SOURCE_NOSE_CORRECTIONS = {
     "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#001": "up",
+    # v2.8 report #186 identifies parked060, which resolves to the fourth
+    # approved sheet crop. That source cell is already nose-up.
+    "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#003": "up",
     # Current reports #133/#135 identify gridcar006 and gridcar009. Their
     # corresponding sheet cells are already nose-up and must not receive the
     # sheet-wide nose-down flip.

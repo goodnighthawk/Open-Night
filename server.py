@@ -81,7 +81,7 @@ from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_met
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v2.6"
+SERVER_NAME = "Open Night v2.8"
 # v2.5 runtime validation replaces this fallback with the exact number of
 # enterable GridWorld buildings. Keep the cold-start/default identity aligned
 # with the current 30-building map so discovery is never advertised as 128.
@@ -509,6 +509,7 @@ class NPCPedestrian:
     last_progress_y: float = 0.0
     signal_waiting: bool = False
     companion_id: str = ""
+    level: int = 0
 
     def public_dict(self) -> dict:
         payload = {
@@ -518,6 +519,7 @@ class NPCPedestrian:
             "aim": round(self.aim, 4),
             "appearance": normalize_character(self.appearance),
             "kind": self.kind,
+            "level": int(self.level),
         }
         if self.companion_id:
             payload["companion_id"] = self.companion_id
@@ -1701,12 +1703,16 @@ def initialize_npcs() -> None:
     # v2.5 dog walkers are paired server-authoritative companions. Each dog
     # stays ahead of one pedestrian on the same pavement route; the public pair
     # IDs let clients draw the connecting leash.
-    dog_count = min(8, max(3, len(routes) // 3))
     walkers = [npc for npc in npc_pedestrians if npc.kind == "pedestrian"]
+    # Reports #185/#188/#189 halve the ambient density and require a strict
+    # one-walker/one-leading-dog pairing. Three distinct walkers receive one
+    # companion each; no walker can be selected twice.
+    dog_count = min(3, len(walkers))
+    walker_stride = max(1, len(walkers) // max(1, dog_count))
     for dog_i in range(dog_count):
         if not walkers:
             break
-        walker = walkers[(dog_i * 29 + 7) % len(walkers)]
+        walker = walkers[(7 + dog_i * walker_stride) % len(walkers)]
         x, y = _dog_front_target(walker)
         if (x, y) == (walker.x, walker.y):
             continue
@@ -1732,11 +1738,13 @@ def initialize_npcs() -> None:
         except (TypeError, ValueError):
             continue
         appearance_index = int(location.get("appearance_index", 40 + index))
+        level = int(location.get("level", 1))
         npc_pedestrians.append(NPCPedestrian(
             npc_id=str(location.get("id", f"job_{role}_{index + 1:02d}")),
             route_index=-1, next_waypoint=0, x=x, y=y, speed=0.0, aim=0.0,
             appearance=_indexed_character_appearance(appearance_index, preset_only=False),
             pause_timer=0.0, kind=role, last_progress_x=x, last_progress_y=y,
+            level=level,
         ))
 
 
@@ -2581,11 +2589,12 @@ async def process_passenger_action(session: ClientSession) -> None:
         return
     eligible = [
         car for car in traffic_vehicles
-        if car.controlled_by and car.controlled_by != p.player_id
+        if car.controlled_by != p.player_id
+        and bool(car.controlled_by or car.npc_driver)
         and math.hypot(car.x - p.x, car.y - p.y) <= 118.0
     ]
     if not eligible:
-        await send_json(session.websocket, {"type": "notice", "text": "No player-driven car close enough for a passenger."})
+        await send_json(session.websocket, {"type": "notice", "text": "No occupied car close enough for a passenger."})
         return
     car = min(eligible, key=lambda item: math.hypot(item.x - p.x, item.y - p.y))
     if abs(car.speed) > PASSENGER_BOARD_MAX_SPEED:
@@ -2849,12 +2858,16 @@ async def process_interaction(session: ClientSession) -> None:
         })
         return
     job_locations = ACTIVE_MAP.get("job_locations", []) or []
-    supplier_positions = [
-        tuple(row.get("pos", [0.0, 0.0]))
+    supplier_locations = [
+        row
         for row in job_locations if str(row.get("role", "")).lower() == "supplier"
-    ] or [tuple(ACTIVE_MAP["supplier_pos"])]
+    ] or [{"pos": ACTIVE_MAP["supplier_pos"], "level": 0}]
 
-    if any(distance(pos, supplier_pos) <= INTERACT_DISTANCE for supplier_pos in supplier_positions):
+    if any(
+        int(location.get("level", 0)) == int(getattr(p, "level", 0))
+        and distance(pos, tuple(location.get("pos", [0.0, 0.0]))) <= INTERACT_DISTANCE
+        for location in supplier_locations
+    ):
         if p.cash < BUY_PRICE:
             text = f"Need ${BUY_PRICE}."
         elif inventory_weight(session.inventory) + float(ITEM_DEFS["package"]["weight_kg"]) > INVENTORY_MAX_WEIGHT_KG + 1e-9:
@@ -2884,7 +2897,11 @@ async def process_interaction(session: ClientSession) -> None:
     pending = trade_offers.get(p.player_id)
     if pending is not None:
         seller = clients.get(pending[0])
-        compatible_room = seller is not None and seller.player.interior_id == p.interior_id
+        compatible_room = (
+            seller is not None
+            and seller.player.interior_id == p.interior_id
+            and int(getattr(seller.player, "level", 0)) == int(getattr(p, "level", 0))
+        )
         close_enough = seller is not None and distance(pos, (seller.player.x, seller.player.y)) <= INTERACT_DISTANCE
         if seller is None or not compatible_room or not close_enough:
             trade_offers.pop(p.player_id, None)
@@ -2918,13 +2935,16 @@ async def process_interaction(session: ClientSession) -> None:
 
     candidates: list[tuple[float, str, object]] = []
     for other in clients.values():
-        if other is session or other.player.in_vehicle or other.player.interior_id != p.interior_id:
+        if (other is session or other.player.in_vehicle or other.player.interior_id != p.interior_id
+                or int(getattr(other.player, "level", 0)) != int(getattr(p, "level", 0))):
             continue
         d = distance(pos, (other.player.x, other.player.y))
         if d <= INTERACT_DISTANCE:
             candidates.append((d, "player", other))
     if not p.interior_id:
         for npc in npc_pedestrians:
+            if int(getattr(npc, "level", 0)) != int(getattr(p, "level", 0)):
+                continue
             d = distance(pos, (npc.x, npc.y))
             if d <= INTERACT_DISTANCE:
                 # Dedicated buyer NPCs win ties over ambient pedestrians so the

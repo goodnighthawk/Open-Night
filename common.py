@@ -111,7 +111,7 @@ if not MAPS:
 # ---------------------------------------------------------------------------
 # Server-authoritative civilian traffic
 # ---------------------------------------------------------------------------
-TRAFFIC_DEFAULT_COUNT = 56
+TRAFFIC_DEFAULT_COUNT = 28
 TRAFFIC_CAR_LENGTH = 34.0
 TRAFFIC_CAR_WIDTH = 18.0
 TRAFFIC_SPRITE_COUNT = 81

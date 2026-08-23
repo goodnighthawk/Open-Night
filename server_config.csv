@@ -1,8 +1,8 @@
 ﻿key,value
-server_name,Open Night v2.6
+server_name,Open Night v2.8
 port,8765
 max_players,30
-traffic_cars,12
+traffic_cars,28
 map_id,map_001_gwb_corridor
 lan_discovery,true
 db_host,127.0.0.1

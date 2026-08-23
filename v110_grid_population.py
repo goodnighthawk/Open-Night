@@ -14,7 +14,7 @@ from typing import Iterable
 
 TRAFFIC_ROUTE_LIMIT = 84
 PEDESTRIAN_ROUTE_LIMIT = 18
-PEDESTRIAN_TARGET = 216
+PEDESTRIAN_TARGET = 108
 
 
 def _group_runs(values: Iterable[int]) -> list[list[int]]:

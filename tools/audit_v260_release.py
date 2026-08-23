@@ -1,4 +1,4 @@
-"""Offline release gate for the v2.6 character-art archive and map authority."""
+"""Carried release gate for the v2.6 character-art archive and map authority."""
 
 from __future__ import annotations
 
@@ -30,13 +30,14 @@ def _committed_ground_data() -> dict:
 
 
 def main() -> int:
-    assert (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip() == "2.6"
-    assert 'GAME_VERSION = "2.6"' in (ROOT / "versioning.py").read_text(encoding="utf-8")
-    assert 'SERVER_NAME = "Open Night v2.6"' in (ROOT / "server.py").read_text(encoding="utf-8")
-    assert "server_name,Open Night v2.6" in (ROOT / "server_config.csv").read_text(encoding="utf-8")
-    assert "open-night-v2.6" in (ROOT / "railway.toml").read_text(encoding="utf-8")
-    assert "OPEN NIGHT v2.6" in (ROOT / "RUN_CLIENT.bat").read_text(encoding="utf-8")
-    assert "OPEN NIGHT v2.6" in (ROOT / "RUN_SERVER.bat").read_text(encoding="utf-8")
+    release = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+    assert tuple(int(part) for part in release.split(".")) >= (2, 6)
+    assert f'GAME_VERSION = "{release}"' in (ROOT / "versioning.py").read_text(encoding="utf-8")
+    assert f'SERVER_NAME = "Open Night v{release}"' in (ROOT / "server.py").read_text(encoding="utf-8")
+    assert f"server_name,Open Night v{release}" in (ROOT / "server_config.csv").read_text(encoding="utf-8")
+    assert f"open-night-v{release}" in (ROOT / "railway.toml").read_text(encoding="utf-8")
+    assert f"OPEN NIGHT v{release}" in (ROOT / "RUN_CLIENT.bat").read_text(encoding="utf-8")
+    assert f"OPEN NIGHT v{release}" in (ROOT / "RUN_SERVER.bat").read_text(encoding="utf-8")
 
     source_names = ("master_8x10.png", "master_8x10_v2.png")
     runtime_name = "master_8x10_v2_clean.png"

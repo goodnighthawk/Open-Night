@@ -151,16 +151,27 @@ def _world_population_audit(config: dict, world) -> dict:
     require(all(world.collision_at("ground", *world.cell_center(int(row["gx"]), int(row["gy"]))) == "sidewalk" for row in phones),
             "a public phone is not anchored to pavement")
 
-    planters = [row for row in world.objects if row.get("scale_policy") == "reported_tree_planter_scale_4x"]
-    require(planters and all(int(row["width_px"]) >= 300 and int(row["height_px"]) >= 280 for row in planters),
-            "reported wooden shrub planter is not four times larger")
-    require(all(float(row.get("collision_radius_px", 0.0)) >= 80.0 for row in planters),
-            "reported wooden shrub planter collision is missing")
+    # v2.8 supersedes the earlier four-times scale after report #190 showed
+    # that it covered the entire pavement cell. Keep the prop substantial while
+    # reserving visible and collision clearance around its authored cell.
+    planters = [
+        row for row in world.objects
+        if row.get("scale_policy") == "sidewalk_fit_tree_planter_scale_1_5x_v28"
+    ]
+    require(planters and all(
+        100 <= int(row["width_px"]) < int(world.cell_px)
+        and 90 <= int(row["height_px"]) < int(world.cell_px)
+        for row in planters
+    ), "reported wooden shrub planter does not fit inside one pavement cell")
+    require(all(25.0 <= float(row.get("collision_radius_px", 0.0)) <= 40.0 for row in planters),
+            "reported wooden shrub planter collision does not preserve sidewalk clearance")
+    require(all(row.get("placement_policy") == "single_pavement_cell_clearance_v28" for row in planters),
+            "reported wooden shrub planter is missing the v2.8 clearance policy")
     return {
         "parking_spots": len(parking), "parked_cars": len(parked),
         "empty_parking_spots": sum(not row.get("occupied") for row in parking),
         "traffic_signals": len(signals), "job_markers": len(jobs),
-        "public_phones_with_lights": len(phones), "large_tree_planters": len(planters),
+        "public_phones_with_lights": len(phones), "sidewalk_fit_tree_planters": len(planters),
     }
 
 

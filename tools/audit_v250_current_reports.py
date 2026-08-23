@@ -195,11 +195,15 @@ def _pedestrian_companion_audit(world) -> dict:
     require(not inside, f"pedestrians entered building/object footprints: {inside[:8]}")
     rooftop_npcs = [
         npc for npc in server.npc_pedestrians
-        if v110_pedestrian_connectivity.is_building_cell(world, *world.world_to_cell(npc.x, npc.y))
+        if int(getattr(npc, "level", 0)) == 1
     ]
     invalid_rooftop_roles = [npc.npc_id for npc in rooftop_npcs if npc.kind not in {"buyer", "supplier"}]
     require(not invalid_rooftop_roles,
             f"non-job NPCs appeared on building/rooftop footprints: {invalid_rooftop_roles[:8]}")
+    require(len(rooftop_npcs) == 20 and all(world.circle_roof_walkable(npc.x, npc.y, server.PLAYER_RADIUS) for npc in rooftop_npcs),
+            "all 20 supplier/buyer NPCs were not placed on accessible rooftops")
+    require(all(int(getattr(npc, "level", 0)) == 0 for npc in server.npc_pedestrians if npc.kind in {"pedestrian", "dog"}),
+            "an ambient pedestrian or dog leaked onto a rooftop")
 
     max_cluster = 0
     for npc in pedestrians:
@@ -209,7 +213,7 @@ def _pedestrian_companion_audit(world) -> dict:
 
     by_id = {npc.npc_id: npc for npc in server.npc_pedestrians}
     dogs = [npc for npc in server.npc_pedestrians if npc.kind == "dog"]
-    require(len(dogs) >= 3, "dog-walker population is missing")
+    require(len(dogs) == 3, "v2.8 requires exactly three distinct dog walkers")
     max_leash = 0.0
     for dog in dogs:
         walker = by_id.get(dog.companion_id)
@@ -232,6 +236,9 @@ def _pedestrian_companion_audit(world) -> dict:
     signal_multiplier = server.player_signal_turn_multiplier(car, 1.0)
     require(signal_multiplier > 1.0 and server.player_signal_turn_multiplier(car, -1.0) == 1.0,
             "indicator-assisted player turning is not direction-sensitive")
+    # This audit fixture is an AI traffic car in the next test. Restore its
+    # neutral signal state so the assertion cannot perturb traffic scheduling.
+    car.turn_signal = 0
     return {
         "pedestrians_outside_buildings": len(pedestrians),
         "allowed_rooftop_npc_roles": sorted({npc.kind for npc in rooftop_npcs}),
@@ -250,6 +257,10 @@ def _traffic_audit() -> dict:
     dt = 1.0 / 60.0
     for tick in range(int(20.0 / dt)):
         server.update_traffic(dt, [], tick * dt)
+        # Production advances both simulations every tick. Freezing pedestrians
+        # after the companion audit can strand a crosswalk occupant in front of
+        # traffic for the full test and create an artificial junction timeout.
+        server.update_npcs(dt, [], tick, server_time=12.0 + tick * dt)
         max_junction_time = max(max_junction_time, *(car.junction_time for car in moving))
         if tick % 12 == 0:
             overlaps.update(_overlap_pairs())

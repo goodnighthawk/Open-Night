@@ -372,7 +372,7 @@ def _install_gwb_landmark(world) -> int:
             "decorative_only": True,
             "landmark_kind": "george_washington_bridge",
             "landmark_piece_index": index,
-            "placement_policy": "central_highway_gwb_restore_v25",
+            "placement_policy": "central_highway_gwb_restore_v28",
         })
     return len(placements)
 

@@ -35,12 +35,17 @@ def main() -> None:
     signals = config.get("traffic_signals", [])
     assert len(signals) >= 24, "GridWorld traffic signals were not restored"
     assert {int(row["phase"]) for row in signals} == {0, 1}
-    for key in v110_job_locations.JOB_KEYS:
-        assert world.collision_at("ground", *config[key]) in {"walk", "sidewalk"}, f"{key} is still on the road"
     jobs = config.get("job_locations", [])
     assert len(jobs) == 20 and sum(row["role"] == "supplier" for row in jobs) == 10
     assert sum(row["role"] == "buyer" for row in jobs) == 10
     assert all(row.get("authoritative_npc") for row in jobs)
+    job_authority = config.get("runtime", {}).get("v110_job_location_normalization", {}).get("authority")
+    if job_authority == "gridworld_rooftop_v28":
+        assert all(int(row.get("level", 0)) == 1 and world.circle_roof_walkable(*row["pos"], 18.0) for row in jobs), \
+            "v2.8 suppliers/buyers are not on accessible rooftops"
+    else:
+        for key in v110_job_locations.JOB_KEYS:
+            assert world.collision_at("ground", *config[key]) in {"walk", "sidewalk"}, f"{key} is still on the road"
     roof_decals = [row for row in world.objects if row.get("composition_pass") == "roof_palette_v1"]
     assert roof_decals and all(int(row.get("width_px", 0)) >= 64 and int(row.get("height_px", 0)) >= 64
                                and str(row.get("placement_policy", "")).startswith("centered_")
