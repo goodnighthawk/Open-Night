@@ -32,4 +32,4 @@ Started from a complete GitHub issue-mirror pull on 2026-08-22 and refreshed bef
 - [x] Pull and inspect the complete current report history and all evidence for #165–#184.
 - [x] Pass focused v2.5 behavior checks, the isolated/sustained traffic simulations, and runtime visual review.
 - [x] Pass every carried report, multiplayer, collision, launcher, version, and release audit.
-- [ ] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
+- [x] Commit directly to `main`, push without merging or force-pushing, and verify GitHub Actions plus Railway production.
