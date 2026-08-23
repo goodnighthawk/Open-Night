@@ -240,9 +240,12 @@ def _build_traffic_routes(world) -> list[dict]:
         ))
         rectangle_groups.append(group)
     rectangles: list[tuple[int, int, int, int]] = []
-    while len(rectangles) < 14 and any(rectangle_groups):
+    # Exhaust the deterministic candidate set. The Hudson splits non-bridge
+    # east/west streets, so some of the widest rectangles are intentionally no
+    # longer valid; local loops on each bank must remain available as fallbacks.
+    while any(rectangle_groups):
         for group in rectangle_groups:
-            if group and len(rectangles) < 14:
+            if group:
                 rectangles.append(group.pop(0))
 
     for rectangle_index, (top_index, bottom_index, left_index, right_index) in enumerate(rectangles):

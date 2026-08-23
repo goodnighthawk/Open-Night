@@ -52,10 +52,10 @@ def main() -> int:
         item for item in objects
         if str(item.get("street_marking", "")).startswith(("lane_divider_", "six_lane_divider_"))
     ]
-    require(len(lane_dividers) >= 100,
-            "lane dividers must populate the installed multi-lane network")
-    require(all(item.get("asset") == "mark_white_repeating_single" for item in lane_dividers),
-            "lane divider object uses the wrong city_block asset")
+    require(not lane_dividers,
+            "v2.8 supersedes the displaced lane-divider layer reported as thick white bars")
+    require("removed_thick_off_cell_bars_v28" in (ROOT / "v100_runtime_refinement.py").read_text(encoding="utf-8"),
+            "current white-bar removal authority is missing")
 
     pavement_image = catalog["tiles"]["pavement_small"]["image"]
     require("road_and_pavement_tileset" in pavement_image,
@@ -91,7 +91,7 @@ def main() -> int:
     require("tire scre" not in client.lower(), "obsolete acceleration tire-screech loop is still present")
 
     print(f"recent bug audit passed: {len(RECENT_ISSUES)} reports (#42-#111, excluding #49)")
-    print(f"map art: {len(lane_dividers)} lane dividers, {len(lamps)} synchronized lamp records")
+    print(f"map art: {len(lane_dividers)} displaced lane bars, {len(lamps)} synchronized lamp records")
     return 0
 
 

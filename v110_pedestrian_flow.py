@@ -178,6 +178,11 @@ def reciprocal_edge_count(routes: list[dict]) -> int:
     directed: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     reciprocal: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     for route in routes:
+        # Full-surface patrols deliberately use a closed tree walk so even a
+        # one-cell sidewalk spur remains reachable. Ordinary crowd loops retain
+        # the no-reciprocal-edge contract that prevents oscillating flows.
+        if route.get("full_sidewalk_coverage"):
+            continue
         points = [
             (round(float(point[0]), 3), round(float(point[1]), 3))
             for point in (route.get("waypoints") or [])
@@ -228,12 +233,18 @@ def install(population_module) -> None:
             raise RuntimeError(f"v1.1 pedestrian routes contain {reciprocal} reciprocal physical edge(s)")
         if int(audit.get("pedestrian_crosswalk_count", 0)) < v110_pedestrian_connectivity.MIN_CROSSWALKS:
             raise RuntimeError("v1.1 pedestrian flow requires a dense zebra-crossing network")
-        if int(audit.get("pedestrian_route_network_components", 99)) != 1:
-            raise RuntimeError("v1.1 pedestrian routes are not one interconnected network")
+        route_components = int(audit.get("pedestrian_route_network_components", 99))
+        surface_components = int(audit.get("pedestrian_full_sidewalk_route_count", 0))
+        if route_components != surface_components or surface_components < 1:
+            raise RuntimeError(
+                "v2.8 pedestrian routes do not cover every Hudson-separated sidewalk component"
+            )
         if int(audit.get("pedestrian_multiblock_route_count", 0)) < 6:
             raise RuntimeError("v1.1 pedestrian flow does not span enough city blocks")
         if int(audit.get("pedestrian_crosswalk_route_count", 0)) < 6:
             raise RuntimeError("v1.1 pedestrian flow does not use enough zebra crossings")
+        if float(audit.get("pedestrian_surface_coverage_ratio", 0.0)) < 0.999:
+            raise RuntimeError("v2.8 pedestrian patrols do not cover every legal sidewalk cell")
         return audit
 
     population_module._is_pavement = is_pedestrian_surface_v110

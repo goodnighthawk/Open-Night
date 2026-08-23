@@ -1,4 +1,4 @@
-"""Render the v2.8 bridge, rooftop-job, planter, and passenger proof sheet."""
+"""Render the v2.8 current-report proof sheet through GitHub issue #197."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import v100_server
 import vehicle_art
 
 
-WIDTH, HEIGHT = 1600, 1050
+WIDTH, HEIGHT = 1600, 1500
 PANEL_SIZE = (760, 430)
 
 
@@ -45,8 +45,11 @@ def _world_panel(world, center: tuple[float, float], title: str, detail: str, la
     panel = pygame.Surface(PANEL_SIZE).convert()
     renderer = GridRenderer(world)
     camera = (center[0] - PANEL_SIZE[0] * 0.5, center[1] - PANEL_SIZE[1] * 0.5)
-    renderer.draw_view(panel, camera, layer)
-    if layer == "ground":
+    if layer == "roof":
+        renderer.draw_rooftop_view(panel, camera)
+        renderer.draw_overhead_objects(panel, camera, "roof")
+    else:
+        renderer.draw_view(panel, camera, layer)
         renderer.draw_overhead_objects(panel, camera, "ground")
     veil = pygame.Surface((PANEL_SIZE[0], 66), pygame.SRCALPHA)
     veil.fill((5, 9, 13, 222))
@@ -65,8 +68,8 @@ def _status_panel() -> pygame.Surface:
     font = pygame.font.Font(None, 30)
     medium = pygame.font.Font(None, 24)
     small = pygame.font.Font(None, 20)
-    panel.blit(font.render("CORRECTED VEHICLE + E PASSENGER ACTION", True, (242, 220, 137)), (18, 12))
-    panel.blit(small.render("The reported parked source points nose-up; AI- and player-driven cars accept E boarding", True, (184, 212, 207)), (18, 43))
+    panel.blit(font.render("RELEASE CONTRACTS", True, (242, 220, 137)), (18, 12))
+    panel.blit(small.render("Corrected vehicle direction • E passenger boarding • clean road markings", True, (184, 212, 207)), (18, 43))
 
     card = pygame.Rect(28, 88, 285, 300)
     pygame.draw.rect(panel, (18, 25, 31), card, border_radius=10)
@@ -92,6 +95,7 @@ def _status_panel() -> pygame.Surface:
         y = 292 + (index // 2) * 60
         panel.blit(medium.render(value, True, (242, 220, 137)), (x, y))
         panel.blit(small.render(label_text, True, (169, 191, 197)), (x + 48, y + 4))
+    panel.blit(small.render("100% LEGAL SIDEWALK CELLS ON NPC PATROLS", True, (105, 224, 179)), (346, 405))
     pygame.draw.rect(panel, (98, 139, 145), panel.get_rect(), width=2)
     return panel
 
@@ -117,15 +121,19 @@ def main() -> int:
         jobs = list(config["job_locations"])
         supplier = next(row for row in jobs if row["role"] == "supplier")
         supplier_center = tuple(map(float, supplier["pos"]))
-        planter = next(item for item in world.objects if item.get("scale_policy") == "sidewalk_fit_tree_planter_scale_1_5x_v28")
+        closure = [item for item in world.objects if item.get("road_closure_id") == "road_closure_02"]
+        closure_center = (
+            sum(_object_center(world, item)[0] for item in closure) / len(closure),
+            sum(_object_center(world, item)[1] for item in closure) / len(closure),
+        )
 
         bridge_panel, _ = _world_panel(
-            world, gwb_center, "GEORGE WASHINGTON BRIDGE — MAP CENTER",
-            "Nine connected landmark pieces restored over the central highway",
+            world, gwb_center, "GWB + HUDSON RIVER — MAP CENTER",
+            "Nine bridge pieces over the continuous blocked-water channel",
         )
         roof_panel, roof_camera = _world_panel(
-            world, supplier_center, "ACCESSIBLE ROOFTOP SUPPLIER",
-            "20 buyer/supplier NPCs on 20 distinct roofs • ambient NPCs remain on Ground", "roof",
+            world, supplier_center, "ROOF VIEW — STRONGLY BLURRED CITY",
+            "Playable roof stays crisp; Ground detail is unreadable surrounding context", "roof",
         )
         sx = int(supplier_center[0] - roof_camera[0])
         sy = int(supplier_center[1] - roof_camera[1])
@@ -136,11 +144,24 @@ def main() -> int:
         pygame.draw.rect(roof_panel, (8, 14, 18), tag_rect.inflate(12, 8), border_radius=5)
         roof_panel.blit(tag, tag_rect)
 
-        planter_panel, _ = _world_panel(
-            world, _object_center(world, planter), "SIDEWALK-FIT SHRUB PLANTER",
-            f"{planter['width_px']}×{planter['height_px']} px prop inside one {world.cell_px} px pavement cell",
+        ground_roof_panel, ground_camera = _world_panel(
+            world, supplier_center, "GROUND SEES ROOFTOP OCCUPANTS",
+            "Rooftop suppliers, buyers, NPCs, and players remain visible from the street",
         )
-        panels = (bridge_panel, roof_panel, planter_panel, _status_panel())
+        gsx = int(supplier_center[0] - ground_camera[0])
+        gsy = int(supplier_center[1] - ground_camera[1])
+        draw_character(ground_roof_panel, (gsx, gsy), 0.0, normalize_character({"preset": 2}), scale=3, moving=False, anim_time=0.0)
+        draw_character(ground_roof_panel, (gsx + 72, gsy + 20), 0.7, normalize_character({"preset": 5}), scale=3, moving=False, anim_time=0.0)
+
+        cone_panel, _ = _world_panel(
+            world, closure_center, "EVEN FIVE-CONE ROAD CLOSURE",
+            "Five non-overlapping cones span the road at equal intervals",
+        )
+        clean_panel, _ = _world_panel(
+            world, (3112.8, 2814.5), "CLEANED REPORTED ROAD LOCATION",
+            "Loose tarp-style awning and displaced thick white divider bars removed",
+        )
+        panels = (bridge_panel, roof_panel, ground_roof_panel, cone_panel, clean_panel, _status_panel())
     finally:
         server.ACTIVE_MAP, server.GRID_WORLD, server.GRID_RUNTIME_ACTIVE, server.TRAFFIC_COUNT = old_map, old_world, old_grid, old_count
 
@@ -150,10 +171,10 @@ def main() -> int:
     subtitle = pygame.font.Font(None, 24)
     review.blit(title.render("OPEN NIGHT v2.8 — CURRENT REPORT VISUAL REVIEW", True, (242, 215, 125)), (38, 22))
     review.blit(subtitle.render(
-        "Runtime GridWorld proof for reports #185–#192 and the requested central bridge restoration",
+        "Runtime GridWorld proof for reports #185–#197 and the central GWB / Hudson restoration",
         True, (163, 194, 198),
     ), (40, 67))
-    for panel, position in zip(panels, ((30, 102), (810, 102), (30, 552), (810, 552))):
+    for panel, position in zip(panels, ((30, 102), (810, 102), (30, 552), (810, 552), (30, 1002), (810, 1002))):
         review.blit(panel, position)
 
     output = ROOT / "work" / "v280_current_reports_visual_review.png"

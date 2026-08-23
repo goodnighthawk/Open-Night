@@ -377,6 +377,54 @@ def _install_gwb_landmark(world) -> int:
     return len(placements)
 
 
+def _install_hudson_river(world, rows, roof_rows) -> dict[str, object]:
+    """Cut a continuous Hudson channel beneath the central GWB span."""
+    from grid_world import TileDef
+
+    river_columns = tuple(range(world.width // 2 - 3, world.width // 2))
+    bridge_rows = tuple(range(world.height // 2 - 3, world.height // 2 + 4))
+    world.catalog.entries["hudson_water_night"] = TileDef(
+        tile_id="hudson_water_night",
+        image="assets/environment/approved/water_64.png",
+        collision="blocked",
+        kind="water",
+        layer="ground",
+        z=8,
+    )
+
+    water_cells = 0
+    for gy in range(world.height):
+        for gx in river_columns:
+            # The seven-cell central highway is the GWB deck. It remains Road
+            # collision so existing traffic authority crosses only at the bridge.
+            if gy in bridge_rows:
+                continue
+            rows[gy][gx] = "hudson_water_night"
+            if roof_rows is not None:
+                roof_rows[gy][gx] = "void"
+            water_cells += 1
+
+    # Derived road marks/props authored before the channel existed must not float
+    # on the water. Keep anything on the actual bridge deck and the GWB art itself.
+    kept = []
+    removed = 0
+    for item in world.objects:
+        gx = int(item.get("gx", -1))
+        gy = int(item.get("gy", -1))
+        if gx in river_columns and gy not in bridge_rows and item.get("landmark_kind") != "george_washington_bridge":
+            removed += 1
+            continue
+        kept.append(item)
+    world.objects[:] = kept
+    return {
+        "columns": list(river_columns),
+        "bridge_rows": list(bridge_rows),
+        "water_cell_count": water_cells,
+        "removed_floating_object_count": removed,
+        "placement_policy": "continuous_central_hudson_under_gwb_v28",
+    }
+
+
 def _spaced_cells(candidates, occupied: set[tuple[int, int]], count: int, spacing: int) -> list[tuple[int, int]]:
     selected: list[tuple[int, int]] = []
     for gx, gy in candidates:
@@ -480,21 +528,48 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
         })
     cone_index = 0
     for closure_index, (gx, gy, edge) in enumerate(closure_anchors, 1):
-        horizontal = edge in {"north", "south"}
-        for offset in (-96, -48, 0, 48, 96):
+        inward_x, inward_y = {
+            "north": (0, 1), "south": (0, -1),
+            "west": (1, 0), "east": (-1, 0),
+        }[edge]
+        road_cells = [(gx, gy)]
+        for step in range(1, 10):
+            nx, ny = gx + inward_x * step, gy + inward_y * step
+            if not world.in_bounds(nx, ny):
+                break
+            if world.collision_at("ground", *world.cell_center(nx, ny)) != "road":
+                break
+            road_cells.append((nx, ny))
+        first_x = gx * world.cell_px + world.cell_px * 0.20
+        first_y = gy * world.cell_px + world.cell_px * 0.20
+        last_gx, last_gy = road_cells[-1]
+        last_x = last_gx * world.cell_px + world.cell_px * 0.80
+        last_y = last_gy * world.cell_px + world.cell_px * 0.80
+        if inward_x < 0:
+            first_x = gx * world.cell_px + world.cell_px * 0.80
+            last_x = last_gx * world.cell_px + world.cell_px * 0.20
+        if inward_y < 0:
+            first_y = gy * world.cell_px + world.cell_px * 0.80
+            last_y = last_gy * world.cell_px + world.cell_px * 0.20
+        for cone_slot in range(5):
+            fraction = cone_slot / 4.0
+            center_world_x = first_x + (last_x - first_x) * fraction if inward_x else (gx + 0.5) * world.cell_px
+            center_world_y = first_y + (last_y - first_y) * fraction if inward_y else (gy + 0.5) * world.cell_px
+            cone_gx = max(0, min(world.width - 1, int(center_world_x // world.cell_px)))
+            cone_gy = max(0, min(world.height - 1, int(center_world_y // world.cell_px)))
             cone_index += 1
-            center_x = world.cell_px // 2 + (offset if horizontal else 0)
-            center_y = world.cell_px // 2 + (0 if horizontal else offset)
             world.objects.append({
-                "asset": "street_item_traffic_cone", "gx": gx, "gy": gy,
-                "offset_x_px": center_x - 42, "offset_y_px": center_y - 60,
+                "asset": "street_item_traffic_cone", "gx": cone_gx, "gy": cone_gy,
+                "offset_x_px": int(round(center_world_x - cone_gx * world.cell_px - 42)),
+                "offset_y_px": int(round(center_world_y - cone_gy * world.cell_px - 60)),
                 "width_px": 84, "height_px": 120,
                 "street_item_kind": "traffic_cone", "street_item_index": cone_index,
+                "road_closure_slot": cone_slot + 1,
                 "road_closure_id": f"road_closure_{closure_index:02d}",
                 "road_closure_edge": edge,
-                "composition_pass": "grouped_road_closures_v25", "decorative_only": False,
+                "composition_pass": "cross_road_closures_v28", "decorative_only": False,
                 "collision_radius_px": 22, "collision_kind": "traffic_cone",
-                "placement_policy": "five_cone_grouped_curb_lane_closure_v25",
+                "placement_policy": "five_cone_evenly_spaced_across_road_v28",
             })
     return {
         "telephone_box_count": len(telephone_cells),
@@ -549,6 +624,7 @@ def apply_world_refinement(world):
     world.objects[:] = [
         item for item in world.objects
         if not str(item.get("street_marking", "")).startswith("six_lane_divider_")
+        and str(item.get("density_kind", "")) != "street_edge_awning"
         and not (
             str(item.get("street_marking", "")).startswith("dashed_center_line_")
             and (int(item.get("gx", -1)), int(item.get("gy", -1))) in junction_cells
@@ -738,37 +814,12 @@ def apply_world_refinement(world):
             item["offset_y_px"] = (world.cell_px - width) // 2
             item["registration_policy"] = "road_cell_center_v12"
 
-    # Four white dividers plus the yellow median describe six full-clearance
-    # lanes. The central highway keeps wider shoulders than primary roads.
+    # Report #176: remove the derived off-cell white divider copies. The original
+    # centered road markings remain, while the displaced bars no longer cross
+    # sidewalks or appear as thick white map seams.
     lane_dividers = []
-    for item in list(world.objects):
-        marking = str(item.get("street_marking", ""))
-        if marking not in {"dashed_center_line_vertical", "dashed_center_line_horizontal"}:
-            continue
-        highway = marking.endswith("horizontal") and int(item.get("gy", -1)) == 24
-        if highway:
-            displacements = tuple(round(world.cell_px * ratio) for ratio in (-7/3, -7/6, 7/6, 7/3))
-        else:
-            displacements = tuple(round(world.cell_px * ratio) for ratio in (-5/3, -5/6, 5/6, 5/3))
-        for divider_index, displacement in enumerate(displacements, start=1):
-            divider = dict(item)
-            divider["asset"] = "mark_white_repeating_single"
-            divider["width_px"] = 7
-            divider["height_px"] = 64
-            divider["street_marking"] = f"six_lane_divider_{'vertical' if marking.endswith('vertical') else 'horizontal'}"
-            divider["lane_divider_index"] = divider_index
-            divider["six_lane_network"] = True
-            divider["highway_lane_network"] = highway
-            if marking.endswith("vertical"):
-                divider["offset_x_px"] = world.cell_px // 2 + displacement - 3
-                divider["offset_y_px"] = (world.cell_px - divider["height_px"]) // 2
-            else:
-                divider["rotation"] = 90
-                divider["offset_x_px"] = (world.cell_px - divider["height_px"]) // 2
-                divider["offset_y_px"] = world.cell_px // 2 + displacement - 3
-            lane_dividers.append(divider)
-    world.objects.extend(lane_dividers)
-    world.data.setdefault("runtime_refinement", {})["six_lane_divider_count"] = len(lane_dividers)
+    world.data.setdefault("runtime_refinement", {})["six_lane_divider_count"] = 0
+    world.data["runtime_refinement"]["six_lane_divider_policy"] = "removed_thick_off_cell_bars_v28"
 
     curb_counts = _install_road_edge_curbs(rows)
     safe_login_spawns = _install_safe_login_spawns(world)
@@ -858,6 +909,7 @@ def apply_world_refinement(world):
         item["render_policy"] = "walk_under_overhead_street_lamp_v25"
         lamp_count += 1
 
+    hudson_river = _install_hudson_river(world, rows, roof_rows)
     street_item_counts = _add_city_block_street_items(world, occupied_lamp_cells)
     gwb_piece_count = _install_gwb_landmark(world)
 
@@ -887,6 +939,7 @@ def apply_world_refinement(world):
         "street_lamp_asset_sync_count": lamp_count,
         "street_lamp_overhead_count": lamp_count,
         "george_washington_bridge_piece_count": gwb_piece_count,
+        "hudson_river": hudson_river,
         "fixture_and_emitter_authority": "same_grid_object_record",
         "junction_clear_cell_count": len(junction_cells),
         "road_art_authority": "grunge_neon_clean_junctions_v130",

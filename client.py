@@ -2314,14 +2314,16 @@ class Game:
         # and independent of this visual layer.
         local_world_player = self.players.get(self.local_id or "")
         active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
-        if active_world_level in {0, 1} and self.grid_renderer is not None:
+        if active_world_level == 0 and self.grid_renderer is not None:
             self.grid_renderer.draw_view(self.screen, self.camera(), "ground")
+        elif active_world_level == 1 and self.grid_renderer is not None:
+            self.grid_renderer.draw_rooftop_view(self.screen, self.camera())
         else:
             self.environment.set_active_level(active_world_level)
             self.environment.draw_view(self.screen, self.camera())
         # Ground street furniture/state must not bleed through the subterranean
         # composition. Underground static detail is already baked into its tiles.
-        if active_world_level < 0:
+        if active_world_level != 0:
             return
         self.draw_parking_spots()
         self.draw_hydrant_effects()
@@ -2995,7 +2997,11 @@ class Game:
             role = str(getattr(npc, "kind", "")).lower()
             if role not in {"supplier", "buyer"}:
                 continue
-            if int(getattr(npc, "level", 0)) != active_level:
+            npc_level = int(getattr(npc, "level", 0))
+            if active_level == 0:
+                if npc_level < 0:
+                    continue
+            elif npc_level != active_level:
                 continue
             raw_pos = (npc.render_x, npc.render_y)
             color = SUPPLIER_COLOR if role == "supplier" else CUSTOMER_COLOR
@@ -3096,9 +3102,10 @@ class Game:
         active_world_level = int(getattr(local_world_player, "level", 0)) if local_world_player is not None else 0
         for player in self.players.values():
             player_level = int(getattr(player, "level", 0))
-            if active_world_level < 0 and player_level != active_world_level:
-                continue
-            if active_world_level >= 0 and player_level < 0:
+            if active_world_level == 0:
+                if player_level < 0:
+                    continue
+            elif player_level != active_world_level:
                 continue
             if getattr(player, "interior_id", ""):
                 continue
@@ -4286,7 +4293,9 @@ class Game:
                         # Ground canopies cover walkers but remain below true
                         # elevated-road/roof overlays and their occupants.
                         self.grid_renderer.draw_overhead_objects(self.screen, self.camera(), "ground")
-                    if active_world_level >= 0:
+                    elif active_world_level == 1 and self.grid_renderer is not None:
+                        self.grid_renderer.draw_overhead_objects(self.screen, self.camera(), "roof")
+                    if active_world_level == 0:
                         positive_levels = sorted({
                             int(float(road.get("level", 0) or 0))
                             for road in self.map_config.get("roads", []) or []
@@ -4299,8 +4308,21 @@ class Game:
                                 for player in self.players.values()
                                 if int(getattr(player, "level", 0)) == map_level
                             ]
-                            for _, player in sorted(level_players, key=lambda row: row[0]):
-                                self.draw_player(player, local=(player.id == self.local_id))
+                            level_npcs = [
+                                (self.camera_depth(npc.render_x, npc.render_y), npc)
+                                for npc in self.npcs.values()
+                                if int(getattr(npc, "level", 0)) == map_level
+                            ]
+                            level_entities = [
+                                (depth, "player", player) for depth, player in level_players
+                            ] + [
+                                (depth, "npc", npc) for depth, npc in level_npcs
+                            ]
+                            for _, kind, entity in sorted(level_entities, key=lambda row: row[0]):
+                                if kind == "npc":
+                                    self.draw_npc(entity)
+                                else:
+                                    self.draw_player(entity, local=(entity.id == self.local_id))
                     self.screen = display_surface
                     self._render_camera_override = None
                     if rotation_active:

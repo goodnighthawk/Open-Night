@@ -397,12 +397,80 @@ def _route_uses_crosswalk(world, cells: list[tuple[int, int]]) -> bool:
     return any(cell in crossing_cells for cell in cells)
 
 
+def _coverage_walk(component: set[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Return a closed, iterative tree patrol that visits every surface cell."""
+    if not component:
+        return []
+    root = min(component, key=lambda point: (point[1], point[0]))
+    parent: dict[tuple[int, int], tuple[int, int] | None] = {root: None}
+    children: dict[tuple[int, int], list[tuple[int, int]]] = {cell: [] for cell in component}
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        x, y = node
+        neighbours = sorted(
+            ((x + 1, y), (x, y + 1), (x - 1, y), (x, y - 1)),
+            key=lambda point: (point[1], point[0]),
+            reverse=True,
+        )
+        for neighbour in neighbours:
+            if neighbour not in component or neighbour in parent:
+                continue
+            parent[neighbour] = node
+            children[node].append(neighbour)
+            stack.append(neighbour)
+
+    walk = [root]
+    frames: list[tuple[tuple[int, int], int]] = [(root, 0)]
+    while frames:
+        node, index = frames[-1]
+        if index < len(children[node]):
+            child = children[node][index]
+            frames[-1] = (node, index + 1)
+            walk.append(child)
+            frames.append((child, 0))
+            continue
+        frames.pop()
+        if frames:
+            walk.append(frames[-1][0])
+    if len(walk) > 1 and walk[-1] == walk[0]:
+        walk.pop()
+    return walk
+
+
+def _all_surface_components(world) -> list[set[tuple[int, int]]]:
+    remaining = {
+        (gx, gy)
+        for gy in range(world.height)
+        for gx in range(world.width)
+        if is_pedestrian_surface_cell(world, gx, gy) and not is_building_cell(world, gx, gy)
+    }
+    components: list[set[tuple[int, int]]] = []
+    while remaining:
+        root = min(remaining, key=lambda point: (point[1], point[0]))
+        remaining.remove(root)
+        component = {root}
+        frontier = [root]
+        while frontier:
+            x, y = frontier.pop()
+            for neighbour in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if neighbour not in remaining:
+                    continue
+                remaining.remove(neighbour)
+                component.add(neighbour)
+                frontier.append(neighbour)
+        components.append(component)
+    return sorted(components, key=lambda component: (-len(component), min(component)))
+
+
 def build_routes(population_module, world, max_routes: int | None = None) -> list[dict]:
     """Build clockwise block-grid cycles, preferring routes that span many blocks."""
     connectivity = apply(world)
     horizontal, vertical = road_bands(world)
     limit = max(1, int(max_routes or getattr(population_module, "PEDESTRIAN_ROUTE_LIMIT", MAX_ROUTE_COUNT)))
     candidates: list[tuple[int, int, int, int, int, int, list[tuple[int, int]]]] = []
+    surface_components = _all_surface_components(world)
+    regular_route_limit = max(1, limit - len(surface_components))
 
     # Every pair of horizontal roads and vertical roads defines a legal sidewalk
     # perimeter. Non-adjacent pairs are the important new multi-block routes.
@@ -438,7 +506,7 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
     if candidates:
         connected = [candidates.pop(0)]
         connected_cells = set(connected[0][-1])
-        while candidates and len(connected) < limit:
+        while candidates and len(connected) < regular_route_limit:
             match = next((index for index, item in enumerate(candidates)
                           if connected_cells & set(item[-1])), None)
             if match is None:
@@ -470,13 +538,13 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
             "block_span_cols": vj - vi,
         })
         route_cells.append(set(cells))
-        if len(routes) >= limit:
+        if len(routes) >= regular_route_limit:
             break
 
     # Wide corridors reduce the number of distinct rectangle perimeters. Add a
     # parallel traversal of a safe multi-block route; individual pedestrians can
     # still reverse through the server's bounded change-of-mind behaviour.
-    if routes and multi_block < 6 and len(routes) < limit:
+    if routes and multi_block < 6 and len(routes) < regular_route_limit:
         source_index = next((index for index, route in enumerate(routes)
                              if int(route.get("block_span_rows", 0)) * int(route.get("block_span_cols", 0)) > 1), None)
         if source_index is not None:
@@ -490,6 +558,27 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
             multi_block += 1
             if source.get("crosswalk_connected"):
                 crosswalk_routes += 1
+
+    coverage_cells: set[tuple[int, int]] = set()
+    for component_index, component in enumerate(surface_components):
+        cells = _coverage_walk(component)
+        if len(cells) < 4:
+            continue
+        coverage_cells.update(component)
+        routes.append({
+            "id": f"grid_ped_all_sidewalk_{component_index:02d}",
+            "waypoints": [[round(x, 3), round(y, 3)] for x, y in (world.cell_center(gx, gy) for gx, gy in cells)],
+            "speed": max(42.0, world.cell_px * 0.43),
+            "turn_radius": 0.0,
+            "grid_native": True,
+            "one_way_cycle": True,
+            "crosswalk_connected": _route_uses_crosswalk(world, cells),
+            "full_sidewalk_coverage": True,
+            "surface_cell_count": len(component),
+            "block_span_rows": 0,
+            "block_span_cols": 0,
+        })
+        route_cells.append(set(component))
 
     if not routes:
         return []
@@ -515,6 +604,12 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
         "pedestrian_multiblock_route_count": multi_block,
         "pedestrian_crosswalk_route_count": crosswalk_routes,
         "pedestrian_route_network_components": components,
+        "pedestrian_full_sidewalk_route_count": sum(bool(route.get("full_sidewalk_coverage")) for route in routes),
+        "pedestrian_surface_cell_count": sum(len(component) for component in surface_components),
+        "pedestrian_covered_surface_cell_count": len(coverage_cells),
+        "pedestrian_surface_coverage_ratio": (
+            len(coverage_cells) / max(1, sum(len(component) for component in surface_components))
+        ),
     })
     return routes
 

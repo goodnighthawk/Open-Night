@@ -29,6 +29,12 @@ class GridRenderer:
     # untouched.  Gameplay actors are drawn later by the client and stay clear.
     GROUND_NIGHT_MULTIPLY = (82, 94, 136)
     GROUND_NIGHT_AMBIENT = (3, 5, 14)
+    # Roof players need geographic context without a clear view of Ground-level
+    # activity.  Collapsing each axis to one fourteenth of its size before the
+    # filtered upscale removes street-scale detail while retaining the surrounding
+    # city's broad colour and massing.
+    ROOFTOP_BACKGROUND_BLUR_DIVISOR = 14
+    ROOFTOP_BACKGROUND_MULTIPLY = (76, 82, 104)
 
     def __init__(self, world: GridWorld):
         self.world = world
@@ -385,6 +391,47 @@ class GridRenderer:
         if layer == "ground":
             self._apply_ground_night_grade(target)
             self._draw_ground_light_pools(target, (cam_x, cam_y))
+        self._draw_proof_compass(target)
+
+    @classmethod
+    def _apply_rooftop_background_blur(cls, target: pygame.Surface) -> None:
+        """Replace readable Ground detail with a strongly blurred city backdrop."""
+        width, height = target.get_size()
+        divisor = max(2, int(cls.ROOFTOP_BACKGROUND_BLUR_DIVISOR))
+        collapsed = pygame.transform.smoothscale(
+            target,
+            (max(1, width // divisor), max(1, height // divisor)),
+        )
+        pygame.transform.smoothscale(collapsed, (width, height), target)
+        target.fill(cls.ROOFTOP_BACKGROUND_MULTIPLY, special_flags=pygame.BLEND_RGB_MULT)
+
+    def draw_rooftop_view(self, target: pygame.Surface, camera: tuple[float, float]) -> None:
+        """Draw crisp Roof cells over an unreadable, strongly blurred city context."""
+        cam_x, cam_y = map(float, camera)
+
+        # Start with the same authoritative city composition visible from Ground,
+        # then destroy its street-scale information.  This is deliberately not a
+        # translucent tint: the severe down/upscale prevents roof players from
+        # inspecting Ground traffic or pedestrians.
+        self.draw_view(target, (cam_x, cam_y), "ground")
+        self._apply_rooftop_background_blur(target)
+
+        roof = pygame.Surface(target.get_size(), pygame.SRCALPHA)
+        self._draw_cells(roof, (cam_x, cam_y), "roof", skip_void=True)
+        for _z, asset_id, item, world_x, world_y, width, height in self._visible_objects_for_layers(
+            (cam_x, cam_y), target.get_width(), target.get_height(), ("roof",)
+        ):
+            if bool(item.get("overhead", False)):
+                continue
+            rotation = float(item.get("rotation", 0.0))
+            image = self._object_surface(asset_id, width, height, rotation)
+            roof.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
+
+        # Keep the approved night grade on the crisp playable roof without making
+        # transparent pixels opaque or re-grading the already blurred backdrop.
+        roof.fill((*self.GROUND_NIGHT_MULTIPLY, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        roof.fill((*self.GROUND_NIGHT_AMBIENT, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        target.blit(roof, (0, 0))
         self._draw_proof_compass(target)
 
     def draw_overhead_objects(

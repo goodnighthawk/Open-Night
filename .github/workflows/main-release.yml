@@ -177,7 +177,8 @@ jobs:
           traffic = json.loads(Path('assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json').read_text())
           buildings = json.loads(Path('assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json').read_text())
           assert pop['pedestrians_spawned'] >= 12, pop
-          assert pop['pedestrian_route_network_components'] == 1, pop
+          assert pop['pedestrian_route_network_components'] == pop['pedestrian_full_sidewalk_route_count'], pop
+          assert pop['pedestrian_surface_coverage_ratio'] >= 0.999, pop
           assert pop['pedestrian_crosswalk_count'] >= 48, pop
           assert pop['pedestrians_stalled_after_warmup_count'] <= max(2, pop['pedestrians_spawned'] // 20), pop
           assert not pop['pedestrians_off_pavement'], pop

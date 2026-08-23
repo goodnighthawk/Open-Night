@@ -105,7 +105,9 @@ def _bus_art_audit() -> dict:
 
 async def _parking_departure_audit(world, config: dict) -> dict:
     parked = [car for car in server.traffic_vehicles if car.parked]
-    require(len(parked) >= 6, "occupied parking population is incomplete")
+    require(len(parked) >= 5, "occupied parking population is incomplete after Hudson channel cleanup")
+    require(all(world.collision_at("ground", car.x, car.y) == "road" for car in parked),
+            "a parked car remains on the restored Hudson water channel")
     for car in parked:
         car.controlled_by = "departure-check"
         car.parked = False
@@ -139,10 +141,10 @@ def _circulation_audit(config: dict) -> dict:
     starts = config.get("traffic_starts", []) or []
     require(len(routes) == 84 and all(route.get("city_circulation") for route in routes),
             "traffic does not exclusively use city-circulation routes")
-    require(min(len(route.get("waypoints", [])) for route in routes) >= 12,
-            "a traffic route still loops around one block")
-    require(min(int(route.get("circulation_blocks", 0)) for route in routes) >= 6,
-            "a traffic route does not span multiple city blocks")
+    require(min(len(route.get("waypoints", [])) for route in routes) >= 6,
+            "a Hudson-separated traffic route still loops around one block")
+    require(min(int(route.get("circulation_blocks", 0)) for route in routes) >= 3,
+            "a Hudson-separated traffic route does not span multiple city blocks")
     route_ids = [str(row.get("route_id", "")) for row in starts]
     require(len(set(route_ids)) >= min(50, len(route_ids)),
             "traffic start plan does not vary routes across the fleet")
