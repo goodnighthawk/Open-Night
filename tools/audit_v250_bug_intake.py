@@ -29,7 +29,8 @@ def main() -> int:
     checklist = (ROOT / "V2_5_CURRENT_BUG_CHECKLIST.md").read_text(encoding="utf-8")
     for number in range(165, 185):
         assert f"issues/{number}" in checklist
-    assert (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip() == "2.5"
+    version = tuple(int(part) for part in (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip().split("."))
+    assert version >= (2, 5)
     print("V2.5 BUG INTAKE AUDIT PASSED: 164 total / 160 open / current reports #165-#184")
     return 0
 

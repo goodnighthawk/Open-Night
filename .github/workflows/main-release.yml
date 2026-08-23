@@ -41,6 +41,7 @@ jobs:
           tools/audit_v230_bug_intake.py tools/audit_v230_current_reports.py tools/capture_v230_visual_review.py
           tools/audit_v240_bug_intake.py tools/audit_v240_current_reports.py tools/capture_v240_visual_review.py
           tools/audit_v250_bug_intake.py tools/audit_v250_current_reports.py tools/capture_v250_visual_review.py
+          tools/audit_v260_release.py
           tools/deterministic_traffic_audit.py
       - name: Verify player-approved pixel vehicle fleet
         env:
@@ -143,6 +144,11 @@ jobs:
           python tools/audit_v250_bug_intake.py
           python tools/audit_v250_current_reports.py
           python tools/capture_v250_visual_review.py
+      - name: Verify v2.6 character-art archive and release authority
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/audit_v260_release.py
       - name: Verify deterministic authored map data
         run: python tools/deterministic_traffic_audit.py
       - name: Verify release audit bundle

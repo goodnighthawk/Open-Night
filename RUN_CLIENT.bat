@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title OPEN NIGHT v2.5 - Grid Client
+title OPEN NIGHT v2.6 - Grid Client
 
 if not exist ".venv\Scripts\python.exe" (
   echo Preparing the Open Night Python environment...
@@ -31,9 +31,9 @@ set "CLIENT_LOG=%~dp0client_crash.log"
 set "PYTHONFAULTHANDLER=1"
 set "PYTHONUNBUFFERED=1"
 
-echo Open Night v2.5 GridWorld-authoritative desktop client starting...
+echo Open Night v2.6 GridWorld-authoritative desktop client starting...
 echo Ground, minimap, and M map use GridWorld; legacy place names may remain as labels only.
-echo Discovered multiplayer servers must advertise the same v2.5 wire version before JOIN.
+echo Discovered multiplayer servers must advertise the same v2.6 wire version before JOIN.
 echo Crash log: %CLIENT_LOG%
 echo.
 
