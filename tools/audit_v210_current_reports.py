@@ -101,7 +101,9 @@ def _vehicle_footprint_and_endcap_audit() -> dict:
 def _prop_and_building_audit(world) -> dict:
     cones = [row for row in world.objects if row.get("street_item_kind") == "traffic_cone"]
     trees = [row for row in world.objects if row.get("collision_kind") == "tree"]
-    require(len(cones) == 24, f"expected 24 traffic cones, got {len(cones)}")
+    closures = {str(row.get("road_closure_id", "")) for row in cones if row.get("road_closure_id")}
+    require((len(cones) == 24 and not closures) or (len(cones) == 15 and len(closures) == 3),
+            f"traffic-cone baseline/grouped closure count failed: {len(cones)}, {closures}")
     require(trees, "no collidable round shrubs/trees were populated")
     for row in cones + trees:
         definition = world.catalog.object(str(row["asset"]))

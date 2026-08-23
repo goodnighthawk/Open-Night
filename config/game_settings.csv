@@ -77,6 +77,7 @@ camera,center_player_when_rotated,true,bool,Keep local player exactly at screen 
 traffic,ai_turn_radius_px,34,float,Default smoothed AI car corner radius; smaller is easier/tighter
 bicycle,ai_turn_radius_px,14,float,Tighter cyclist corner radius than cars
 vehicle,player_turn_rate,3.6,float,Player car steering rate; raised for more immediate GTA2-style urban turning
+vehicle,player_signal_turn_multiplier,1.32,float,Steering-rate multiplier when the active indicator matches the turn direction
 vehicle,player_front_axle_offset_ratio,0.36,float,Player car steering pivot measured forward from body center as a fraction of collision length
 vehicle,passenger_capacity,3,int,Maximum player passengers in a car in addition to the driver
 vehicle,passenger_board_max_speed_px_s,35,float,Maximum car speed at which a nearby player can board as passenger

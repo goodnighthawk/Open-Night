@@ -1179,6 +1179,7 @@ class RemoteNPC:
         self.aim = float(data.get("aim", 0.0))
         self.appearance = normalize_character(data.get("appearance"))
         self.kind = str(data.get("kind", "pedestrian"))
+        self.companion_id = str(data.get("companion_id", ""))
         self.moving_until = time.monotonic() + 0.3
         self.anim_epoch = time.monotonic() + random.random() * 4.0
 
@@ -1190,6 +1191,7 @@ class RemoteNPC:
         self.target_x, self.target_y = nx, ny
         self.aim = float(data.get("aim", self.aim))
         self.kind = str(data.get("kind", self.kind))
+        self.companion_id = str(data.get("companion_id", self.companion_id))
         if "appearance" in data:
             self.appearance = normalize_character(data.get("appearance"))
 
@@ -2269,6 +2271,11 @@ class Game:
                 ex, ey = float(info["entry"][0]), float(info["entry"][1])
             except (KeyError, TypeError, ValueError, IndexError):
                 continue
+            # GridWorld doors are real wall-bound object sprites. Drawing the
+            # legacy freestanding marker at their interaction point put a
+            # second fake door in the sidewalk/road (report #165).
+            if bool(info.get("grid_native")):
+                continue
             sx, sy = self.world_to_screen(ex, ey)
             if -40 <= sx <= self.screen.get_width()+40 and -40 <= sy <= self.screen.get_height()+40:
                 pygame.draw.rect(self.screen, (28, 30, 30), pygame.Rect(sx-13, sy-15, 26, 30), border_radius=2)
@@ -2821,6 +2828,11 @@ class Game:
     def draw_npc(self, npc: RemoteNPC) -> None:
         sx, sy = self.world_to_screen(npc.render_x, npc.render_y)
         if getattr(npc, "kind", "pedestrian") == "dog":
+            walker = self.npcs.get(str(getattr(npc, "companion_id", "")))
+            if walker is not None:
+                wx, wy = self.world_to_screen(walker.render_x, walker.render_y)
+                pygame.draw.line(self.screen, (25, 20, 17), (sx, sy), (wx, wy), 5)
+                pygame.draw.line(self.screen, (164, 105, 54), (sx, sy), (wx, wy), 2)
             # Compact original top-down dog silhouette; heading follows the same
             # authoritative route aim as pedestrians. No external art dependency.
             sprite = pygame.Surface((34, 22), pygame.SRCALPHA)

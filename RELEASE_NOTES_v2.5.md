@@ -1,11 +1,20 @@
-# Python MMO v2.5 release notes
+# Open Night v2.5
 
-- Integrated selected user-created Arcade Car Physics, CityVoxelPack, white-puff, and character-motion source assets into both game clients and the standalone movement tester.
-- Added five new top-down vehicle sprites with class-consistent sizing and deterministic traffic coverage.
-- Added camera-matched voxel-building art and eight-frame sprint dust.
-- Upgraded the game to the current modular eight-direction dual-camera character pack.
-- Fixed fluid character playback reading the wrong CSV frame-count field.
-- Added double-tap directional running at server-authoritative 3× speed, a remote `run` pose, and faster run animation cadence.
-- Added dedicated eight-direction `run_wide_8` sheets for both cameras. Peak run frames use a 1.48× wider gait, while custom modular outfits receive a compatible lower-body widening fallback.
-- Preserved Shift sprint/vehicle boost for compatibility.
-- Excluded original Unity/editor content and redundant legacy sprite sets from the release.
+Map-capacity and player-report reconciliation release covering the GitHub backlog through issue #184.
+
+- Restores the George Washington Bridge art over the center highway.
+- Adds two enterable infill buildings to empty urban blocks with a three-player-width curb setback.
+- Gives every building a wall-bound functional first-floor entrance.
+- Reduces public-server capacity from 128 to the authoritative count of 30 enterable buildings; future map changes update the slot limit from the same runtime count.
+- Groups traffic cones into three recognizable road closures, moves public telephones inward, and renders lamps and enlarged wall-attached canopies overhead so players and pedestrians pass below them.
+- Adds clear-before-entry intersection reservations, inside-junction priority, and sustained overlap/orbit regression checks for civilian traffic.
+- Corrects the runtime orientation of `gridcar005` and `gridcar015` while retaining the recently added pixel-car fleet.
+- Completes the three generated vehicle exports reported with clipped/missing rear bodywork.
+- Speeds up player steering when the active indicator matches the turn direction.
+- Keeps pedestrian routes outside building/rooftop footprints, reserves rooftops to buyer/supplier job NPCs, disperses dense visible clusters, and pairs dogs with ahead-of-walker pavement movement plus visible bounded leashes.
+- Integrates the selected Arcade Car Physics, CityVoxelPack, white-puff, and character-motion source assets into both game clients and the standalone movement tester.
+- Retains the five added top-down vehicle sprites, camera-matched voxel-building art, eight-frame sprint dust, and the modular eight-direction dual-camera character pack.
+- Keeps the fluid character frame-count fix, server-authoritative 3× directional running, remote run pose, faster run cadence, and dedicated wide-gait sheets with their modular-outfit fallback.
+- Preserves Shift sprint/vehicle boost compatibility while continuing to exclude redundant legacy sprites and original Unity/editor content.
+
+Release verification covers reports #165–#184, every carried report suite, sustained and isolated traffic behavior, building/interior capacity authority, multiplayer handshakes, launcher/version authority, and runtime visual review.

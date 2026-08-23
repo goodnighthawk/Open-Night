@@ -102,6 +102,98 @@ def _build_traffic_signals(world) -> list[dict]:
     return signals
 
 
+def _build_traffic_junctions(world) -> list[dict]:
+    """Publish exact road-band conflict boxes for server-side reservations."""
+    from v110_pedestrian_connectivity import road_bands
+
+    horizontal, vertical = road_bands(world)
+    junctions = []
+    for row_index, row in enumerate(horizontal):
+        for col_index, col in enumerate(vertical):
+            junctions.append({
+                "id": f"grid_junction_{row_index:02d}_{col_index:02d}",
+                "rect": [
+                    float(col.start * world.cell_px),
+                    float(row.start * world.cell_px),
+                    float((col.end + 1) * world.cell_px),
+                    float((row.end + 1) * world.cell_px),
+                ],
+                "reservation_policy": "clear_before_entry_inside_vehicle_priority_v25",
+            })
+    return junctions
+
+
+def _install_enterable_buildings(server_module, map_config: dict, world) -> int:
+    """Bind one functional first-floor interior to every runtime building."""
+    buildings = list((world.data.get("building_synthesis") or {}).get("buildings") or [])
+    doors = {
+        str(item.get("building_id", "")): item
+        for item in world.objects
+        if bool(item.get("functional_entry"))
+    }
+    building_ids: list[str] = []
+    building_rects: list[list[float]] = []
+    interiors: list[dict] = []
+    room_kinds = (
+        "starter_apartment", "corner_shop", "night_diner", "pharmacy",
+        "laundromat", "pawn_shop", "garage", "nightclub",
+        "warehouse_office", "rooftop_loft",
+    )
+    for index, building in enumerate(sorted(buildings, key=lambda row: str(row["building_id"])), 1):
+        building_id = str(building["building_id"])
+        x0, y0, x1, y1 = map(int, building["rect"])
+        rect = [
+            float(x0 * world.cell_px),
+            float(y0 * world.cell_px),
+            float((x1 - x0 + 1) * world.cell_px),
+            float((y1 - y0 + 1) * world.cell_px),
+        ]
+        door = doors.get(building_id)
+        if door is None:
+            raise RuntimeError(f"enterable building lacks a functional wall door: {building_id}")
+        door_gx = int(door["gx"])
+        door_gy = int(door["gy"])
+        # The visual door is aligned inside its chosen wall cell; the
+        # interaction point sits just outside that wall on walkable pavement.
+        edge = str(door.get("edge", "south"))
+        depth = min(28.0, world.cell_px * 0.22)
+        entry_x = (door_gx + 0.5) * world.cell_px
+        entry_y = (door_gy + 0.5) * world.cell_px
+        if edge == "south":
+            entry_y = (door_gy + 1.0) * world.cell_px + depth
+        elif edge == "north":
+            entry_y = door_gy * world.cell_px - depth
+        elif edge == "east":
+            entry_x = (door_gx + 1.0) * world.cell_px + depth
+        elif edge == "west":
+            entry_x = door_gx * world.cell_px - depth
+        if world.collision_at("ground", entry_x, entry_y) not in {"walk", "sidewalk"}:
+            raise RuntimeError(f"functional door does not open onto pavement: {building_id}")
+        room_id = f"grid_room_{index:03d}"
+        building_ids.append(building_id)
+        building_rects.append(rect)
+        interiors.append({
+            "id": room_id,
+            "name": f"Building {index:02d}",
+            "kind": room_kinds[(index - 1) % len(room_kinds)],
+            "entry": [round(entry_x, 3), round(entry_y, 3)],
+            "building_id": building_id,
+            "door_asset": str(door.get("asset", "placeholder_street_door")),
+            "grid_native": True,
+            "first_floor": True,
+        })
+
+    if not interiors or len(interiors) != len(buildings):
+        raise RuntimeError("every runtime building must contribute exactly one server slot")
+    map_config["building_ids"] = building_ids
+    map_config["buildings"] = building_rects
+    map_config["interiors"] = interiors
+    map_config.setdefault("runtime", {})["server_capacity_policy"] = "one_slot_per_enterable_building_v25"
+    map_config["runtime"]["enterable_building_count"] = len(interiors)
+    server_module.MAX_PLAYERS = len(interiors)
+    return len(interiors)
+
+
 def _segment_surface(world, a: tuple[float, float], b: tuple[float, float], collision: str) -> bool:
     dx, dy = b[0] - a[0], b[1] - a[1]
     length = math.hypot(dx, dy)
@@ -251,6 +343,7 @@ def _build_pedestrian_routes(world) -> list[dict]:
         for gy in range(world.height)
         for gx in range(world.width)
         if _is_pavement(world, gx, gy)
+        and not world.object_collision_at(*world.cell_center(gx, gy), 8.0)
     }
     routes: list[dict] = []
     for component in _components(pavement):
@@ -441,6 +534,7 @@ def install(server_module, world) -> None:
 def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     """Derive GridWorld routes and populate the mature server AI systems."""
     install(server_module, world)
+    enterable_buildings = _install_enterable_buildings(server_module, map_config, world)
     traffic_routes = _build_traffic_routes(world)
     pedestrian_routes = _build_pedestrian_routes(world)
     if not traffic_routes:
@@ -452,6 +546,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     map_config["traffic_routes"] = traffic_routes
     map_config["traffic_starts"] = _traffic_starts(traffic_routes, traffic_count)
     map_config["traffic_signals"] = _build_traffic_signals(world)
+    map_config["traffic_junctions"] = _build_traffic_junctions(world)
     map_config["parking_spots"] = _build_parking_spots(world, map_config["traffic_signals"])
     map_config["npc_routes"] = pedestrian_routes
     map_config["npc_starts"] = _pedestrian_starts(pedestrian_routes)
@@ -476,6 +571,23 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     # poison the traffic simulation simply because a catalog car is unusually wide.
     safe_cars = []
     for car in server_module.traffic_vehicles:
+        junction_margin = max(20.0, float(car.collision_length) * 0.58)
+        if (not car.parked and 0 <= car.route_index < len(traffic_routes)
+                and server_module._traffic_junction_at(car.x, car.y, junction_margin)):
+            # Starting several large bodies inside the same junction defeats
+            # clear-before-entry before the first tick. Reseat each authored
+            # fraction to the first stable route pose outside every conflict box.
+            route = traffic_routes[car.route_index]
+            for offset in (0.031, 0.067, 0.103, 0.151, 0.211, 0.283, 0.367):
+                fraction = (float(car.home_fraction) + offset) % 1.0
+                x, y, next_waypoint, angle = server_module._sample_route(route, fraction)
+                if server_module._traffic_junction_at(x, y, junction_margin):
+                    continue
+                car.x, car.y, car.next_waypoint, car.angle = x, y, next_waypoint, angle
+                car.last_progress_x, car.last_progress_y = x, y
+                car.home_fraction = fraction
+                break
+
         def pose_clear() -> bool:
             if _grid_vehicle_blocked(world, car, car.x, car.y, car.angle):
                 return False
@@ -513,6 +625,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
         "traffic_requested": traffic_count,
         "traffic_spawned": sum(1 for car in server_module.traffic_vehicles if not car.parked),
         "traffic_signal_count": len(map_config["traffic_signals"]),
+        "traffic_junction_count": len(map_config["traffic_junctions"]),
         "parking_spot_count": len(map_config["parking_spots"]),
         "parked_vehicle_count": sum(1 for car in safe_cars if car.parked),
         "pedestrian_route_count": len(pedestrian_routes),
@@ -521,6 +634,9 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
         "road_center_rows": _major_road_centers(world)[0],
         "road_center_cols": _major_road_centers(world)[1],
         "grid_cell_px": world.cell_px,
+        "enterable_building_count": enterable_buildings,
+        "server_slot_capacity": int(server_module.MAX_PLAYERS),
+        "server_capacity_policy": "one_slot_per_enterable_building_v25",
     }
     map_config.setdefault("runtime", {})["legacy_surface_entities"] = False
     map_config["runtime"]["grid_native_surface_entities"] = True

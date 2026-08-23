@@ -158,7 +158,17 @@ def load_map_folder(folder: Path, *, attach_grid: bool = True) -> dict:
 
     cfg["districts"] = [{"name": str(r.get("name", "")), "pos": [_float(r.get("x")), _float(r.get("y"))]} for r in _rows(folder / "districts.csv")]
     cfg["landmarks"] = [{"id": str(r.get("id", "")), "name": str(r.get("name", "")), "kind": str(r.get("kind", "landmark")), "pos": [_float(r.get("x")), _float(r.get("y"))]} for r in _rows(folder / "landmarks.csv")]
-    cfg["interiors"] = [{"id": str(r.get("id", "")), "name": str(r.get("name", "")), "kind": str(r.get("kind", "interior")), "entry": [_float(r.get("entry_x")), _float(r.get("entry_y"))]} for r in _rows(folder / "interiors.csv")]
+    cfg["interiors"] = [
+        {
+            "id": str(r.get("id", "")),
+            "name": str(r.get("name", "")),
+            "kind": str(r.get("kind", "interior")),
+            "entry": [_float(r.get("entry_x")), _float(r.get("entry_y"))],
+            "building_id": str(r.get("building_id", "")).strip(),
+            "door_hint": str(r.get("door_hint", "")).strip(),
+        }
+        for r in _rows(folder / "interiors.csv")
+    ]
     cfg["parked_vehicle_spawns"] = [[_float(r.get("x")), _float(r.get("y")), _float(r.get("angle"))] for r in _rows(folder / "parked_vehicles.csv")]
     cfg["parked_bicycle_spawns"] = [[_float(r.get("x")), _float(r.get("y")), _float(r.get("angle"))] for r in _rows(folder / "parked_bicycles.csv")]
     building_rows = _rows(folder / "buildings.csv")

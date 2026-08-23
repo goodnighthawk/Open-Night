@@ -52,6 +52,7 @@ def _parking_panel(world, config: dict, spot: dict, size: tuple[int, int]) -> py
     game.local_id = "v24-review"
     game.players = {"v24-review": SimpleNamespace(level=0, render_x=center[0], render_y=center[1])}
     game.settings = {"render": {"camera_pixel_snap": True}}
+    game.tiny_font = pygame.font.Font(None, 18)
     game._render_camera_override = (center[0] - size[0] * 0.5, center[1] - size[1] * 0.5)
     game.hydrants = {}
     game.traffic_lights = {}

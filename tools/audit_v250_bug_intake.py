@@ -1,4 +1,4 @@
-"""Offline release gate for the v2.4 bug-report intake baseline."""
+"""Offline release gate for the v2.5 bug-report intake baseline."""
 
 from __future__ import annotations
 
@@ -14,11 +14,10 @@ def main() -> int:
     with snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     by_issue = {int(row["github_issue"]): row for row in rows}
-    baseline = [row for row in rows if int(row["github_issue"]) <= 164]
-    assert len(baseline) == 144, f"expected 144 v2.4-baseline issues, found {len(baseline)}"
-    assert max(int(row["github_issue"]) for row in baseline) == 164
-    assert sum(row["state"] == "open" for row in baseline) == 140
-    for number in range(161, 165):
+    assert len(rows) == 164, f"expected 164 pulled issues, found {len(rows)}"
+    assert max(by_issue) == 184
+    assert sum(row["state"] == "open" for row in rows) == 160
+    for number in range(165, 185):
         row = by_issue[number]
         assert row["state"] == "open"
         assert row["review_status"] == "pending-review"
@@ -27,12 +26,11 @@ def main() -> int:
         for value in row.values():
             assert not str(value or "").lstrip().startswith(("=", "+", "-", "@"))
 
-    checklist = (ROOT / "V2_4_CURRENT_BUG_CHECKLIST.md").read_text(encoding="utf-8")
-    for number in range(161, 165):
+    checklist = (ROOT / "V2_5_CURRENT_BUG_CHECKLIST.md").read_text(encoding="utf-8")
+    for number in range(165, 185):
         assert f"issues/{number}" in checklist
-    current_version = tuple(int(part) for part in (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip().split("."))
-    assert current_version >= (2, 4), f"v2.4 carried gate cannot run on version {current_version}"
-    print("V2.4 BUG INTAKE AUDIT PASSED: 144 total / 140 open / current reports #161-#164")
+    assert (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip() == "2.5"
+    print("V2.5 BUG INTAKE AUDIT PASSED: 164 total / 160 open / current reports #165-#184")
     return 0
 
 

@@ -64,6 +64,7 @@ DEFAULTS = {
         "player_brake_px_s2": 390.0,
         "player_drag_px_s2": 92.0,
         "player_turn_rate": 2.75,
+        "player_signal_turn_multiplier": 1.32,
         "player_front_axle_offset_ratio": 0.36,
     },
     "engine": {"ai_profile_version": 2, "client_profile_version": 282},

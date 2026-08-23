@@ -81,8 +81,11 @@ from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_met
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v0.9.0 / consolidation"
-MAX_PLAYERS = 128
+SERVER_NAME = "Open Night v2.5"
+# v2.5 runtime validation replaces this fallback with the exact number of
+# enterable GridWorld buildings. Keep the cold-start/default identity aligned
+# with the current 30-building map so discovery is never advertised as 128.
+MAX_PLAYERS = 30
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 SERVER_VERSION = GAME_VERSION
 BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
@@ -447,6 +450,8 @@ class TrafficVehicle:
     turn_signal: int = 0
     headlights: bool = False
     brake_lights: bool = False
+    junction_id: str = ""
+    junction_time: float = 0.0
 
     def public_dict(self) -> dict:
         return {
@@ -503,9 +508,10 @@ class NPCPedestrian:
     last_progress_x: float = 0.0
     last_progress_y: float = 0.0
     signal_waiting: bool = False
+    companion_id: str = ""
 
     def public_dict(self) -> dict:
-        return {
+        payload = {
             "id": self.npc_id,
             "x": round(self.x, 2),
             "y": round(self.y, 2),
@@ -513,6 +519,9 @@ class NPCPedestrian:
             "appearance": normalize_character(self.appearance),
             "kind": self.kind,
         }
+        if self.companion_id:
+            payload["companion_id"] = self.companion_id
+        return payload
 
 
 npc_pedestrians: list[NPCPedestrian] = []
@@ -984,6 +993,12 @@ def _traffic_should_yield_to_pedestrian(car: TrafficVehicle, heading: float) -> 
     """Brake for a pedestrian ahead and expose a short horn signal."""
     hx, hy = math.cos(heading), math.sin(heading)
     for npc in npc_pedestrians:
+        # Sidewalk crowds—including pedestrians passing below overhead lamps—
+        # are not lane hazards. Yield only after a pedestrian has legally
+        # entered the road/crosswalk, preventing curb queues from starving a
+        # green vehicle phase (#149/#171).
+        if GRID_WORLD is not None and GRID_WORLD.collision_at("ground", npc.x, npc.y) != "road":
+            continue
         rx, ry = npc.x - car.x, npc.y - car.y
         forward = rx * hx + ry * hy
         lateral = abs(rx * hy - ry * hx)
@@ -1137,6 +1152,19 @@ def _traffic_priority(car: TrafficVehicle, target: tuple[float, float] | None = 
     return score
 
 
+def _traffic_junction_at(x: float, y: float, margin: float = 0.0) -> str:
+    """Return the exact GridWorld junction containing a vehicle center."""
+    for junction in ACTIVE_MAP.get("traffic_junctions", []) or []:
+        rect = junction.get("rect", []) or []
+        if len(rect) < 4:
+            continue
+        x0, y0, x1, y1 = map(float, rect[:4])
+        reserve = max(0.0, float(margin))
+        if x0 - reserve <= float(x) <= x1 + reserve and y0 - reserve <= float(y) <= y1 + reserve:
+            return str(junction.get("id", ""))
+    return ""
+
+
 def _far_from_all_players(x: float, y: float, sessions: list[ClientSession], clearance: float) -> bool:
     r2 = float(clearance) ** 2
     return all((s.player.x - x) ** 2 + (s.player.y - y) ** 2 >= r2 for s in sessions)
@@ -1173,22 +1201,27 @@ def _recover_visible_stall(car: TrafficVehicle, route: dict) -> bool:
     points = _route_points(route)
     if len(points) < 2:
         return False
-    next_wp = (car.next_waypoint + 1) % len(points)
-    tx, ty = map(float, points[next_wp])
-    heading = math.atan2(ty - car.y, tx - car.x)
-    # A short lane-aligned nudge is visually continuous and breaks overlapping
-    # reservations that otherwise leave an on-screen sprite frozen indefinitely.
-    nx = car.x + math.cos(heading) * 10.0
-    ny = car.y + math.sin(heading) * 10.0
-    if _vehicle_map_blocked(car, nx, ny, heading):
-        return False
-    car.x, car.y, car.angle = nx, ny, heading
-    car.next_waypoint = next_wp
-    car.speed = max(28.0, float(route.get("speed_limit", 120.0)) * 0.28 * car.speed_factor)
-    car.wait_age = 0.0
-    car.stuck_time = 0.0
-    car.last_progress_x, car.last_progress_y = nx, ny
-    return True
+    current_junction = _traffic_junction_at(car.x, car.y)
+    for advance in range(1, min(7, len(points))):
+        next_wp = (car.next_waypoint + advance) % len(points)
+        tx, ty = map(float, points[next_wp])
+        # A stalled junction occupant targets the first point beyond the box,
+        # so recovery clears the conflict area instead of orbiting its center.
+        if current_junction and _traffic_junction_at(tx, ty) == current_junction:
+            continue
+        heading = math.atan2(ty - car.y, tx - car.x)
+        nx = car.x + math.cos(heading) * 12.0
+        ny = car.y + math.sin(heading) * 12.0
+        if _vehicle_map_blocked(car, nx, ny, heading):
+            continue
+        car.x, car.y, car.angle = nx, ny, heading
+        car.next_waypoint = next_wp
+        car.speed = max(28.0, float(route.get("speed_limit", 120.0)) * 0.34 * car.speed_factor)
+        car.wait_age = 0.0
+        car.stuck_time = 0.0
+        car.last_progress_x, car.last_progress_y = nx, ny
+        return True
+    return False
 
 
 def update_traffic(dt: float, sessions: list[ClientSession], server_time: float) -> None:
@@ -1221,7 +1254,16 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
         dx, dy = target[0] - car.x, target[1] - car.y
         dist = math.hypot(dx, dy)
         next_waypoint = car.next_waypoint
-        if dist < 3.0:
+        # Three pixels was much smaller than a real car's turning circle. A car
+        # that passed just outside that pin-point target would circle it forever
+        # (#174). Consume nearby curve samples using a body/fillet-sized radius.
+        waypoint_reach = max(
+            24.0,
+            min(72.0, max(car.collision_length * 0.72, float(route.get("turn_radius", 34.0)) * 0.68)),
+        )
+        for _ in range(min(4, len(points))):
+            if dist >= waypoint_reach:
+                break
             # Do not mutate yet; keep the whole update two-phase.
             next_waypoint = (next_waypoint + 1) % len(points)
             target_raw = points[next_waypoint]
@@ -1230,8 +1272,15 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             dist = math.hypot(dx, dy)
 
         desired = float(route.get("speed_limit", 150.0)) * car.speed_factor
+        current_junction = _traffic_junction_at(car.x, car.y)
+        if current_junction:
+            # Keep the conflict box flowing: a reserved occupant clears at a
+            # modestly elevated crossing speed and never loiters in the middle.
+            desired *= 1.22
         phase = route.get("_runtime_signals", route.get("signals", {})).get(str(next_waypoint))
-        red_light = phase is not None and not traffic_phase_green(int(phase), server_time)
+        # Once a vehicle has entered, it must clear the junction without
+        # stopping for the next signal phase (reports #167/#171).
+        red_light = not current_junction and phase is not None and not traffic_phase_green(int(phase), server_time)
         # Start braking before the curve entry rather than waiting until the car
         # body is already in the junction. The stopping envelope scales with the
         # live speed and vehicle length.
@@ -1292,7 +1341,6 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
     # routes use stable vehicle IDs so every server tick makes the same decision.
     prop_grid: dict[tuple[int, int], list[TrafficVehicle]] = {}
     cell = float(TRAFFIC_SPATIAL_CELL)
-    by_id = {car.vehicle_id: car for car in traffic_vehicles}
     for car in traffic_vehicles:
         if car.vehicle_id not in proposals:
             continue
@@ -1300,6 +1348,31 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
         prop_grid.setdefault((int(nx // cell), int(ny // cell)), []).append(car)
 
     cancelled: set[str] = set()
+    # A junction may accept only one new vehicle at a time. Existing occupants
+    # keep the reservation until clear; otherwise the longest-waiting entrant
+    # wins. This prevents a fresh pileup from being created several body lengths
+    # inside an intersection.
+    occupants: dict[str, list[TrafficVehicle]] = {}
+    entrants: dict[str, list[TrafficVehicle]] = {}
+    for car in traffic_vehicles:
+        prop = proposals.get(car.vehicle_id)
+        if prop is None or car.controlled_by or car.parked or car.route_index < 0:
+            continue
+        current = _traffic_junction_at(car.x, car.y)
+        proposed = _traffic_junction_at(
+            prop[0], prop[1],
+            margin=max(20.0, float(car.collision_length) * 0.58),
+        )
+        if current:
+            occupants.setdefault(current, []).append(car)
+        elif proposed:
+            entrants.setdefault(proposed, []).append(car)
+    for junction_id, waiting in entrants.items():
+        if occupants.get(junction_id):
+            cancelled.update(car.vehicle_id for car in waiting)
+            continue
+        winner = max(waiting, key=lambda car: _traffic_priority(car, proposals[car.vehicle_id][5]))
+        cancelled.update(car.vehicle_id for car in waiting if car is not winner)
     # Cars reserve against the complete bicycle body as well as other cars.
     # Bicycles may overlap one another, but a car and bicycle never share space.
     for car in traffic_vehicles:
@@ -1308,7 +1381,6 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             continue
         if _vehicle_hits_bicycle(car,prop[0],prop[1],prop[2]):
             cancelled.add(car.vehicle_id)
-    yield_to: dict[str, str] = {}
     checked: set[tuple[str, str]] = set()
     for car in traffic_vehicles:
         prop = proposals.get(car.vehicle_id)
@@ -1340,6 +1412,10 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
                 loser = other
             elif other_static and not car_static:
                 loser = car
+            elif _traffic_junction_at(car.x, car.y) and not _traffic_junction_at(other.x, other.y):
+                loser = other
+            elif _traffic_junction_at(other.x, other.y) and not _traffic_junction_at(car.x, car.y):
+                loser = car
             else:
                 # Fair right-of-way: a car that has waited longer eventually wins,
                 # preventing deterministic circular-yield deadlocks at intersections.
@@ -1352,58 +1428,11 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
                 else:
                     loser = car if score_car < score_other else other
             cancelled.add(loser.vehicle_id)
-            winner = other if loser is car else car
-            yield_to[loser.vehicle_id] = winner.vehicle_id
+            # Keep the loser in-lane while the reservation clears the winner.
 
-    # A yielding car keeps positive progress toward its route while making a small
-    # lane-width sidestep. It never reverses or spins away from its desired heading.
-    avoidance_positions: dict[str, tuple[float, float]] = {}
-    for loser_id, winner_id in yield_to.items():
-        loser = by_id.get(loser_id)
-        winner = by_id.get(winner_id)
-        winner_prop = proposals.get(winner_id)
-        if loser is None or winner is None or winner_prop is None:
-            continue
-        if loser.parked or loser.controlled_by or loser.route_index < 0:
-            continue
-        prop = proposals.get(loser_id)
-        if prop is None:
-            continue
-        heading = prop[2]
-        hx, hy = math.cos(heading), math.sin(heading)
-        sx, sy = -hy, hx
-        winner_side = (winner_prop[0] - loser.x) * sx + (winner_prop[1] - loser.y) * sy
-        preferred = -1.0 if winner_side >= 0.0 else 1.0
-        candidate = None
-        for side_sign in (preferred, -preferred):
-            for lateral in (18.0, 12.0, 7.0):
-                rx = loser.x + hx * 4.0 + sx * lateral * side_sign
-                ry = loser.y + hy * 4.0 + sy * lateral * side_sign
-                if _vehicle_map_blocked(loser, rx, ry, heading):
-                    continue
-                if _traffic_footprints_conflict(loser, rx, ry, heading, winner,
-                                                winner_prop[0], winner_prop[1], winner_prop[2],
-                                                courtesy_scale=0.92):
-                    continue
-                candidate = (rx, ry)
-                break
-            if candidate is not None:
-                break
-        if candidate is None:
-            continue
-        rx, ry = candidate
-        # Local clearance only; do not use the all-car helper here because the
-        # winner is exactly the object we are intentionally moving away from.
-        clear = True
-        for nearby in _nearby_cars(loser, grid):
-            if nearby is loser or nearby is winner:
-                continue
-            sep = max(TRAFFIC_MIN_SEPARATION, 0.42 * (loser.collision_length + nearby.collision_length))
-            if (nearby.x-rx)**2 + (nearby.y-ry)**2 < sep*sep:
-                clear = False
-                break
-        if clear:
-            avoidance_positions[loser_id] = (rx, ry)
+    # Lateral sidesteps made touching sprites look glued together. Yielding cars
+    # now remain in lane while the junction and following reservations clear the
+    # winner first.
 
     # Phase 2b: hard safety using a spatial hash as well. This replaces the old
     # O(N^2) all-car scan, which became expensive exactly when traffic density rose.
@@ -1416,7 +1445,7 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             if prop is None:
                 pos = (car.x, car.y)
             elif car.vehicle_id in cancelled:
-                pos = avoidance_positions.get(car.vehicle_id, (car.x, car.y))
+                pos = (car.x, car.y)
             else:
                 pos = (prop[0], prop[1])
             effective[car.vehicle_id] = pos
@@ -1457,10 +1486,6 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
             continue
         moved = math.hypot(nx - car.x, ny - car.y)
         if car.vehicle_id in cancelled:
-            if car.vehicle_id in avoidance_positions:
-                car.x, car.y = avoidance_positions[car.vehicle_id]
-                car.angle = heading
-                car.speed = max(12.0, min(speed, car.speed))
             car.speed = max(0.0, car.speed - TRAFFIC_BRAKE_DECEL * dt)
             car.wait_age = min(float(TRAFFIC_AI.get("max_wait_priority", 15.0)), car.wait_age + dt)
             car.stuck_time += dt
@@ -1472,17 +1497,33 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
                     _activate_traffic_horn(car, 0.8)
                 car.turn_signal = -1 if sum(ord(ch) for ch in car.vehicle_id) % 2 == 0 else 1
             recovery_after = min(
-                1.8,
+                0.9 if _traffic_junction_at(car.x, car.y) else 1.8,
                 max(1.0, float(TRAFFIC_AI.get("visible_stall_recovery_seconds", 2.2))),
             )
             if not red_light and car.stuck_time >= recovery_after:
                 _recover_visible_stall(car, routes[car.route_index % len(routes)])
             _try_recycle_stuck_car(car, routes, sessions)
+            current_junction = _traffic_junction_at(car.x, car.y)
+            prior_junction = car.junction_id
+            car.junction_id = current_junction
+            car.junction_time = (
+                car.junction_time + dt
+                if current_junction and current_junction == prior_junction
+                else (dt if current_junction else 0.0)
+            )
             continue
         car.x, car.y = nx, ny
         car.angle = heading
         car.speed = speed
         car.next_waypoint = next_waypoint
+        current_junction = _traffic_junction_at(car.x, car.y)
+        prior_junction = car.junction_id
+        car.junction_id = current_junction
+        car.junction_time = (
+            car.junction_time + dt
+            if current_junction and current_junction == prior_junction
+            else (dt if current_junction else 0.0)
+        )
         if moved > 0.6:
             car.wait_age = max(0.0, car.wait_age - dt * 2.4)
             car.stuck_time = max(0.0, car.stuck_time - dt * 3.0)
@@ -1570,6 +1611,75 @@ def initialize_hydrants() -> None:
         hydrants[hid] = HydrantState(hydrant_id=hid, x=x, y=y)
 
 
+DOG_LEASH_LENGTH = 54.0
+DOG_MAX_LEASH_LENGTH = 96.0
+
+
+def _npc_on_building_footprint(x: float, y: float) -> bool:
+    if GRID_WORLD is None or not hasattr(GRID_WORLD, "world_to_cell") or not hasattr(GRID_WORLD, "data"):
+        return False
+    gx, gy = GRID_WORLD.world_to_cell(float(x), float(y))
+    for building in list((GRID_WORLD.data.get("building_synthesis") or {}).get("buildings") or []):
+        try:
+            x0, y0, x1, y1 = map(int, building.get("rect", ()))
+        except (TypeError, ValueError):
+            continue
+        if x0 <= gx <= x1 and y0 <= gy <= y1:
+            return True
+    return False
+
+
+def _recover_ambient_npc_from_rooftop(npc: NPCPedestrian) -> None:
+    """Keep roof/building footprints exclusive to buyer and supplier roles."""
+    if npc.kind in {"buyer", "supplier"} or not _npc_on_building_footprint(npc.x, npc.y):
+        return
+    routes = ACTIVE_MAP.get("npc_routes", []) or []
+    if not (0 <= npc.route_index < len(routes)):
+        return
+    route_points = _route_points(routes[npc.route_index])
+    safe_points = [
+        (index, float(point[0]), float(point[1]))
+        for index, point in enumerate(route_points)
+        if not _npc_on_building_footprint(float(point[0]), float(point[1]))
+    ]
+    if not safe_points:
+        return
+    index, x, y = min(safe_points, key=lambda row: math.hypot(row[1] - npc.x, row[2] - npc.y))
+    npc.x, npc.y = x, y
+    npc.next_waypoint = (index + npc.route_direction) % len(route_points)
+    npc.last_progress_x, npc.last_progress_y = x, y
+    npc.pause_timer = 0.0
+    npc.stuck_time = 0.0
+
+
+def _dog_front_target(walker: NPCPedestrian) -> tuple[float, float]:
+    """Choose a legal pavement point directly ahead of a paired walker."""
+    # The dog may stand one leash-length into a registered road crossing while
+    # its walker waits at the curb; traffic already yields to road occupants.
+    allowed_surfaces = {"walk", "sidewalk", "road"}
+    surface_fallback: tuple[float, float] | None = None
+    for distance in (DOG_LEASH_LENGTH, 42.0, 30.0, 22.0, 14.0):
+        for offset in (0.0, 0.55, -0.55, 1.0, -1.0):
+            heading = float(walker.aim) + offset
+            x = walker.x + math.cos(heading) * distance
+            y = walker.y + math.sin(heading) * distance
+            if GRID_WORLD is None:
+                return x, y
+            if GRID_WORLD.collision_at("ground", x, y) not in allowed_surfaces:
+                continue
+            if _npc_on_building_footprint(x, y):
+                continue
+            if surface_fallback is None:
+                surface_fallback = (x, y)
+            if hasattr(GRID_WORLD, "object_collision_at") and GRID_WORLD.object_collision_at(x, y, 7.0):
+                continue
+            return x, y
+    # Dogs are non-colliding ambient art. If a hydrant, lamp base, or other
+    # small prop occupies every ahead candidate, retain the ahead/leash contract
+    # on the correct surface instead of collapsing the dog into its walker.
+    return surface_fallback or (walker.x, walker.y)
+
+
 def initialize_npcs() -> None:
     npc_pedestrians.clear()
     blood_stains.clear()
@@ -1588,23 +1698,26 @@ def initialize_npcs() -> None:
             last_progress_x=x, last_progress_y=y,
         ))
 
-    # v0.9: dogs are lightweight server-authoritative ambient NPCs. They reuse
-    # sidewalk pedestrian routes so they inherit existing culling/path behavior
-    # without adding a second AI system or allowing animals onto water/roads.
+    # v2.5 dog walkers are paired server-authoritative companions. Each dog
+    # stays ahead of one pedestrian on the same pavement route; the public pair
+    # IDs let clients draw the connecting leash.
     dog_count = min(8, max(3, len(routes) // 3))
+    walkers = [npc for npc in npc_pedestrians if npc.kind == "pedestrian"]
     for dog_i in range(dog_count):
-        route_index = (dog_i * 7 + 1) % len(routes)
-        route = routes[route_index]
-        points = _route_points(route)
-        if len(points) < 2:
+        if not walkers:
+            break
+        walker = walkers[(dog_i * 29 + 7) % len(walkers)]
+        x, y = _dog_front_target(walker)
+        if (x, y) == (walker.x, walker.y):
             continue
-        fraction = ((dog_i + 1) / (dog_count + 1)) * 0.92
-        x, y, next_wp, heading = _sample_route(route, fraction)
+        dog_id = f"dog{dog_i+1:02d}"
+        walker.companion_id = dog_id
         npc_pedestrians.append(NPCPedestrian(
-            npc_id=f"dog{dog_i+1:02d}", route_index=route_index, next_waypoint=next_wp,
-            x=x, y=y, speed=max(36.0, float(route.get("speed", 54.0)) * 0.82),
-            aim=heading, appearance={}, pause_timer=0.0, kind="dog",
+            npc_id=dog_id, route_index=walker.route_index, next_waypoint=walker.next_waypoint,
+            x=x, y=y, speed=max(42.0, walker.speed * 1.12),
+            aim=walker.aim, appearance={}, pause_timer=0.0, kind="dog",
             last_progress_x=x, last_progress_y=y,
+            companion_id=walker.npc_id,
         ))
 
     # Report #53: suppliers and buyers are real, stationary, authoritative NPCs
@@ -1699,7 +1812,7 @@ def _resolve_npc_personal_space(world, personal_space: float) -> int:
     """Apply soft pedestrian body separation while preserving legal surfaces."""
     if world is None:
         return 0
-    movers = [npc for npc in npc_pedestrians if npc.kind not in {"supplier", "buyer"} and npc.route_index >= 0]
+    movers = [npc for npc in npc_pedestrians if npc.kind == "pedestrian" and npc.route_index >= 0]
     minimum = max(20.0, float(personal_space) * 0.90)
     resolved = 0
     for _pass in range(2):
@@ -1747,6 +1860,23 @@ def _resolve_npc_personal_space(world, personal_space: float) -> int:
     return resolved
 
 
+def _update_dog_walkers(dt: float) -> None:
+    """Keep each dog visibly ahead of its walker with a bounded leash."""
+    by_id = {npc.npc_id: npc for npc in npc_pedestrians}
+    for dog in (npc for npc in npc_pedestrians if npc.kind == "dog"):
+        walker = by_id.get(dog.companion_id)
+        if walker is None or walker.kind != "pedestrian":
+            continue
+        target_x, target_y = _dog_front_target(walker)
+        dog.x, dog.y = target_x, target_y
+        dog.aim = walker.aim
+        dog.route_index = walker.route_index
+        dog.next_waypoint = walker.next_waypoint
+        dog.route_direction = walker.route_direction
+        dog.pause_timer = walker.pause_timer
+        dog.last_progress_x, dog.last_progress_y = dog.x, dog.y
+
+
 def update_npcs(
     dt: float,
     sessions: list[ClientSession],
@@ -1770,6 +1900,9 @@ def update_npcs(
     signal_time = time.time() if server_time is None else float(server_time)
     for npc in npc_pedestrians:
         npc.signal_waiting = False
+        _recover_ambient_npc_from_rooftop(npc)
+        if npc.kind == "dog":
+            continue
         near_player = _npc_near_any_player(npc, sessions, active_radius)
         if not near_player and tick_index % far_stride != (sum(ord(c) for c in npc.npc_id) % far_stride):
             # Distant pedestrians sleep most ticks. Scale the occasional step so
@@ -1946,8 +2079,21 @@ def update_npcs(
                 npc.pause_timer = 0.0
             continue
 
-        step = min(dist, npc.speed * step_dt)
+        # Five-cell avenues are much wider than the legacy pedestrian scale.
+        # Cross at a brisk clearance pace so a walker admitted during the
+        # pedestrian phase leaves the conflict box before vehicles regain green.
+        crossing_multiplier = 3.0 if current_surface == "road" else 1.0
+        step = min(dist, npc.speed * step_dt * crossing_multiplier)
         nx, ny = npc.x + ux * step, npc.y + uy * step
+        if (GRID_WORLD is not None and hasattr(GRID_WORLD, "object_collision_at")
+                and GRID_WORLD.object_collision_at(nx, ny, 8.0)):
+            # Never let a pavement route hidden beneath a building footprint
+            # pull a crowd through its roof. Skip the obstructed waypoint and
+            # stay on the last legal visible pavement point.
+            npc.next_waypoint = (npc.next_waypoint + npc.route_direction) % len(points)
+            npc.pause_timer = 0.0
+            npc.stuck_time = 0.0
+            continue
         if (not _pedestrian_signal_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny, signal_time)
                 or not _pedestrian_vehicle_allows_entry(GRID_WORLD, npc.x, npc.y, nx, ny)):
             npc.signal_waiting = True
@@ -1981,10 +2127,19 @@ def update_npcs(
                 npc.pause_timer = 0.25
 
     _resolve_npc_personal_space(GRID_WORLD, personal_space)
+    _update_dog_walkers(dt)
 
 
 def vehicle_speed_mph(speed_px_s: float) -> float:
     return abs(float(speed_px_s)) * max(0.01, float(VEHICLE_SETTINGS.get("mph_per_px_s", 0.18)))
+
+
+def player_signal_turn_multiplier(car: TrafficVehicle, steer: float) -> float:
+    """Reward a driver for indicating in the direction they are steering."""
+    steer_direction = -1 if float(steer) < -0.02 else (1 if float(steer) > 0.02 else 0)
+    if steer_direction and int(car.turn_signal) == steer_direction:
+        return max(1.0, float(VEHICLE_SETTINGS.get("player_signal_turn_multiplier", 1.32)))
+    return 1.0
 
 
 def _apply_player_handbrake(car: TrafficVehicle, dt: float) -> None:
@@ -2091,7 +2246,7 @@ def displace_low_speed_npcs() -> int:
     ]
     displaced_count = 0
     for npc in npc_pedestrians:
-        if npc.kind in {"supplier", "buyer"}:
+        if npc.kind in {"supplier", "buyer", "dog"}:
             continue
         for car in moving_cars:
             displaced = _displace_point_from_car(npc.x, npc.y, 9.0, car)
@@ -2163,7 +2318,7 @@ def update_npc_runovers(now: float) -> None:
     moving_cars = [car for car in traffic_vehicles if vehicle_speed_mph(car.speed) >= min_speed_mph]
     victims: list[NPCPedestrian] = []
     for npc in npc_pedestrians:
-        if npc.kind in {"supplier", "buyer"}:
+        if npc.kind in {"supplier", "buyer", "dog"}:
             continue
         for car in moving_cars:
             dx, dy = npc.x - car.x, npc.y - car.y
@@ -3680,6 +3835,7 @@ async def simulation_loop() -> None:
                         high_speed_reduction = max(0.42, 1.0 - speed_abs / 620.0)
                         direction = 1.0 if car.speed >= 0.0 else -1.0
                         turn_rate = float(VEHICLE_SETTINGS.get("player_turn_rate", 2.75))
+                        turn_rate *= player_signal_turn_multiplier(car, steer)
                         proposed_angle += steer * turn_rate * steering_grip * high_speed_reduction * direction * dt
 
                     # Steering rotates the body around its front axle rather than

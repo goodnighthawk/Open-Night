@@ -40,6 +40,7 @@ jobs:
           tools/audit_v220_bug_intake.py tools/audit_v220_current_reports.py
           tools/audit_v230_bug_intake.py tools/audit_v230_current_reports.py tools/capture_v230_visual_review.py
           tools/audit_v240_bug_intake.py tools/audit_v240_current_reports.py tools/capture_v240_visual_review.py
+          tools/audit_v250_bug_intake.py tools/audit_v250_current_reports.py tools/capture_v250_visual_review.py
           tools/deterministic_traffic_audit.py
       - name: Verify player-approved pixel vehicle fleet
         env:
@@ -134,6 +135,14 @@ jobs:
           python tools/audit_v240_bug_intake.py
           python tools/audit_v240_current_reports.py
           python tools/capture_v240_visual_review.py
+      - name: Verify v2.5 issue intake and current reports
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python tools/audit_v250_bug_intake.py
+          python tools/audit_v250_current_reports.py
+          python tools/capture_v250_visual_review.py
       - name: Verify deterministic authored map data
         run: python tools/deterministic_traffic_audit.py
       - name: Verify release audit bundle
@@ -144,6 +153,7 @@ jobs:
           test -f assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json
           test -f assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
           test -f work/v240_current_reports_visual_review.png
+          test -f work/v250_current_reports_visual_review.png
           python - <<'PY'
           import json
           from pathlib import Path
@@ -177,5 +187,6 @@ jobs:
             assets/grid_v100/V110_TRAFFIC_RECOVERY_AUDIT.json
             assets/grid_v100/BUILDING_SETBACK_RUNTIME_AUDIT.json
             work/v240_current_reports_visual_review.png
+            work/v250_current_reports_visual_review.png
           if-no-files-found: error
           retention-days: 30

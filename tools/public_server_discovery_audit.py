@@ -25,7 +25,7 @@ async def protocol_server(websocket) -> None:
         "type": "server_info",
         "name": "Open Night Internet Test",
         "players": 2,
-        "max_players": 128,
+        "max_players": 30,
         "version": "2.5",
         "map_id": "map_001_gwb_corridor",
         "map_name": "Open Night Test Map",
@@ -54,7 +54,7 @@ async def audit_probe() -> None:
             assert result["uri"] == f"ws://127.0.0.1:{port}"
             assert result["scope"] == "INTERNET"
             assert result["name"] == "Open Night Internet Test"
-            assert result["players"] == 2 and result["max_players"] == 128
+            assert result["players"] == 2 and result["max_players"] == 30
             assert result["port"] == port
 
 

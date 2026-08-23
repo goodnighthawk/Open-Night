@@ -1,6 +1,6 @@
 {
   "building_adjacent_pair_count": 0,
-  "building_count": 28,
+  "building_count": 30,
   "building_overlap_cell_count": 0,
   "edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
   "edge_alpha_rows": [

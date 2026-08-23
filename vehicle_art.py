@@ -27,6 +27,20 @@ SOURCE_NOSE_CORRECTIONS = {
     # sheet-wide nose-down flip.
     "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#005": "up",
     "free-pixel-cars-link-in-comments-v0-xs01xj2gvg661.webp#000": "up",
+    # v2.5 reports #168/#175 identify gridcar005 and gridcar015. These two
+    # source cells are also authored nose-up and must not receive the default
+    # sheet-wide vertical flip.
+    "free-pixel-cars-link-in-comments-v0-fujphf59vg661.png#004": "up",
+    "free-pixel-cars-link-in-comments-v0-xs01xj2gvg661.webp#006": "up",
+}
+
+# v2.5 reports #177/#178/#181/#184 identify three generated exports whose
+# cargo/rear body reaches the source image boundary. Close those specific rear
+# edges before scaling; complete generated sources remain byte-for-byte intact.
+REAR_CROP_REPAIR_SOURCES = {
+    "gen_vehicle_09.png",
+    "gen_vehicle_10.png",
+    "gen_vehicle_12.png",
 }
 
 
@@ -174,7 +188,8 @@ def _base_car(index: int, target_length: int | None = None) -> pygame.Surface | 
     # All three generated bus sources end at the same flat rear crop line. Their
     # complete rounded front cap is safe to mirror into a connected rear end.
     # Trucks remain opt-in so gridcar010 never regains its detached strip.
-    if generated_heavy and (category == "bus" or bool(meta.get("repair_rear_crop", False))):
+    repair_rear = str(meta.get("source_name", "")) in REAR_CROP_REPAIR_SOURCES
+    if generated_heavy and (category == "bus" or repair_rear or bool(meta.get("repair_rear_crop", False))):
         source = _repair_generated_rear_crop(source, category)
 
     # Player-supplied sheets are allowed to contain a horizontal source sprite;

@@ -60,9 +60,12 @@ def main() -> None:
                and int(row.get("height_px", 0)) >= 192
                and int(row.get("light_radius_px", 0)) >= 180 for row in lamps), \
         "streetlamps were not relocated from the expanded road onto sidewalks"
-    street_items = [row for row in world.objects if row.get("composition_pass") == "city_block_street_items_svg_v1"]
+    street_items = [row for row in world.objects if row.get("street_item_kind")]
     assert sum(row.get("street_item_kind") == "telephone_box" for row in street_items) == 16
-    assert sum(row.get("street_item_kind") == "traffic_cone" for row in street_items) == 24
+    cones = [row for row in street_items if row.get("street_item_kind") == "traffic_cone"]
+    closures = {str(row.get("road_closure_id", "")) for row in cones if row.get("road_closure_id")}
+    assert (len(cones) == 24 and not closures) or (len(cones) == 15 and len(closures) == 3), \
+        "traffic-cone baseline or grouped v2.5 closure contract failed"
     for asset, filename in {
         "street_item_lamp": "street_lamp.png",
         "street_item_telephone_box": "telephone_box.png",
@@ -105,7 +108,10 @@ def main() -> None:
     morphology = world.data.get("road_morphology", {})
     assert morphology.get("physical_primary_road_width_cells") == 5, "six-lane primary roads lack physical clearance"
     assert morphology.get("physical_central_highway_width_cells") == 7, "central highway is not physically wider"
-    assert len(world.data.get("building_synthesis", {}).get("buildings", [])) == 28, "building density was not reduced"
+    buildings = world.data.get("building_synthesis", {}).get("buildings", [])
+    infill = [row for row in buildings if row.get("infill_policy")]
+    assert len(buildings) == 28 or (len(buildings) == 30 and len(infill) == 2), \
+        "building density baseline or v2.5 two-block infill contract failed"
     assert all(row.get("asset") == "mark_white_repeating_single" for row in lane_dividers), "lane lines do not use city-block art"
     assert world.width * world.height == 6144 and world.data.get("playable_area_multiplier") == 2, "playable map area is not exact 2x"
     routes = v110_grid_population._build_traffic_routes(world)

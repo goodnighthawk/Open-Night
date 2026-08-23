@@ -1,7 +1,7 @@
 ﻿key,value
-server_name,Open Night v2.4
+server_name,Open Night v2.5
 port,8765
-max_players,128
+max_players,30
 traffic_cars,12
 map_id,map_001_gwb_corridor
 lan_discovery,true

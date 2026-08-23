@@ -204,6 +204,8 @@ def install(population_module) -> None:
         # Preserve every authored sidewalk cell and additionally admit only the
         # road cells explicitly registered as zebra-crossing corridors. This
         # keeps existing flow/runtime audits meaningful while NPCs cross streets.
+        if v110_pedestrian_connectivity.is_building_cell(world, gx, gy):
+            return False
         return bool(original_is_pavement(world, gx, gy)) or v110_pedestrian_connectivity.is_pedestrian_surface_cell(
             world, gx, gy
         )

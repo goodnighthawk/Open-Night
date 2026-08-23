@@ -70,6 +70,19 @@ def _is_sidewalk(world, gx: int, gy: int) -> bool:
     return str(world.tile("ground", gx, gy).collision) in {"walk", "sidewalk"}
 
 
+def is_building_cell(world, gx: int, gy: int) -> bool:
+    """Return whether a cell is covered by an authoritative building footprint."""
+    buildings = list((world.data.get("building_synthesis") or {}).get("buildings") or [])
+    for building in buildings:
+        try:
+            x0, y0, x1, y1 = map(int, building.get("rect", ()))
+        except (TypeError, ValueError):
+            continue
+        if x0 <= int(gx) <= x1 and y0 <= int(gy) <= y1:
+            return True
+    return False
+
+
 def road_bands(world) -> tuple[list[RoadBand], list[RoadBand]]:
     """Find authored major horizontal and vertical road bands from collision."""
     min_row_coverage = max(4, int(math.ceil(world.width * 0.55)))
@@ -404,7 +417,11 @@ def build_routes(population_module, world, max_routes: int | None = None) -> lis
                     cells = _rectangle_cycle_cells(left, top, right, bottom)
                     if len(cells) < 8:
                         continue
-                    if not all(is_pedestrian_surface_cell(world, gx, gy) for gx, gy in cells):
+                    if not all(
+                        is_pedestrian_surface_cell(world, gx, gy)
+                        and not is_building_cell(world, gx, gy)
+                        for gx, gy in cells
+                    ):
                         continue
                     block_rows = hj - hi
                     block_cols = vj - vi

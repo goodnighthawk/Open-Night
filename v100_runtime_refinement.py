@@ -259,6 +259,124 @@ def _install_city_block_street_item_defs(world) -> None:
         )
 
 
+def _install_report_152_infill(world, rows: list[list[str]], buildings: list[dict]) -> list[str]:
+    """Fill the two large ordinary empty lots while reserving the center landmark lot.
+
+    The one-cell inset is 128 px after world normalization, slightly more than
+    three 36 px player widths. This keeps every facade clear of the curb while
+    turning the photographed empty blocks into useful enterable buildings.
+    """
+    lookup, components = _block_components(rows)
+    occupied = {
+        next(iter({lookup[cell] for cell in _footprint(building)}))
+        for building in buildings
+    }
+    candidates = []
+    for component_id, cells in components.items():
+        if component_id in occupied or len(cells) < 80:
+            continue
+        x0, y0, x1, y1 = _bbox(cells)
+        # The center-north lot is the restored GWB's landmark/approach reserve.
+        # Edge fragments are not complete city blocks.
+        if x0 <= world.width // 2 <= x1 or x0 == 0 or x1 == world.width - 1:
+            continue
+        if x1 - x0 < 8 or y1 - y0 < 7:
+            continue
+        candidates.append((component_id, (x0, y0, x1, y1)))
+
+    added: list[str] = []
+    themes = ("red", "dark_green")
+    for index, (_component_id, (x0, y0, x1, y1)) in enumerate(
+        sorted(candidates, key=lambda row: (row[1][0], row[1][1]))[:2], 1
+    ):
+        rect = [x0 + 1, y0 + 1, x1 - 1, y1 - 1]
+        building_id = f"grid_infill_{index:02d}"
+        theme = themes[(index - 1) % len(themes)]
+        generated_cells = (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1)
+        buildings.append({
+            "building_id": building_id,
+            "theme": theme,
+            "rect": rect,
+            "notch": None,
+            "footprint_type": "rectangle",
+            "orientation_policy": "filename_semantics_no_rotation",
+            "generated_cells": generated_cells,
+            "envelope_cells": generated_cells,
+            "infill_policy": "empty_road_bounded_block_three_player_width_setback_v25",
+        })
+        door_gx = (rect[0] + rect[2]) // 2
+        world.objects.append({
+            "asset": "placeholder_street_door",
+            "gx": door_gx,
+            "gy": rect[3],
+            "offset_x_px": 80,
+            "offset_y_px": 112,
+            "width_px": 96,
+            "height_px": 144,
+            "building_id": building_id,
+            "edge": "south",
+            "rotation": 0,
+            "placeholder": False,
+            "transition": "ground_to_first_floor_door",
+            "functional_entry": True,
+        })
+        added.append(building_id)
+
+    world.data.setdefault("building_synthesis", {})["buildings"] = buildings
+    return added
+
+
+def _install_gwb_landmark(world) -> int:
+    """Restore the George Washington Bridge art over the central highway."""
+    from grid_world import ObjectDef
+
+    definitions = {
+        "gwb_tower_night": "lan_gwb_tower_01_night.png",
+        "gwb_truss_night": "lan_gwb_truss_02_night.png",
+        "gwb_pier_night": "lan_gwb_pier_03_night.png",
+    }
+    for object_id, filename in definitions.items():
+        world.catalog.objects[object_id] = ObjectDef(
+            object_id=object_id,
+            image=f"cosmetic_packs/nyc_gta2_callback/sprites/{filename}",
+            kind="landmark",
+            layer="ground",
+            z=240,
+            native_width_px=128,
+            native_height_px=128,
+        )
+
+    center_y = world.height // 2
+    center_x = world.width // 2
+    placements = [
+        ("gwb_pier_night", center_x - 5, center_y - 1, 512, 512),
+        ("gwb_tower_night", center_x - 3, center_y - 2, 640, 640),
+        ("gwb_truss_night", center_x - 2, center_y - 1, 512, 512),
+        ("gwb_truss_night", center_x - 1, center_y - 1, 512, 512),
+        ("gwb_truss_night", center_x, center_y - 1, 512, 512),
+        ("gwb_truss_night", center_x + 1, center_y - 1, 512, 512),
+        ("gwb_truss_night", center_x + 2, center_y - 1, 512, 512),
+        ("gwb_tower_night", center_x + 3, center_y - 2, 640, 640),
+        ("gwb_pier_night", center_x + 5, center_y - 1, 512, 512),
+    ]
+    for index, (asset, gx, gy, width, height) in enumerate(placements, 1):
+        world.objects.append({
+            "asset": asset,
+            "gx": gx,
+            "gy": gy,
+            "offset_x_px": (world.cell_px - width) // 2,
+            "offset_y_px": (world.cell_px - height) // 2,
+            "width_px": width,
+            "height_px": height,
+            "overhead": True,
+            "decorative_only": True,
+            "landmark_kind": "george_washington_bridge",
+            "landmark_piece_index": index,
+            "placement_policy": "central_highway_gwb_restore_v25",
+        })
+    return len(placements)
+
+
 def _spaced_cells(candidates, occupied: set[tuple[int, int]], count: int, spacing: int) -> list[tuple[int, int]]:
     selected: list[tuple[int, int]] = []
     for gx, gy in candidates:
@@ -296,7 +414,27 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
             ):
                 road_edges.append((gx, gy))
     road_edges.sort(key=lambda cell: ((cell[0] * 53 + cell[1] * 29) % 991, cell[1], cell[0]))
-    cone_cells = _spaced_cells(road_edges, occupied, 24, 5)
+
+    # Report #166: three recognizable curb-lane closures replace twenty-four
+    # unrelated single cones. Each closure is a compact five-cone line on one
+    # straight road edge, well separated from the other two closures.
+    closure_anchors: list[tuple[int, int, str]] = []
+    for gx, gy in road_edges:
+        edge = next((
+            direction for direction, (dx, dy) in (
+                ("north", (0, -1)), ("south", (0, 1)),
+                ("west", (-1, 0)), ("east", (1, 0)),
+            )
+            if 0 <= gx + dx < world.width and 0 <= gy + dy < world.height
+            and world.collision_at("ground", *world.cell_center(gx + dx, gy + dy)) == "sidewalk"
+        ), "")
+        if not edge:
+            continue
+        if any(abs(gx - ox) + abs(gy - oy) < 22 for ox, oy, _ in closure_anchors):
+            continue
+        closure_anchors.append((gx, gy, edge))
+        if len(closure_anchors) >= 3:
+            break
 
     for index, (gx, gy) in enumerate(telephone_cells, 1):
         road_direction = next(
@@ -318,8 +456,8 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
             "south": (0, -1), "west": (1, 0),
         }[road_direction]
         width_px, height_px = 128, 96
-        center_x = world.cell_px // 2 + inward[0] * 52
-        center_y = world.cell_px // 2 + inward[1] * 52
+        center_x = world.cell_px // 2 + inward[0] * 104
+        center_y = world.cell_px // 2 + inward[1] * 104
         world.objects.append({
             "asset": "street_item_telephone_box", "gx": gx, "gy": gy,
             "offset_x_px": center_x - width_px // 2,
@@ -327,7 +465,7 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
             "width_px": width_px, "height_px": height_px,
             "street_item_kind": "telephone_box", "street_item_index": index,
             "composition_pass": "city_block_street_items_svg_v1", "decorative_only": True,
-            "placement_policy": "pavement_inset_public_phone_v23",
+            "placement_policy": "deep_pavement_inset_public_phone_v25",
             "road_edge_direction": road_direction,
             # A compact cyan pool makes the pavement phone discoverable at
             # night. Fixture and light remain one authoritative object record.
@@ -340,16 +478,29 @@ def _add_city_block_street_items(world, occupied_lamp_cells: set[tuple[int, int]
             "light_intensity": 0.24,
             "light_registration": "public_phone_same_object_v23",
         })
-    for index, (gx, gy) in enumerate(cone_cells, 1):
-        world.objects.append({
-            "asset": "street_item_traffic_cone", "gx": gx, "gy": gy,
-            "offset_x_px": 86, "offset_y_px": 68, "width_px": 84, "height_px": 120,
-            "street_item_kind": "traffic_cone", "street_item_index": index,
-            "composition_pass": "city_block_street_items_svg_v1", "decorative_only": False,
-            "collision_radius_px": 22, "collision_kind": "traffic_cone",
-            "placement_policy": "spaced_road_edge_cell_report44",
-        })
-    return {"telephone_box_count": len(telephone_cells), "traffic_cone_count": len(cone_cells)}
+    cone_index = 0
+    for closure_index, (gx, gy, edge) in enumerate(closure_anchors, 1):
+        horizontal = edge in {"north", "south"}
+        for offset in (-96, -48, 0, 48, 96):
+            cone_index += 1
+            center_x = world.cell_px // 2 + (offset if horizontal else 0)
+            center_y = world.cell_px // 2 + (0 if horizontal else offset)
+            world.objects.append({
+                "asset": "street_item_traffic_cone", "gx": gx, "gy": gy,
+                "offset_x_px": center_x - 42, "offset_y_px": center_y - 60,
+                "width_px": 84, "height_px": 120,
+                "street_item_kind": "traffic_cone", "street_item_index": cone_index,
+                "road_closure_id": f"road_closure_{closure_index:02d}",
+                "road_closure_edge": edge,
+                "composition_pass": "grouped_road_closures_v25", "decorative_only": False,
+                "collision_radius_px": 22, "collision_kind": "traffic_cone",
+                "placement_policy": "five_cone_grouped_curb_lane_closure_v25",
+            })
+    return {
+        "telephone_box_count": len(telephone_cells),
+        "traffic_cone_count": cone_index,
+        "traffic_cone_closure_count": len(closure_anchors),
+    }
 
 
 def _lamp_anchor_geometry(rotation: int, source_w: int, source_h: int) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -382,6 +533,8 @@ def apply_world_refinement(world):
     if not rows or not buildings:
         world._v100_layout_refined = True
         return world
+
+    infill_buildings = _install_report_152_infill(world, rows, buildings)
 
     from v110_pedestrian_connectivity import road_bands
     horizontal_roads, vertical_roads = road_bands(world)
@@ -484,6 +637,70 @@ def apply_world_refinement(world):
             dx, dy = shifts[building_id]
             item["gx"] = int(item["gx"]) + dx
             item["gy"] = int(item["gy"]) + dy
+
+        if str(item.get("asset", "")) == "placeholder_street_door" and building_id in refined_footprints:
+            footprint = refined_footprints[building_id]
+            width = int(item.get("width_px", 96))
+            height = int(item.get("height_px", 144))
+            center_x = sum(x for x, _y in footprint) / len(footprint)
+            center_y = sum(y for _x, y in footprint) / len(footprint)
+            candidates = []
+            for priority, (dx, dy, edge, rotation) in enumerate((
+                (0, 1, "south", 0), (0, -1, "north", 180),
+                (1, 0, "east", 270), (-1, 0, "west", 90),
+            )):
+                for gx, gy in footprint:
+                    nx, ny = gx + dx, gy + dy
+                    if (nx, ny) in footprint or not (0 <= nx < world.width and 0 <= ny < world.height):
+                        continue
+                    exterior = str(rows[ny][nx])
+                    if not (exterior.startswith("pavement") or exterior.startswith("curb_")):
+                        continue
+                    candidates.append((priority, abs(gx - center_x) + abs(gy - center_y), gx, gy, edge, rotation))
+            if not candidates:
+                raise RuntimeError(f"no pavement-facing wall door for {building_id}")
+            _priority, _distance, door_x, door_y, edge, rotation = min(candidates)
+            offsets = {
+                "south": ((world.cell_px - width) // 2, world.cell_px - height),
+                "north": ((world.cell_px - width) // 2, 0),
+                "east": (world.cell_px - height, (world.cell_px - width) // 2),
+                "west": (0, (world.cell_px - width) // 2),
+            }
+            offset_x, offset_y = offsets[edge]
+            item.update({
+                "gx": door_x,
+                "gy": door_y,
+                "offset_x_px": offset_x,
+                "offset_y_px": offset_y,
+                "edge": edge,
+                "rotation": rotation,
+                "placeholder": False,
+                "functional_entry": True,
+                "transition": "ground_to_first_floor_door",
+                "placement_policy": "building_wall_boundary_functional_door_v25",
+            })
+
+        if item.get("silhouette_kind") == "facade_break" and building_id in refined_footprints:
+            # Report #176: a three-times-larger canopy is wall-attached, keeps
+            # half its depth on the facade, and is always walk-under art.
+            footprint = refined_footprints[building_id]
+            south_y = max(y for _x, y in footprint)
+            south_cells = sorted(x for x, y in footprint if y == south_y)
+            width = int(item.get("width_px", 224)) * 3
+            height = int(item.get("height_px", 88)) * 3
+            item.update({
+                "gx": south_cells[len(south_cells) // 2],
+                "gy": south_y,
+                "rotation": 0,
+                "width_px": width,
+                "height_px": height,
+                "offset_x_px": (world.cell_px - width) // 2,
+                "offset_y_px": world.cell_px - height // 2,
+                "edge": "south",
+                "overhead": True,
+                "decorative_only": True,
+                "placement_policy": "triple_scale_wall_attached_walk_under_canopy_v25",
+            })
 
         if item.get("composition_pass") == "roof_palette_v1":
             # Keep equipment visibly legible while fully inside its authoritative
@@ -635,9 +852,14 @@ def apply_world_refinement(world):
         item["light_intensity"] = 0.28
         item["light_registration"] = "cardinal_transform_shared_anchors_report60"
         item["fixture_light_sync"] = "same_grid_object_record"
+        item["overhead"] = True
+        item["decorative_only"] = True
+        item["collision_radius_px"] = 0
+        item["render_policy"] = "walk_under_overhead_street_lamp_v25"
         lamp_count += 1
 
     street_item_counts = _add_city_block_street_items(world, occupied_lamp_cells)
+    gwb_piece_count = _install_gwb_landmark(world)
 
     if roof_rows is not None:
         ground_mask = {(x, y) for y, row in enumerate(rows) for x, tile in enumerate(row) if tile.startswith("bld_")}
@@ -651,6 +873,9 @@ def apply_world_refinement(world):
         "building_overlap_cell_count": len(overlap_cells),
         "building_adjacent_pair_count": len(adjacent_pairs),
         "minimum_building_setback_cells": 1,
+        "infill_building_count": len(infill_buildings),
+        "infill_building_ids": infill_buildings,
+        "enterable_building_count": len(buildings),
         "safe_login_spawn_count": len(safe_login_spawns),
         "safe_login_spawn_policy": "distributed_interior_sidewalks_v19",
         "pavement_variant_cell_count": pavement_variant_count,
@@ -660,6 +885,8 @@ def apply_world_refinement(world):
         "building_edge_alpha_policy": "source_alpha_preserved_exterior_frame_removed",
         "fire_escape_outside_collision_count": fire_escape_count,
         "street_lamp_asset_sync_count": lamp_count,
+        "street_lamp_overhead_count": lamp_count,
+        "george_washington_bridge_piece_count": gwb_piece_count,
         "fixture_and_emitter_authority": "same_grid_object_record",
         "junction_clear_cell_count": len(junction_cells),
         "road_art_authority": "grunge_neon_clean_junctions_v130",

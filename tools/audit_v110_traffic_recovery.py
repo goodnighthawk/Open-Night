@@ -119,6 +119,12 @@ def main() -> None:
     cars = [car for car in server.traffic_vehicles if not car.parked]
     if len(cars) < 12:
         raise RuntimeError(f"traffic audit expected at least 12 safe cars, got {len(cars)}")
+    # This gate isolates car/car reservations and route progress. Frozen NPC
+    # snapshots are not a valid pedestrian simulation and can permanently sit
+    # on a crosswalk; combined moving pedestrian behavior is covered by the
+    # population and signal-harmony gates.
+    server.npc_pedestrians.clear()
+    server.bicycles.clear()
 
     stationary = {car.vehicle_id: 0.0 for car in cars}
     max_stationary = {car.vehicle_id: 0.0 for car in cars}
