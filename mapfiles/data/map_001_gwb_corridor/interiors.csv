@@ -1,4 +1,4 @@
-﻿id,name,kind,entry_x,entry_y,building_id,door_hint
+id,name,kind,entry_x,entry_y,building_id,door_hint
 starter_apartment,Starter Apartment,apartment,62.8,2386.42,block_building_0001,west_collision_frontage
 corner_shop,Bridge Corner Store,shop,717.93,2413.62,block_building_0002,west_collision_frontage
 night_diner,Open Night Diner,diner,1451.62,2400.0,block_building_0003,west_collision_frontage
@@ -9,3 +9,17 @@ garage,Riverside Garage,garage,13277.2,6596.06,block_building_0050,west_collisio
 nightclub,After Hours Club,club,13968.48,6646.32,block_building_0051,west_collision_frontage
 warehouse_office,Warehouse Office,office,14862.14,6593.25,block_building_0052,west_collision_frontage
 rooftop_loft,Washington Heights Loft,apartment,15758.38,6599.12,block_building_0053,west_collision_frontage
+blank_house_01,Empty House,blank_house,70.81,3371.07,block_building_0013,west_collision_frontage
+blank_house_02,Empty House,blank_house,719.21,4208.24,block_building_0020,west_collision_frontage
+blank_house_03,Empty House,blank_house,83.2,5730.4,block_building_0032,west_collision_frontage
+blank_house_04,Empty House,blank_house,716.87,6607.01,block_building_0044,west_collision_frontage
+blank_house_05,Empty House,blank_house,70.84,7562.4,block_building_0062,west_collision_frontage
+blank_house_06,Empty House,blank_house,718.0,8589.62,block_building_0074,west_collision_frontage
+blank_house_07,Empty House,blank_house,72.93,9664.51,block_building_0085,west_collision_frontage
+blank_house_08,Empty House,blank_house,10892.42,4079.6,block_building_0019,west_collision_frontage
+blank_house_09,Empty House,blank_house,14157.33,5055.22,block_building_0029,west_collision_frontage
+blank_house_10,Empty House,blank_house,10955.6,6602.46,block_building_0048,west_collision_frontage
+blank_house_11,Empty House,blank_house,10958.0,7323.24,block_building_0054,west_collision_frontage
+blank_house_12,Empty House,blank_house,11657.52,8076.48,block_building_0069,west_collision_frontage
+blank_house_13,Empty House,blank_house,14005.32,8736.79,block_building_0083,west_collision_frontage
+blank_house_14,Empty House,blank_house,10927.82,9709.59,block_building_0091,west_collision_frontage

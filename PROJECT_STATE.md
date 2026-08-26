@@ -1,102 +1,62 @@
 # Open Night — Working State
 
-Read this file before starting a new development session. Update it whenever a
-pass is checkpointed so GitHub, rather than chat history, remains the source of
-truth.
+Read this file before starting a development session. Update it whenever a v4.0 pass is checkpointed so GitHub remains the source of truth.
 
 ## Current checkpoint
 
-- Release under development: **Open Night v0.8.1**
-- Working branch: `agent/v0.8.1-pass19-map`
-- Integration base: latest accepted `main` map checkpoint
-- Playable map: `map_001_gwb_corridor` only
-- Map corridor: Fort Lee / GWB approaches / George Washington Bridge /
-  Washington Heights
-- Server: Railway WebSocket service, automatically selected by supported clients
-- Persistence: Railway MySQL, reset once whenever `PYMMO_PATCH_ID` changes
+- Release under development: **Open Night v4.0**
+- Working branch: `v4.0`
+- Integration base: released `main` v3.0 checkpoint (`68a5abce`)
+- Playable world: `map_001_gwb_corridor` only
+- Map corridor: Fort Lee / GWB approaches / George Washington Bridge / Washington Heights
+- Current public version marker remains **3.0** until the v4.0 release gate passes.
 
-## Approved direction
+## v4.0 objective
 
-- Strictly top-down, readable GTA 2-like play space.
-- Reference-driven Fort Lee/GWB/Washington Heights composition without literal
-  street-level realism overwhelming gameplay.
-- Roads, sidewalks, crossings, buildings, water, vegetation, props, and lighting
-  must read as one composition.
-- Roads remain clearly drivable; sidewalks must not be clipped by roads.
-- Buildings use the approved top-down/2.5D facade and roof families.
-- Streetlights belong on sidewalks; no decorative yellow road lines.
-- Semantic gameplay geometry remains CSV-based and deterministic.
+Open Night v4.0 should make the existing multiplayer build finally look and feel like Open Night. The procedural/generated GWB corridor is the only normal playable map. The release should favor a consistent approved visual language over bespoke perfection for every building.
 
-## Latest completed work (uncommitted at workflow creation)
+Full player housing is post-v4.0. v4.0 establishes the foundation by distributing blank residential houses through the city and spawning players inside a provisional first-floor home instead of outdoors.
 
-- Revised latest map composition and installed semantic CSVs.
-- Added sidewalk-only streetlamps and bridge lamps; art-rule audit reports zero
-  errors.
-- Added Railway MySQL environment-variable support.
-- Added patch-ID persistence reset policy for v0.7.2.
-- Railway deployment batch, database reset mock, and server CLI smoke checks pass.
-- Made outdoor level connectors direction-aware: continuing forward or standing
-  cannot bounce levels, while reversing direction can immediately traverse back
-  toward the lower endpoint without a time-based lockout.
-- Made Map Viewer open the authoritative default playable map unless `--choose`
-  is explicitly requested.
-- Changed Movement Preview running to hold Shift plus WASD; removed its
-  double-tap run activation and Shift slow-walk behavior.
-- Integrated that movement contract into multiplayer: the server now owns
-  Shift-running, forward single/double jumps, double-jump prone landings,
-  crouch/prone stand transitions, and broadcasts every pose to nearby players.
-- Made double jump visibly larger than single jump in both the movement preview
-  and multiplayer rendering.
-- Added the v0.7.3 Railway-backed player-report queue. Reports remain pending
-  until a token-authenticated human reviews the text/screenshot and explicitly
-  approves or rejects the exact report ID.
-- Limited screenshots, salted reporter identifiers, rate-limited submissions,
-  and made `feedback/approved/` the only agent-actionable player-feedback path.
-- Added stable friend markers, Tab-completed persistent SMS with an F2 inbox,
-  strict client/server release matching, slow water wading, front-axle player-car
-  steering, a 30 mph NPC run-over threshold, and a non-Git friend updater.
-- Added Ctrl+A/C/X/V editing to launcher, chat/SMS, and report fields, with a
-  dedicated highlighted `/bug` instruction above the active chat entry box.
-- Installed the official Pass 19 building-art convergence over the accepted
-  Pass 18 geometry without changing gameplay roads or collision.
-- Assigned 95 buildings across 40 approved top-down styles: maximum style share
-  6.3%, nearest-neighbour repeat share 2.1%, and worst same-sprite scale spread
-  0.0964.
-- Rebuilt the day/night composition as `composition_tiles_v19.zip` and promoted
-  matching runtime CSVs, generator CSVs, and portable-map assets.
-- Kept decorative yellow road lines disabled and retained the authored
-  sidewalk/lighting composition.
+## Release blockers
+
+1. **Map cutover** — `map_001_gwb_corridor` is the sole normal playable world. Implemented in architecture; re-verify in v4 runtime.
+2. **Visual consistency** — roads, buildings, roofs, sidewalks, crossings, lighting, and major props use the approved Open Night language. Partial; requires runtime visual pass.
+3. **Indoor spawn** — blank houses, valid first-floor spawn, exits/collision, and multi-player house distribution. In progress.
+4. **Multiplayer regression** — movement, player visibility, reconnect/version handling, and server synchronization. v3 baseline exists; v4 regression required.
+5. **Core systems regression** — vehicles, friends/SMS, HUD, and minimap. v3 baseline exists; v4 regression required.
+6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
+7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
+
+## Housing-spawn implementation direction
+
+- Reuse the existing interior system rather than create a second coordinate system for v4.0.
+- Author a distributed `blank_house` interior pool against existing building footprints.
+- Select a provisional home deterministically from the account key so returning players receive the same house until persistent housing is implemented.
+- Prefer an unoccupied house among connected sessions, with stable fallback if all houses are occupied.
+- Keep current outdoor `login_spawn` points as recovery/fallback locations if no valid house is available.
+- Login should send authoritative interior state immediately so the first playable frame is inside the house.
+- Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 
 ## Current next pass
 
-1. Playtest the Pass 19 map in desktop and web multiplayer.
-2. Record the largest remaining composition/style mismatch with `/bug`.
-3. Run `TEST_FAST.bat`.
-4. Render the Fort Lee preview with `BUILD_PREVIEW.bat`.
-5. Update this file and `feedback/next_version/tasks.csv`.
-6. Run `CHECKPOINT_PROGRESS.bat` to commit and push the pass.
+1. Add and validate the blank-house pool and deterministic selection helper.
+2. Integrate house selection into `server.py` login creation and immediate `interior_state` delivery.
+3. Verify the client enters the assigned room directly from the welcome/login flow.
+4. Test exiting the house to the authored exterior door and re-entering it.
+5. Run multiplayer/core-system regressions before changing `VERSION.txt` to 4.0.
 
-## Commands
+## Existing development commands
 
 - Play locally: `QUICK_LOCAL_TEST.bat`
-- Small visual iteration: `BUILD_PREVIEW.bat`
 - Fast noninteractive checks: `TEST_FAST.bat`
 - Full verification and render: `BUILD_RELEASE.bat`
-- Save a GitHub checkpoint: `CHECKPOINT_PROGRESS.bat`
-- Launch/update the isolated WIP map channel: `OPEN_NIGHT_MAP_PREVIEW.bat`
-- Open the authoritative default playable map: `RUN_MAP_VIEWER.bat` (pass
-  `--choose` only when intentionally browsing another portable map)
+- Build preview: `BUILD_PREVIEW.bat`
 - Deploy server: `DEPLOY_OPEN_NIGHT_SERVER.bat`
-- Review pending bug reports: `REVIEW_BUG_REPORTS.bat`
 
-## Session rules that reduce work usage
+## Scope discipline
 
-- One subsystem or one visual problem per pass.
-- Use the Fort Lee crop until the pass is visually accepted.
-- Do not run the full release build after every small edit.
-- Do not duplicate extracted releases or generated backups in Git.
-- End every successful pass with a pushed checkpoint.
-- Start new chats by asking the agent to read this file and take the next queued
-  task.
-- Incomplete playable map passes go to `map-preview`; accepted releases go to
-  `main`.
+- One bounded subsystem or visual problem per pass.
+- Runtime behavior outranks Map Lab/preview-only improvements.
+- Do not maintain a second playable legacy map.
+- Do not change the release version merely to mark work in progress.
+- Preserve the released v3.0 baseline on `main`; v4.0 work stays on `v4.0` until gates pass.
