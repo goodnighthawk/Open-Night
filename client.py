@@ -81,7 +81,7 @@ from versioning import GAME_VERSION
 SCREEN_W = 1280
 SCREEN_H = 720
 FPS = 120
-NETWORK_SEND_RATE = 30
+NETWORK_SEND_RATE = 60
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 DISCOVERY_PORT_START = 8765
 DISCOVERY_PORT_END = 8795
@@ -1257,6 +1257,7 @@ class Game:
         self.inventory_open = False
         self.map_open = False
         self.chunk_debug_overlay = False
+        self.network_debug_overlay = False
         self.issue_report_open = False
         self.issue_report_category = "art"
         self.issue_report_note = ""
@@ -1279,10 +1280,19 @@ class Game:
         self.apartment_floor = 0
         self.apartment_label = ""
         self.apartment_directory: dict[str, list[dict]] = {}
+        self.mutual_friend_names: set[str] = set()
         self.game_mode_id = "glorious_car_hijacker"
         self.game_mode_name = "Glorious Car Hijacker"
         self.server_population = 0
         self.housing_capacity = 0
+        self.server_tick_rate = 0.0
+        self.server_tick_configured_rate = 60.0
+        self.server_tick_time_ms = 0.0
+        self.server_tick_max_ms = 0.0
+        self.server_tick_budget_ms = 1000.0 / 60.0
+        self.server_tick_overruns = 0
+        self.server_snapshot_rate = 20.0
+        self.server_ambient_rate = 30.0
         self.settings = load_settings()
         self.audio = GameAudio()
         self.radio = RadioPlayer()
@@ -1340,6 +1350,33 @@ class Game:
     def is_friend(self, name: str) -> bool:
         return str(name).strip().casefold() in self.friend_names
 
+    def is_mutual_friend(self, name: str) -> bool:
+        return str(name).strip().casefold() in self.mutual_friend_names
+
+    def apply_server_metrics(self, raw: object) -> None:
+        if not isinstance(raw, dict):
+            return
+        numeric_fields = {
+            "server_tick_rate_hz": "server_tick_rate",
+            "server_tick_configured_rate_hz": "server_tick_configured_rate",
+            "server_tick_time_ms": "server_tick_time_ms",
+            "server_tick_max_time_ms": "server_tick_max_ms",
+            "server_tick_budget_ms": "server_tick_budget_ms",
+            "snapshot_rate_hz": "server_snapshot_rate",
+            "ambient_sim_rate_hz": "server_ambient_rate",
+        }
+        for source, target in numeric_fields.items():
+            try:
+                value = float(raw.get(source, getattr(self, target)))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value) and value >= 0.0:
+                setattr(self, target, value)
+        try:
+            self.server_tick_overruns = max(0, int(raw.get("server_tick_overruns", self.server_tick_overruns)))
+        except (TypeError, ValueError):
+            pass
+
     def toggle_friend(self, name: str) -> None:
         clean = str(name).strip()[:24]
         if not clean:
@@ -1362,7 +1399,10 @@ class Game:
             # Browser builds keep the list for the current play session even if
             # their virtual filesystem does not persist writes.
             pass
-        self.notice = f"{action} {clean} {'to' if action == 'Added' else 'from'} friends"
+        self.notice = (
+            f"Friend request saved for {clean}; private access activates when they add you too."
+            if action == "Added" else f"Removed {clean} from friends"
+        )
         self.notice_until = time.monotonic() + 2.0
         self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
 
@@ -1944,6 +1984,7 @@ class Game:
                 self.game_mode_name = str(game_mode.get("name", "Glorious Car Hijacker"))
                 self.server_population = int(message.get("server_population", 1) or 1)
                 self.housing_capacity = int(message.get("housing_capacity", 0) or 0)
+                self.apply_server_metrics(message.get("server_metrics"))
                 self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
                 self.notice = "Connected. WASD move; hold Shift to run; Space jumps (twice for double); C crouches; X toggles prone; MMB rotates; T vehicle; E interact; ESC options."
                 self.notice_until = time.monotonic() + 4.0
@@ -2001,6 +2042,12 @@ class Game:
                                 "label": str(row.get("label", "")).strip(),
                             })
                     self.apartment_directory = directory
+                mutual_rows = message.get("mutual_friends")
+                if isinstance(mutual_rows, list):
+                    self.mutual_friend_names = {
+                        str(name).strip().casefold() for name in mutual_rows
+                        if str(name).strip()
+                    }
                 seen_cars: set[str] = set()
                 for data in message.get("vehicles", []):
                     car_id = str(data.get("id", ""))
@@ -2071,6 +2118,7 @@ class Game:
                 self.server_region_id = str(message.get("region_id", self.server_region_id))
                 self.server_population = int(message.get("server_population", self.server_population) or 0)
                 self.housing_capacity = int(message.get("housing_capacity", self.housing_capacity) or 0)
+                self.apply_server_metrics(message.get("server_metrics"))
                 try:
                     self.interest_radius = int(message.get("interest_radius", self.interest_radius))
                 except (TypeError, ValueError):
@@ -2843,7 +2891,7 @@ class Game:
             p = mp_dynamic(px, py)
             if p is not None and map_rect.collidepoint(p):
                 name = str(marker.get("name", "Player"))[:18]
-                friend = self.is_friend(name)
+                friend = self.is_mutual_friend(name)
                 marker_color = (112, 225, 157) if friend else REMOTE_COLOR
                 pygame.draw.circle(self.screen, (12, 13, 13), p, 7 if friend else 6)
                 pygame.draw.circle(self.screen, marker_color, p, 5 if friend else 4)
@@ -3720,7 +3768,8 @@ class Game:
                 "T                Enter or exit vehicle", "E                Interact / right signal",
                 "Q                Left signal (driving)", "H                Headlamps (driving)",
                 "I or TAB         Inventory", "M                World map",
-                "F2               Messages", "F10 or /bug      Report a bug",
+                "F2               Messages", "F8               Network / performance",
+                "SHIFT + F8       Reload all map chunks", "F10 or /bug      Report a bug",
             ]
             for i, line in enumerate(controls):
                 self.screen.blit(self.small_font.render(line, True, TEXT_COLOR), (panel.x + 48, panel.y + 135 + i * 29))
@@ -3753,13 +3802,15 @@ class Game:
             for i, (name, online) in enumerate(rows):
                 y = panel.y + 145 + i * 60 - self.pause_scroll
                 state = self.is_friend(name)
-                status = "ONLINE" if online else "OFFLINE"
+                mutual = self.is_mutual_friend(name)
+                status = "MUTUAL FRIEND" if mutual else ("REQUEST SENT" if state else ("ONLINE" if online else "OFFLINE"))
+                status_color = (145, 226, 160) if mutual or (online and not state) else ((230, 188, 95) if state else MUTED_TEXT)
                 self.screen.blit(self.font.render(name, True, REMOTE_COLOR if online else MUTED_TEXT), (panel.x + 48, y + 4))
-                self.screen.blit(self.tiny_font.render(status, True, (145, 226, 160) if online else MUTED_TEXT), (panel.x + 48, y + 29))
+                self.screen.blit(self.tiny_font.render(status, True, status_color), (panel.x + 48, y + 29))
                 rect = pygame.Rect(panel.right - 210, y, 150, 34)
                 self._draw_menu_button(rect, "REMOVE" if state else "ADD FRIEND", active=state)
             self.screen.set_clip(old_clip)
-            self.screen.blit(self.tiny_font.render("Friends stay marked on M/minimap; /sms Name text persists; F2 opens messages", True, MUTED_TEXT), (panel.x + 190, panel.bottom - 52))
+            self.screen.blit(self.tiny_font.render("Mutual friends share private map/residency access; one-sided requests stay private", True, MUTED_TEXT), (panel.x + 190, panel.bottom - 52))
             self._draw_menu_button(buttons["back"], "BACK")
             return
 
@@ -3994,7 +4045,7 @@ class Game:
         # The compact minimap is deliberately private/friend-focused. The full
         # M map retains the complete online roster for general orientation.
         for pid, marker in self.map_players.items():
-            if pid == self.local_id or not self.is_friend(str(marker.get("name", ""))):
+            if pid == self.local_id or not self.is_mutual_friend(str(marker.get("name", ""))):
                 continue
             try:
                 dx = float(marker.get("x", 0.0)) - local.render_x
@@ -4069,6 +4120,41 @@ class Game:
         pygame.draw.rect(self.screen, (122, 126, 119), box, width=1, border_radius=4)
         for i, line in enumerate(lines):
             self.screen.blit(self.small_font.render(line, True, TEXT_COLOR), (box.x + 11, box.y + 8 + i * 19))
+
+    def draw_network_debug_overlay(self) -> None:
+        """F8 baseline for the v4 authoritative-network performance contract."""
+        if not self.network_debug_overlay:
+            return
+        cx, cy = self.server_chunk
+        subscribed = (self.interest_radius * 2 + 1) ** 2
+        measured = self.server_tick_rate
+        target = self.server_tick_configured_rate
+        if measured <= 0.0:
+            tick_color = (230, 188, 95)
+            tick_text = f"warming up / {target:.0f} Hz target"
+        else:
+            tick_color = (145, 226, 160) if measured >= target * 0.95 else (255, 92, 92)
+            tick_text = f"{measured:.1f} / {target:.0f} Hz"
+        lines = [
+            ("F8  NETWORK / PERFORMANCE", (116, 204, 238)),
+            (f"CLIENT FPS       {self.clock.get_fps():5.1f}", TEXT_COLOR),
+            (f"SERVER TICK      {tick_text}", tick_color),
+            (f"TICK WORK        {self.server_tick_time_ms:.2f} avg  {self.server_tick_max_ms:.2f} max / {self.server_tick_budget_ms:.2f} ms", TEXT_COLOR),
+            (f"RATES            input {NETWORK_SEND_RATE}  snapshot {self.server_snapshot_rate:.0f}  ambient {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
+            (f"ZONE             {chunk_label(cx, cy)} ({cx},{cy})  subscribed {subscribed}", TEXT_COLOR),
+            (f"RELEVANT         players {len(self.players)}  NPCs {len(self.npcs)}  vehicles {len(self.vehicles)}  bikes {len(self.bicycles)}", TEXT_COLOR),
+            (f"POPULATION       {self.server_population}  tick overruns {self.server_tick_overruns}", TEXT_COLOR),
+            ("PING / LOSS      pending probe instrumentation", MUTED_TEXT),
+        ]
+        width = max(self.small_font.size(line)[0] for line, _ in lines) + 24
+        height = 14 + len(lines) * 20
+        box = pygame.Rect(18, 142, width, height)
+        panel = pygame.Surface(box.size, pygame.SRCALPHA)
+        panel.fill((12, 17, 20, 232))
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, (70, 125, 147), box, width=1, border_radius=4)
+        for index, (line, color) in enumerate(lines):
+            self.screen.blit(self.small_font.render(line, True, color), (box.x + 12, box.y + 8 + index * 20))
 
     def draw_location_plaque(self) -> None:
         local = self.players.get(self.local_id or "")
@@ -4194,6 +4280,7 @@ class Game:
             self._draw_hud3_interaction_prompt(local)
             self.draw_vehicle_status()
             self.draw_chunk_debug_overlay()
+            self.draw_network_debug_overlay()
             self.draw_server_population()
             if bool(self.settings.get("debug", {}).get("show_camera_lookahead", False)):
                 cx, cy = w // 2, h // 2
@@ -4276,6 +4363,7 @@ class Game:
         self.draw_vehicle_status()
         self.draw_local_minimap()
         self.draw_chunk_debug_overlay()
+        self.draw_network_debug_overlay()
         self.draw_location_plaque()
         if bool(self.settings.get("debug", {}).get("show_camera_lookahead", False)):
             cx, cy = w // 2, h // 2
@@ -4337,7 +4425,7 @@ class Game:
                             if event.key in (pygame.K_DOWN, pygame.K_PAGEDOWN, pygame.K_END):
                                 self.scroll_pause_page(240 if event.key == pygame.K_PAGEDOWN else (60 if event.key == pygame.K_DOWN else 100000))
                                 continue
-                        # Manual reload keys always work and are documented on ESC.
+                        # Manual reload/debug keys always work and are documented on ESC.
                         if event.key == pygame.K_F5:
                             self.reload_visual_style(manual=True)
                             continue
@@ -4348,7 +4436,12 @@ class Game:
                             self.manual_chunk_reload("near")
                             continue
                         if event.key == pygame.K_F8:
-                            self.manual_chunk_reload("all")
+                            if event.mod & pygame.KMOD_SHIFT:
+                                self.manual_chunk_reload("all")
+                            else:
+                                self.network_debug_overlay = not self.network_debug_overlay
+                                self.notice = f"F8 network performance {'ON' if self.network_debug_overlay else 'OFF'}"
+                                self.notice_until = time.monotonic() + 1.5
                             continue
                         if event.key == pygame.K_F9:
                             self.chunk_debug_overlay = not self.chunk_debug_overlay

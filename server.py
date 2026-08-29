@@ -116,6 +116,7 @@ MOVEMENT_SETTINGS = SETTINGS.get("movement", {})
 VEHICLE_SETTINGS = SETTINGS.get("vehicle", {})
 ENGINE_SETTINGS = SETTINGS.get("engine", {})
 MAP_ROSTER_RATE = max(0.25, float(ENGINE_SETTINGS.get("world_map_player_roster_hz", 2.0)))
+AMBIENT_SIM_RATE = min(float(SERVER_TICK_RATE), 30.0)
 LAYER_TRANSITION_JUMP_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.0)))
 JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("jump_duration_seconds", 0.75)))
 DOUBLE_JUMP_WINDOW_SECONDS = max(0.05, float(MOVEMENT_SETTINGS.get("double_jump_window_seconds", 0.55)))
@@ -239,6 +240,7 @@ def network_map_payload(map_config: dict) -> dict:
 
 def server_info_payload(server_name: str, game_port: int, max_players: int, map_config: dict) -> dict:
     """Small unauthenticated status record used only by the launcher browser."""
+    housing_capacity = len(blank_house_interiors(map_config))
     return {
         "protocol": DISCOVERY_MAGIC,
         "type": "server_info",
@@ -246,7 +248,8 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "port": int(game_port),
         "players": len(clients),
         "max_players": int(max_players),
-        "housing_capacity": len(blank_house_interiors(map_config)),
+        "housing_capacity": housing_capacity,
+        "housing_overflow": max(0, len(clients) - housing_capacity),
         "version": SERVER_VERSION,
         "map_id": map_config["id"],
         "map_name": map_config["name"],
@@ -257,6 +260,7 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "traffic_cars": TRAFFIC_COUNT,
         "bicycles": len(bicycles),
         "npcs": len(npc_pedestrians),
+        "server_metrics": SERVER_TICK_METRICS.public_dict(),
     }
 
 
@@ -280,6 +284,60 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
             return
         payload = server_info_payload(self.server_name, self.game_port, self.max_players, self.map_config)
         self.transport.sendto(json.dumps(payload, separators=(",", ":")).encode("utf-8"), addr)
+
+
+@dataclass
+class ServerTickMetrics:
+    """Rolling proof of authoritative-loop cadence and work cost."""
+
+    configured_rate_hz: float
+    window_seconds: float = 1.0
+    window_started: float = field(default_factory=time.monotonic)
+    window_ticks: int = 0
+    window_work_seconds: float = 0.0
+    window_max_work_seconds: float = 0.0
+    measured_rate_hz: float = 0.0
+    average_work_ms: float = 0.0
+    max_work_ms: float = 0.0
+    overrun_count: int = 0
+
+    @property
+    def budget_seconds(self) -> float:
+        return 1.0 / max(1.0, float(self.configured_rate_hz))
+
+    def record_tick(self, work_seconds: float, completed_at: float | None = None) -> None:
+        work = max(0.0, float(work_seconds))
+        now = time.monotonic() if completed_at is None else float(completed_at)
+        self.window_ticks += 1
+        self.window_work_seconds += work
+        self.window_max_work_seconds = max(self.window_max_work_seconds, work)
+        if work > self.budget_seconds:
+            self.overrun_count += 1
+        elapsed = now - self.window_started
+        if elapsed < self.window_seconds:
+            return
+        self.measured_rate_hz = self.window_ticks / max(1e-6, elapsed)
+        self.average_work_ms = self.window_work_seconds * 1000.0 / max(1, self.window_ticks)
+        self.max_work_ms = self.window_max_work_seconds * 1000.0
+        self.window_started = now
+        self.window_ticks = 0
+        self.window_work_seconds = 0.0
+        self.window_max_work_seconds = 0.0
+
+    def public_dict(self) -> dict:
+        return {
+            "server_tick_rate_hz": round(self.measured_rate_hz, 2),
+            "server_tick_configured_rate_hz": round(self.configured_rate_hz, 2),
+            "server_tick_time_ms": round(self.average_work_ms, 3),
+            "server_tick_max_time_ms": round(self.max_work_ms, 3),
+            "server_tick_budget_ms": round(self.budget_seconds * 1000.0, 3),
+            "server_tick_overruns": int(self.overrun_count),
+            "snapshot_rate_hz": int(SNAPSHOT_RATE),
+            "ambient_sim_rate_hz": round(AMBIENT_SIM_RATE, 2),
+        }
+
+
+SERVER_TICK_METRICS = ServerTickMetrics(SERVER_TICK_RATE)
 
 
 @dataclass
@@ -1556,11 +1614,14 @@ bug_report_source_times: dict[str, float] = {}
 
 def print_machine_status() -> None:
     """Emit a small machine-readable line for the local server-control launcher."""
+    housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
     payload = {"players": len(clients), "max_players": MAX_PLAYERS,
-               "housing_capacity": len(blank_house_interiors(ACTIVE_MAP)), "map_id": ACTIVE_MAP_ID,
+               "housing_capacity": housing_capacity,
+               "housing_overflow": max(0, len(clients) - housing_capacity), "map_id": ACTIVE_MAP_ID,
                "traffic_cars": sum(1 for c in traffic_vehicles if not c.parked),
                "parked_cars": sum(1 for c in traffic_vehicles if c.parked),
-               "bicycles": len(bicycles), "npcs": len(npc_pedestrians)}
+               "bicycles": len(bicycles), "npcs": len(npc_pedestrians),
+               "server_metrics": SERVER_TICK_METRICS.public_dict()}
     print("@STATUS " + json.dumps(payload, separators=(",", ":")), flush=True)
 
 
@@ -1921,7 +1982,7 @@ def update_npcs(
     personal_space = float(NPC_AI.get("personal_space_px", 26.0))
     active_radius = float(NPC_AI.get("active_radius_px", 1800.0))
     far_hz = max(1.0, float(NPC_AI.get("far_update_hz", 5.0)))
-    far_stride = max(1, int(round(SERVER_TICK_RATE / far_hz)))
+    far_stride = max(1, int(round(AMBIENT_SIM_RATE / far_hz)))
     job_npcs = [npc for npc in npc_pedestrians if npc.kind in {"supplier", "buyer"}]
     moving_npcs = [npc for npc in npc_pedestrians if 0 <= npc.route_index < len(routes)]
     # Stationary job NPCs have their own keep-clear rule below and must not be
@@ -2559,7 +2620,11 @@ def _can_view_apartment_residency(viewer: ClientSession, resident: ClientSession
     """Enforce self/friend/buzzer visibility for apartment residency."""
     if viewer is resident:
         return True
-    if resident.player.name.casefold() in viewer.friend_names:
+    mutual_friends = (
+        resident.player.name.casefold() in viewer.friend_names
+        and viewer.player.name.casefold() in resident.friend_names
+    )
+    if mutual_friends:
         return True
     return _near_apartment_buzzer(viewer, resident.apartment_interior_id)
 
@@ -3731,6 +3796,8 @@ async def client_handler(websocket: ServerConnection) -> None:
             "server_version": SERVER_VERSION,
             "server_population": server_population,
             "housing_capacity": housing_capacity,
+            "housing_overflow": max(0, server_population - housing_capacity),
+            "server_metrics": SERVER_TICK_METRICS.public_dict(),
             "account": {
                 "phone_masked": masked_phone(phone),
                 "created": created,
@@ -3749,7 +3816,11 @@ async def client_handler(websocket: ServerConnection) -> None:
             "type": "notice",
             "text": (
                 f"{'New account created' if created else 'Account loaded'} ({masked_phone(phone)}). "
-                "I/TAB inventory, E interact, T car/bicycle, M world map."
+                + (
+                    f"Housing is full ({server_population}/{housing_capacity}); you spawned outside an apartment. "
+                    if not player.interior_id and housing_capacity > 0 else ""
+                )
+                + "I/TAB inventory, E interact, T car/bicycle, M world map."
             ),
         })
         await send_sms_history(session)
@@ -3804,8 +3875,10 @@ async def client_handler(websocket: ServerConnection) -> None:
 
 async def simulation_loop() -> None:
     tick_dt = 1.0 / SERVER_TICK_RATE
+    ambient_interval = 1.0 / AMBIENT_SIM_RATE
+    ambient_accumulator = 0.0
+    ambient_tick_index = 0
     next_tick = time.monotonic()
-    tick_index = 0
     while True:
         now = time.monotonic()
         if now < next_tick:
@@ -3815,9 +3888,11 @@ async def simulation_loop() -> None:
         next_tick += tick_dt
         if current - next_tick > 0.25:
             next_tick = current + tick_dt
+        tick_work_started = time.perf_counter()
 
         async with clients_lock:
             sessions = list(clients.values())
+        housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
         vehicle_by_id = {car.vehicle_id: car for car in traffic_vehicles}
         bicycle_by_id = {bike.bicycle_id: bike for bike in bicycles}
         for session in sessions:
@@ -4086,15 +4161,20 @@ async def simulation_loop() -> None:
             p.aim = session.aim
 
         signal_time = time.time()
-        update_traffic(dt, sessions, signal_time)
         current_mono = time.monotonic()
         update_player_vehicle_impacts(sessions, current_mono)
-        update_bicycles(dt, sessions)
-        update_npcs(dt, sessions, tick_index, signal_time)
-        displace_low_speed_npcs()
         update_npc_runovers(current_mono)
         update_hydrants(current_mono)
-        tick_index += 1
+        ambient_accumulator = min(ambient_interval * 2.0, ambient_accumulator + dt)
+        if ambient_accumulator >= ambient_interval:
+            ambient_dt = ambient_accumulator
+            ambient_accumulator = 0.0
+            update_traffic(ambient_dt, sessions, signal_time)
+            update_bicycles(ambient_dt, sessions)
+            update_npcs(ambient_dt, sessions, ambient_tick_index, signal_time)
+            displace_low_speed_npcs()
+            ambient_tick_index += 1
+        SERVER_TICK_METRICS.record_tick(time.perf_counter() - tick_work_started)
 
 
 async def snapshot_loop() -> None:
@@ -4192,7 +4272,9 @@ async def snapshot_loop() -> None:
                 "traffic_lights": visible_lights,
                 "server_time": server_time,
                 "server_population": len(sessions),
-                "housing_capacity": len(blank_house_interiors(ACTIVE_MAP)),
+                "housing_capacity": housing_capacity,
+                "housing_overflow": max(0, len(sessions) - housing_capacity),
+                "server_metrics": SERVER_TICK_METRICS.public_dict(),
                 "chunk": [pcx, pcy],
                 "chunk_id": chunk_label(pcx, pcy),
                 "interest_radius": radius,
@@ -4205,6 +4287,13 @@ async def snapshot_loop() -> None:
                 # recipient is standing beside that apartment's buzzer.
                 map_players = [resident.player.map_marker_dict() for resident in sessions]
                 apartment_directory = []
+                mutual_friends = sorted(
+                    resident.player.name
+                    for resident in sessions
+                    if resident is not session
+                    and resident.player.name.casefold() in session.friend_names
+                    and session.player.name.casefold() in resident.friend_names
+                )
                 for resident in sessions:
                     is_resident = bool(resident.apartment_interior_id)
                     if is_resident and _can_view_apartment_residency(session, resident):
@@ -4216,6 +4305,7 @@ async def snapshot_loop() -> None:
                         })
                 payload["map_players"] = map_players
                 payload["apartment_directory"] = apartment_directory
+                payload["mutual_friends"] = mutual_friends
             sends.append(send_json(session.websocket, payload))
         if sends:
             await asyncio.gather(*sends, return_exceptions=True)

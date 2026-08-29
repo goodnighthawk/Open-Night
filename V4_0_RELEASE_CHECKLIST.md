@@ -18,15 +18,20 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 ## 2. Blank-house first-floor spawn
 
 - [x] Author a distributed pool of blank houses across Fort Lee and Washington Heights.
-- [x] Add stable pseudo-random account-to-house selection for shared usual homes.
-- [x] Integrate the selector into server login with stable shared-home assignment.
+- [x] Add stable pseudo-random preferred-apartment selection with occupied-floor avoidance.
+- [x] Integrate atomic login assignment with one connected player per first floor.
 - [x] Start the player in the assigned room on the first playable frame.
 - [ ] Preserve outdoor login spawns as a safe recovery fallback only.
 - [ ] Verify exit places the player at the correct exterior entrance and re-entry works.
-- [ ] Verify two or more simultaneous players consistently return to their usual shared homes and can see one another when assigned to the same room.
+- [x] Spawn player 15+ outdoors at a stable random-looking apartment entrance when all 14 floors are occupied.
+- [x] Publish population, housing capacity, and overflow metrics for future controlled map expansion.
+- [x] Defer all generated/additional housing to v5.0; v4.0 never mutates the playable map from population data.
+- [ ] Verify 14 simultaneous players receive distinct floors and player 15 sees the outdoor overflow flow.
 - [x] Present the assignment as `1st Floor - <username>'s Apartment` with a separate numeric floor field.
-- [x] Enforce self/friend/nearby-buzzer visibility for apartment residency listings.
+- [x] Enforce self/mutually-accepted-friend/nearby-buzzer visibility for apartment residency listings; one-sided requests reveal nothing.
+- [x] Keep v4.0 friend saves device-local; reciprocal online saves define mutual acceptance for this release.
 - [ ] Runtime-check buzzer panels, authorized directory labels, and hidden distant-stranger listings.
+- [ ] Runtime-check the red top-right population/capacity counter (for example `15/14`).
 
 ## 3. Visual consistency
 
@@ -37,6 +42,12 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 
 ## 4. Multiplayer regression
 
+- [x] Configure the authoritative player/player-vehicle simulation and client input stream for 60 Hz.
+- [x] Keep ambient traffic, bicycles, and pedestrian movement on a separate 30 Hz tier.
+- [x] Publish measured server tick rate/work/budget metrics and expose the initial F8 performance panel.
+- [ ] Add application ping, loss, bandwidth, and packet-rate instrumentation to complete the F8 contract.
+- [ ] Add compact 60 Hz replication for nearby players and player-controlled vehicles without raising full ambient snapshot cost.
+- [ ] Prove stable 60 Hz authoritative ticks under a representative automated 64-client city load.
 - [ ] Movement and remote-player visibility pass with at least two clients.
 - [ ] Disconnect/reconnect and strict client/server version handling pass.
 - [ ] Server snapshots and map-player markers remain coherent while players are indoors/outdoors.

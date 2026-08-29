@@ -22,32 +22,38 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 
 1. **Map cutover** — `map_001_gwb_corridor` is the sole normal playable world. Implemented in architecture; re-verify in v4 runtime.
 2. **Visual consistency** — roads, buildings, roofs, sidewalks, crossings, lighting, and major props use the approved Open Night language. Partial; requires runtime visual pass.
-3. **Indoor spawn** — shared blank houses, stable account assignment, and first-frame interior delivery are implemented; exits/re-entry and multiplayer room visibility still require runtime proof.
+3. **Indoor spawn** — 14 private first-floor apartments use collision-free online assignment and first-frame interior delivery. Overflow players spawn outside an apartment; exits/re-entry still require runtime proof.
 4. **Multiplayer regression** — movement, player visibility, reconnect/version handling, and server synchronization. v3 baseline exists; v4 regression required.
 5. **Core systems regression** — vehicles, friends/SMS, HUD, and minimap. v3 baseline exists; v4 regression required.
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
 8. **Game-mode authority** — discovery, welcome packets, server manager, Railway, and HUD now identify the default ruleset as Glorious Car Hijacker. Additional modes can be added through the central registry without branching the server entry path.
+9. **64-player networking** — the authoritative player/player-vehicle loop and client input stream now run at 60 Hz; ambient traffic/NPC movement remains 30 Hz. Rolling tick work/rate metrics and an initial F8 panel are implemented, but representative 64-client load proof and high-rate player replication remain release blockers.
 
 ## Housing-spawn implementation direction
 
 - Reuse the existing interior system rather than create a second coordinate system for v4.0.
 - Author a distributed `blank_house` interior pool against existing building footprints.
-- Select a provisional home deterministically from the account key so returning players receive the same house until persistent housing is implemented.
-- Always return an account to its deterministic provisional home; v4.0 homes are shared spaces and remain stable even when another player is inside.
+- Select a preferred apartment deterministically from the account key, then walk the pool until an unoccupied first floor is found.
+- Assign at most one connected player to each authored floor. Current housing capacity is 14 while the connection limit remains higher.
+- When capacity is exhausted, spawn the overflow player outdoors at a stable random-looking apartment entrance and expose the overflow count as planning data for v5.0.
+- Do not generate, append, or mutate housing geometry in v4.0. Additional housing generation belongs exclusively to the v5.0 map/release project.
 - Keep current outdoor `login_spawn` points as recovery/fallback locations if no valid house is available.
 - Login should send authoritative interior state immediately so the first playable frame is inside the house.
 - Present the assignment as `1st Floor - <username>'s Apartment`; floor remains a separate field for later multi-floor/unit expansion.
-- Treat residency as private directory data: self and saved friends can see it globally; strangers receive it only while standing outside beside that building's buzzer.
+- Treat residency as private directory data: self and mutually accepted friends can see it globally; one-sided requests reveal nothing, while strangers receive the listing only beside that building's buzzer.
+- Keep v4.0 friend saves device-local. Mutual access exists only while both online clients report each other's saved username; account-backed requests/persistence are deferred.
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 
 ## Current next pass
 
-1. Verify the client enters its usual shared home directly from the welcome/login flow.
+1. Verify the first 14 clients enter distinct private first floors and client 15 spawns outdoors.
 2. Test exiting the house to the authored exterior door and re-entering it.
-3. Verify two clients assigned to the same room see one another and retain coherent map markers.
-4. Decide whether v4.0 apartments are one shared unit per building/floor or require separate unit numbers now.
-5. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+3. Runtime-check the red `population/housing capacity` HUD and private buzzer directory.
+4. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
+5. Add high-rate compact player/controlled-vehicle replication without raising full ambient snapshots above 20 Hz.
+6. Build the representative 64-client load harness and prove stable 60 Hz before changing `VERSION.txt` to 4.0.
+7. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 

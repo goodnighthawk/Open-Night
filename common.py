@@ -9,7 +9,7 @@ from character_catalog import default_character as _default_character, normalize
 
 PLAYER_RADIUS = 18
 PLAYER_SPEED = 240.0
-SERVER_TICK_RATE = 30
+SERVER_TICK_RATE = 60
 SNAPSHOT_RATE = 20
 INTERACT_DISTANCE = 78.0
 
