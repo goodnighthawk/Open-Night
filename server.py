@@ -76,7 +76,7 @@ from gameplay.settings import load_settings
 from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
-from housing_spawn import house_login_state
+from housing_spawn import blank_house_interiors, house_login_state, overflow_exterior_spawn
 from versioning import GAME_VERSION
 from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
 from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES, get_game_mode
@@ -246,6 +246,7 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "port": int(game_port),
         "players": len(clients),
         "max_players": int(max_players),
+        "housing_capacity": len(blank_house_interiors(map_config)),
         "version": SERVER_VERSION,
         "map_id": map_config["id"],
         "map_name": map_config["name"],
@@ -1555,7 +1556,8 @@ bug_report_source_times: dict[str, float] = {}
 
 def print_machine_status() -> None:
     """Emit a small machine-readable line for the local server-control launcher."""
-    payload = {"players": len(clients), "max_players": MAX_PLAYERS, "map_id": ACTIVE_MAP_ID,
+    payload = {"players": len(clients), "max_players": MAX_PLAYERS,
+               "housing_capacity": len(blank_house_interiors(ACTIVE_MAP)), "map_id": ACTIVE_MAP_ID,
                "traffic_cars": sum(1 for c in traffic_vehicles if not c.parked),
                "parked_cars": sum(1 for c in traffic_vehicles if c.parked),
                "bicycles": len(bicycles), "npcs": len(npc_pedestrians)}
@@ -3666,41 +3668,58 @@ async def client_handler(websocket: ServerConnection) -> None:
             await websocket.close(code=1011, reason="database unavailable")
             return
 
-        spawn_x, spawn_y = choose_safe_player_spawn(ACTIVE_MAP)
-        login_house = house_login_state(ACTIVE_MAP, phone)
-        interior_id = ""
-        interior_x = interior_y = 0
-        interior_aim = 0.0
-        if login_house is not None:
-            interior_id, spawn_x, spawn_y, interior_x, interior_y = login_house
-            interior_aim = -math.pi / 2.0
-        player = PlayerState(
-            player_id=player_id,
-            name=name,
-            x=spawn_x,
-            y=spawn_y,
-            cash=int(cash),
-            packages=inventory_count(inventory, "package"),
-            appearance=normalize_character(appearance),
-            interior_id=interior_id,
-            interior_x=interior_x,
-            interior_y=interior_y,
-            interior_aim=interior_aim,
-        )
         remote_address = getattr(websocket, "remote_address", None)
         remote_host = str(remote_address[0]) if isinstance(remote_address, tuple) and remote_address else "unknown"
         rate_key = hashlib.sha256(f"{BUG_REPORT_SALT}:{remote_host}".encode("utf-8")).hexdigest()
-        session = ClientSession(
-            websocket=websocket,
-            player=player,
-            phone=phone,
-            inventory=inventory,
-            apartment_interior_id=interior_id,
-            bug_rate_key=rate_key,
-        )
-
+        duplicate_after_load = False
         async with clients_lock:
-            clients[player_id] = session
+            if any(existing.phone == phone for existing in clients.values()):
+                duplicate_after_load = True
+            else:
+                occupied = {
+                    existing.apartment_interior_id for existing in clients.values()
+                    if existing.apartment_interior_id
+                }
+                spawn_x, spawn_y = choose_safe_player_spawn(ACTIVE_MAP)
+                login_house = house_login_state(ACTIVE_MAP, phone, occupied)
+                interior_id = ""
+                interior_x = interior_y = 0
+                interior_aim = 0.0
+                if login_house is not None:
+                    interior_id, spawn_x, spawn_y, interior_x, interior_y = login_house
+                    interior_aim = -math.pi / 2.0
+                else:
+                    overflow_spawn = overflow_exterior_spawn(ACTIVE_MAP, phone)
+                    if overflow_spawn is not None:
+                        spawn_x, spawn_y = overflow_spawn
+                player = PlayerState(
+                    player_id=player_id,
+                    name=name,
+                    x=spawn_x,
+                    y=spawn_y,
+                    cash=int(cash),
+                    packages=inventory_count(inventory, "package"),
+                    appearance=normalize_character(appearance),
+                    interior_id=interior_id,
+                    interior_x=interior_x,
+                    interior_y=interior_y,
+                    interior_aim=interior_aim,
+                )
+                session = ClientSession(
+                    websocket=websocket,
+                    player=player,
+                    phone=phone,
+                    inventory=inventory,
+                    apartment_interior_id=interior_id,
+                    bug_rate_key=rate_key,
+                )
+                clients[player_id] = session
+            server_population = len(clients)
+        if duplicate_after_load:
+            await send_json(websocket, {"type": "login_error", "text": "That phone-number account is already logged in."})
+            await websocket.close(code=1008, reason="account already online")
+            return
+        housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
         print_machine_status()
 
         await send_json(websocket, {
@@ -3710,6 +3729,8 @@ async def client_handler(websocket: ServerConnection) -> None:
             "map": network_map_payload(ACTIVE_MAP),
             "game_mode": dict(ACTIVE_GAME_MODE),
             "server_version": SERVER_VERSION,
+            "server_population": server_population,
+            "housing_capacity": housing_capacity,
             "account": {
                 "phone_masked": masked_phone(phone),
                 "created": created,
@@ -4170,6 +4191,8 @@ async def snapshot_loop() -> None:
                 "hydrants": visible_hydrants,
                 "traffic_lights": visible_lights,
                 "server_time": server_time,
+                "server_population": len(sessions),
+                "housing_capacity": len(blank_house_interiors(ACTIVE_MAP)),
                 "chunk": [pcx, pcy],
                 "chunk_id": chunk_label(pcx, pcy),
                 "interest_radius": radius,
