@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 
@@ -40,11 +39,9 @@ def main() -> int:
     ):
         assert token in source, token
 
+    version = (ROOT / "VERSION.txt").read_text(encoding="utf-8-sig").strip()
     version_source = (ROOT / "versioning.py").read_text(encoding="utf-8")
-    match = re.search(r'^GAME_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$', version_source, re.MULTILINE)
-    assert match, "GAME_VERSION"
-    version = match.group(1)
-    assert f"Open Night v{version}" in (ROOT / "VERSION.txt").read_text(encoding="utf-8")
+    assert f'GAME_VERSION = "{version}"' in version_source, "GAME_VERSION"
     assert f"open-night-v{version}" in (ROOT / "railway.toml").read_text(encoding="utf-8")
 
     print(f"OPEN NIGHT v{version} CLIPBOARD / CHAT-HINT AUDIT: PASS")

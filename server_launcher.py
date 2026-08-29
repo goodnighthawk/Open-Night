@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from common import DEFAULT_MAP_ID, MAPS, TRAFFIC_DEFAULT_COUNT
+from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES
 from database import DatabaseConfig, InventoryDatabase, mysql_error_text
 from portable_paths import ensure_shared_layout
 from versioning import version_label
@@ -58,6 +59,7 @@ def _load_config() -> dict:
         "max_players": 128,
         "traffic_cars": TRAFFIC_DEFAULT_COUNT,
         "map_id": DEFAULT_MAP_ID,
+        "game_mode_id": DEFAULT_GAME_MODE_ID,
         "map_file": "",
         "lan_discovery": True,
         "db_host": os.getenv("PYMMO_DB_HOST", "127.0.0.1"),
@@ -300,6 +302,9 @@ class ServerLauncher:
         self.max_players_var = tk.StringVar(value=str(self.config["max_players"]))
         self.traffic_cars_var = tk.StringVar(value=str(self.config.get("traffic_cars", TRAFFIC_DEFAULT_COUNT)))
         self.map_id_var = tk.StringVar(value=str(self.config["map_id"]))
+        configured_mode_id = str(self.config.get("game_mode_id", DEFAULT_GAME_MODE_ID))
+        configured_mode = GAME_MODES.get(configured_mode_id, GAME_MODES[DEFAULT_GAME_MODE_ID])
+        self.game_mode_name_var = tk.StringVar(value=str(configured_mode["name"]))
         self.map_file_var = tk.StringVar(value=str(self.config.get("map_file", "")))
         self.discovery_var = tk.BooleanVar(value=bool(self.config["lan_discovery"]))
 
@@ -326,29 +331,34 @@ class ServerLauncher:
         self.traffic_cars_entry.grid(row=4, column=1, sticky="w", pady=3)
         ttk.Label(server, text="server-authoritative AI", style="Muted.Panel.TLabel").grid(row=4, column=2, columnspan=2, sticky="w", padx=(12, 0))
 
-        ttk.Label(server, text="Map", style="Muted.Panel.TLabel").grid(row=5, column=0, sticky="w")
+        ttk.Label(server, text="Game mode", style="Muted.Panel.TLabel").grid(row=5, column=0, sticky="w")
+        mode_values = [mode["name"] for mode in GAME_MODES.values()]
+        self.game_mode_combo = ttk.Combobox(server, values=mode_values, textvariable=self.game_mode_name_var, state="readonly")
+        self.game_mode_combo.grid(row=5, column=1, columnspan=3, sticky="ew", pady=3)
+
+        ttk.Label(server, text="Map", style="Muted.Panel.TLabel").grid(row=6, column=0, sticky="w")
         map_values = list(MAPS.keys())
         self.map_combo = ttk.Combobox(server, values=map_values, textvariable=self.map_id_var, state="readonly")
-        self.map_combo.grid(row=5, column=1, columnspan=3, sticky="ew", pady=3)
+        self.map_combo.grid(row=6, column=1, columnspan=3, sticky="ew", pady=3)
 
-        ttk.Label(server, text="Portable .map", style="Muted.Panel.TLabel").grid(row=6, column=0, sticky="w")
+        ttk.Label(server, text="Portable .map", style="Muted.Panel.TLabel").grid(row=7, column=0, sticky="w")
         self.map_file_entry = self._entry(server, self.map_file_var)
-        self.map_file_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3)
+        self.map_file_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3)
         self.map_file_button = ttk.Button(server, text="BROWSE", command=self._browse_map_file)
-        self.map_file_button.grid(row=6, column=3, sticky="ew", padx=(6,0), pady=3)
+        self.map_file_button.grid(row=7, column=3, sticky="ew", padx=(6,0), pady=3)
 
         self.discovery_check = ttk.Checkbutton(server, text="Advertise this server on the LAN", variable=self.discovery_var)
-        self.discovery_check.grid(row=7, column=0, columnspan=4, sticky="w", pady=(8, 2))
+        self.discovery_check.grid(row=8, column=0, columnspan=4, sticky="w", pady=(8, 2))
 
         self.map_description_var = tk.StringVar()
         self.map_description_label = tk.Label(server, textvariable=self.map_description_var, bg=PANEL, fg=MUTED, font=("Consolas", 8), justify="left", anchor="w", wraplength=470)
-        self.map_description_label.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(6, 8))
+        self.map_description_label.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(6, 8))
         self.map_combo.bind("<<ComboboxSelected>>", lambda _e: self._update_map_description())
         self.map_file_var.trace_add("write", lambda *_: self._update_map_description())
         self._update_map_description()
 
         server_buttons = ttk.Frame(server, style="Panel.TFrame")
-        server_buttons.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(12, 0))
+        server_buttons.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(12, 0))
         self.start_button = ttk.Button(server_buttons, text="START SERVER", style="Accent.TButton", command=self.start_server)
         self.start_button.pack(side="left", fill="x", expand=True)
         self.stop_button = ttk.Button(server_buttons, text="STOP", command=self.stop_server, state="disabled")
@@ -433,12 +443,20 @@ class ServerLauncher:
             map_file = str(mp.resolve())
         elif map_id not in MAPS:
             raise ValueError("Select a valid map.")
+        selected_mode_name = self.game_mode_name_var.get().strip()
+        game_mode_id = next(
+            (mode_id for mode_id, mode in GAME_MODES.items() if mode["name"] == selected_mode_name),
+            "",
+        )
+        if not game_mode_id:
+            raise ValueError("Select a valid game mode.")
         return {
             "server_name": self.server_name_var.get().strip() or "Python MMO Server",
             "port": port,
             "max_players": max_players,
             "traffic_cars": traffic_cars,
             "map_id": map_id,
+            "game_mode_id": game_mode_id,
             "map_file": map_file,
             "lan_discovery": bool(self.discovery_var.get()),
             "db_host": self.db_host_var.get().strip() or "127.0.0.1",
@@ -592,6 +610,7 @@ class ServerLauncher:
             "--max-players", str(cfg["max_players"]),
             "--traffic", str(cfg["traffic_cars"]),
             "--map", cfg["map_id"],
+            "--mode", cfg["game_mode_id"],
             "--db-host", cfg["db_host"],
             "--db-port", str(cfg["db_port"]),
             "--db-name", cfg["db_name"],
@@ -631,7 +650,8 @@ class ServerLauncher:
         self.stop_button.configure(state="normal")
         self._set_server_inputs_enabled(False)
         map_label = Path(cfg["map_file"]).name if cfg.get("map_file") else MAPS[cfg["map_id"]]["name"]
-        self._log(f"Launched {cfg['server_name']} on port {cfg['port']} ({map_label}) with {cfg['traffic_cars']} civilian cars.")
+        mode_label = GAME_MODES[cfg["game_mode_id"]]["name"]
+        self._log(f"Launched {cfg['server_name']} on port {cfg['port']} ({mode_label} / {map_label}) with {cfg['traffic_cars']} civilian cars.")
 
         def reader() -> None:
             assert self.server_process is not None
@@ -673,6 +693,7 @@ class ServerLauncher:
         for widget in (self.server_name_entry, self.server_port_entry, self.max_players_entry, self.traffic_cars_entry, self.map_file_entry):
             widget.configure(state=state)
         self.map_combo.configure(state="readonly" if enabled else "disabled")
+        self.game_mode_combo.configure(state="readonly" if enabled else "disabled")
         self.map_file_button.configure(state="normal" if enabled else "disabled")
         self.discovery_check.configure(state=state)
 

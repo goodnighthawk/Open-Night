@@ -322,6 +322,8 @@ class DiscoveryService:
                     "version": str(data.get("version", "dev")),
                     "map_id": str(data.get("map_id", DEFAULT_MAP_ID)),
                     "map_name": str(data.get("map_name", "Unknown map")),
+                    "game_mode_id": str(data.get("game_mode_id", "glorious_car_hijacker")),
+                    "game_mode_name": str(data.get("game_mode_name", "Glorious Car Hijacker")),
                     "host": host,
                     "port": port,
                     "scope": "LAN",
@@ -381,6 +383,8 @@ class DiscoveryService:
                 "version": str(data.get("version", "dev")),
                 "map_id": str(data.get("map_id", DEFAULT_MAP_ID)),
                 "map_name": str(data.get("map_name", "Unknown map")),
+                "game_mode_id": str(data.get("game_mode_id", "glorious_car_hijacker")),
+                "game_mode_name": str(data.get("game_mode_name", "Glorious Car Hijacker")),
                 "host": "127.0.0.1",
                 "port": int(port),
                 "scope": "LOCAL",
@@ -761,7 +765,7 @@ class Launcher:
                         occupancy = f'{server.get("players", 0)}/{max_players}' if max_players else str(server.get("players", 0))
                         scope = str(server.get("scope", "LAN"))
                         endpoint = "Railway" if scope == "INTERNET" else f'{server["host"]}:{server["port"]}'
-                        details = f'{occupancy} players   {server.get("map_name", "Unknown map")}   {scope} {endpoint}   v{server.get("version", "dev")}'
+                        details = f'{occupancy} players   {server.get("game_mode_name", "Glorious Car Hijacker")}   {server.get("map_name", "Unknown map")}   {scope} {endpoint}   v{server.get("version", "dev")}'
                         self.screen.blit(self.small.render(details, True, MUTED_TEXT), (row.x + 12, row.y + 34))
                         row_y += 64
 
@@ -1271,6 +1275,12 @@ class Game:
         self.selected_slot = 0
         self.drag_source: int | None = None
         self.account_masked = ""
+        self.apartment_interior_id = ""
+        self.apartment_floor = 0
+        self.apartment_label = ""
+        self.apartment_directory: dict[str, list[dict]] = {}
+        self.game_mode_id = "glorious_car_hijacker"
+        self.game_mode_name = "Glorious Car Hijacker"
         self.settings = load_settings()
         self.audio = GameAudio()
         self.radio = RadioPlayer()
@@ -1352,6 +1362,7 @@ class Game:
             pass
         self.notice = f"{action} {clean} {'to' if action == 'Added' else 'from'} friends"
         self.notice_until = time.monotonic() + 2.0
+        self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
 
     def _friend_target_from_text(self, rest: str) -> str | None:
         folded = rest.casefold()
@@ -1920,7 +1931,16 @@ class Game:
                     "level": player.level,
                 }
                 self.inventory = normalize_inventory(message.get("inventory"))
-                self.account_masked = str(message.get("account", {}).get("phone_masked", ""))
+                account = message.get("account", {}) if isinstance(message.get("account"), dict) else {}
+                self.account_masked = str(account.get("phone_masked", ""))
+                apartment = account.get("apartment", {}) if isinstance(account.get("apartment"), dict) else {}
+                self.apartment_interior_id = str(apartment.get("interior_id", "")).strip()
+                self.apartment_floor = int(apartment.get("floor", 0) or 0)
+                self.apartment_label = str(apartment.get("label", "")).strip()
+                game_mode = message.get("game_mode", {}) if isinstance(message.get("game_mode"), dict) else {}
+                self.game_mode_id = str(game_mode.get("id", "glorious_car_hijacker"))
+                self.game_mode_name = str(game_mode.get("name", "Glorious Car Hijacker"))
+                self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
                 self.notice = "Connected. WASD move; hold Shift to run; Space jumps (twice for double); C crouches; X toggles prone; MMB rotates; T vehicle; E interact; ESC options."
                 self.notice_until = time.monotonic() + 4.0
             elif kind == "inventory":
@@ -1962,6 +1982,21 @@ class Game:
                                 "in_vehicle": bool(row.get("in_vehicle", False)),
                             }
                     self.map_players = global_markers
+                directory_rows = message.get("apartment_directory")
+                if isinstance(directory_rows, list):
+                    directory: dict[str, list[dict]] = {}
+                    for row in directory_rows:
+                        if not isinstance(row, dict):
+                            continue
+                        interior_id = str(row.get("interior_id", "")).strip()
+                        resident_name = str(row.get("resident_name", "")).strip()[:24]
+                        if interior_id and resident_name:
+                            directory.setdefault(interior_id, []).append({
+                                "floor": int(row.get("floor", 1) or 1),
+                                "resident_name": resident_name,
+                                "label": str(row.get("label", "")).strip(),
+                            })
+                    self.apartment_directory = directory
                 seen_cars: set[str] = set()
                 for data in message.get("vehicles", []):
                     car_id = str(data.get("id", ""))
@@ -2244,6 +2279,55 @@ class Game:
             None,
         )
 
+    def interior_display_name(self, info: dict | None) -> str:
+        """Return the local account's personalized name for an interior."""
+        if not info:
+            return "Building"
+        interior_id = str(info.get("id", "")).strip()
+        if interior_id and interior_id == self.apartment_interior_id and self.apartment_label:
+            return self.apartment_label
+        return str(info.get("name", "Building"))
+
+    def apartment_entry(self) -> tuple[float, float] | None:
+        """Return this account's authored apartment entrance, when available."""
+        info = self.interior_info(self.apartment_interior_id)
+        if info is None:
+            return None
+        try:
+            return float(info["entry"][0]), float(info["entry"][1])
+        except (KeyError, TypeError, ValueError, IndexError):
+            return None
+
+    def visible_apartment_labels(self, interior_id: str) -> list[str]:
+        """Return only server-authorized residency labels for one buzzer."""
+        wanted = str(interior_id).strip()
+        labels = [
+            str(row.get("label", "")).strip()
+            for row in self.apartment_directory.get(wanted, [])
+            if str(row.get("label", "")).strip()
+        ]
+        if wanted == self.apartment_interior_id and self.apartment_label and self.apartment_label not in labels:
+            labels.insert(0, self.apartment_label)
+        return labels
+
+    def visible_apartment_entries(self) -> list[tuple[tuple[float, float], list[str]]]:
+        """Return server-authorized apartment directory locations for map UI."""
+        interior_ids = set(self.apartment_directory)
+        if self.apartment_interior_id:
+            interior_ids.add(self.apartment_interior_id)
+        entries: list[tuple[tuple[float, float], list[str]]] = []
+        for interior_id in sorted(interior_ids):
+            info = self.interior_info(interior_id)
+            labels = self.visible_apartment_labels(interior_id)
+            if info is None or not labels:
+                continue
+            try:
+                entry = float(info["entry"][0]), float(info["entry"][1])
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+            entries.append((entry, labels))
+        return entries
+
     def apply_interior_state(
         self, active: bool, interior_id: str, x: int, y: int, aim: float,
         title: str = "",
@@ -2254,7 +2338,9 @@ class Game:
                 self.interior.leave()
             return
         info = self.interior_info(interior_id)
-        room_title = title or (str(info.get("name", "")) if info else "")
+        room_title = self.interior_display_name(info) if interior_id == self.apartment_interior_id else (
+            title or (str(info.get("name", "")) if info else "")
+        )
         if not self.interior.active or self.interior.room_id != interior_id:
             self.inventory_open = False
             self.map_open = False
@@ -2272,7 +2358,7 @@ class Game:
         local = self.players.get(self.local_id or "")
         body_aim = float(getattr(local, "move_heading", getattr(local, "aim", 0.0))) if local is not None else 0.0
         self.network.send({"type": "input", "x": 0.0, "y": 0.0, "aim": body_aim})
-        self.notice = f"Entering {str(info.get('name', 'building'))}..."
+        self.notice = f"Entering {self.interior_display_name(info)}..."
         self.notice_until = time.monotonic() + 1.5
         return True
 
@@ -2282,19 +2368,43 @@ class Game:
                 ex, ey = float(info["entry"][0]), float(info["entry"][1])
             except (KeyError, TypeError, ValueError, IndexError):
                 continue
+            sx, sy = self.world_to_screen(ex, ey)
+            is_apartment_door = str(info.get("kind", "")).strip().lower() == "blank_house"
+            if is_apartment_door and -60 <= sx <= self.screen.get_width()+60 and -60 <= sy <= self.screen.get_height()+80:
+                # Every apartment entrance has a readable buzzer panel. The
+                # server decides which resident labels this client may receive.
+                buzzer = pygame.Rect(sx + 15, sy - 11, 9, 22)
+                pygame.draw.rect(self.screen, (19, 21, 22), buzzer, border_radius=2)
+                pygame.draw.rect(self.screen, (174, 160, 103), buzzer, width=1, border_radius=2)
+                for button_y in (sy - 6, sy, sy + 6):
+                    pygame.draw.circle(self.screen, (224, 207, 137), (sx + 19, button_y), 1)
+            visible_labels = self.visible_apartment_labels(str(info.get("id", "")))
+            if visible_labels and -220 <= sx <= self.screen.get_width()+220 and -90 <= sy <= self.screen.get_height()+80:
+                shown = visible_labels[:4]
+                if len(visible_labels) > len(shown):
+                    shown.append(f"+{len(visible_labels) - len(shown)} more residents")
+                rendered = [self.tiny_font.render(text, True, (241, 221, 116)) for text in shown]
+                width = max(label.get_width() for label in rendered)
+                height = sum(label.get_height() for label in rendered) + max(0, len(rendered) - 1) * 2
+                panel = pygame.Rect(0, 0, width + 12, height + 8)
+                panel.midbottom = (sx, sy - 20)
+                pygame.draw.rect(self.screen, (9, 10, 10), panel, border_radius=4)
+                cursor_y = panel.y + 4
+                for label in rendered:
+                    self.screen.blit(label, (panel.centerx - label.get_width() // 2, cursor_y))
+                    cursor_y += label.get_height() + 2
             # GridWorld doors are real wall-bound object sprites. Drawing the
             # legacy freestanding marker at their interaction point put a
             # second fake door in the sidewalk/road (report #165).
             if bool(info.get("grid_native")):
                 continue
-            sx, sy = self.world_to_screen(ex, ey)
             if -40 <= sx <= self.screen.get_width()+40 and -40 <= sy <= self.screen.get_height()+40:
                 pygame.draw.rect(self.screen, (28, 30, 30), pygame.Rect(sx-13, sy-15, 26, 30), border_radius=2)
                 pygame.draw.rect(self.screen, (207, 180, 86), pygame.Rect(sx-10, sy-12, 20, 27), width=2)
                 pygame.draw.circle(self.screen, (226, 205, 124), (sx+5, sy+2), 2)
         info = self.nearest_interior()
         if info is not None:
-            txt = self.font.render(f"[E] ENTER {str(info.get('name','BUILDING')).upper()}", True, (241, 221, 116))
+            txt = self.font.render(f"[E] ENTER {self.interior_display_name(info).upper()}", True, (241, 221, 116))
             r = txt.get_rect(center=(self.screen.get_width()//2, self.screen.get_height()-108))
             pygame.draw.rect(self.screen, (9, 10, 10), r.inflate(24, 14), border_radius=5)
             self.screen.blit(txt, r)
@@ -2625,7 +2735,7 @@ class Game:
         title_text = str(self.map_config.get("name", "WORLD MAP")).upper()
         title = self.big_font.render(title_text, True, TEXT_COLOR)
         self.screen.blit(title, (panel.x + 18, panel.y + 12))
-        subtitle = self.small_font.render("M close | yellow: you | green: friends | blue: players | supplier/buyer: job markers", True, MUTED_TEXT)
+        subtitle = self.small_font.render("M close | yellow: you/apartment | green: friends | blue: players | supplier/buyer: jobs", True, MUTED_TEXT)
         self.screen.blit(subtitle, (panel.x + 20, panel.y + 46))
 
         available = pygame.Rect(panel.x + 20, panel.y + 72, max(64, panel.width - 40), max(64, panel.height - 102))
@@ -2684,6 +2794,20 @@ class Game:
             ).clip(map_rect)
             if interest_rect.width > 0 and interest_rect.height > 0:
                 pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
+
+        for apartment_entry, apartment_labels in self.visible_apartment_entries():
+            apartment_pos = mp_dynamic(*apartment_entry)
+            if apartment_pos is not None and map_rect.collidepoint(apartment_pos):
+                ax, ay = apartment_pos
+                pygame.draw.polygon(self.screen, (12, 13, 13), [(ax, ay-9), (ax+9, ay), (ax, ay+9), (ax-9, ay)])
+                pygame.draw.polygon(self.screen, (241, 221, 116), [(ax, ay-6), (ax+6, ay), (ax, ay+6), (ax-6, ay)])
+                shown_label = apartment_labels[0]
+                if len(apartment_labels) > 1:
+                    shown_label += f" +{len(apartment_labels) - 1}"
+                label = self.tiny_font.render(shown_label, True, (241, 221, 116))
+                label_rect = label.get_rect(midleft=(ax + 10, ay))
+                pygame.draw.rect(self.screen, (18, 21, 22), label_rect.inflate(4, 2), border_radius=2)
+                self.screen.blit(label, label_rect)
 
         # Job-economy locations are client-side map UI, not baked map text. This
         # keeps labels horizontal/readable and makes supplier/buyer destinations
@@ -3838,6 +3962,16 @@ class Game:
         # at the player's exact position must remain visible instead of being
         # completely covered by the arrow/center dot.
         minimap_job_markers: list[tuple[tuple[int, int], tuple[int, int, int], str]] = []
+        minimap_apartment_markers: list[tuple[tuple[int, int], str, float]] = []
+        for apartment_entry, apartment_labels in self.visible_apartment_entries():
+            dx = apartment_entry[0] - local.render_x
+            dy = apartment_entry[1] - local.render_y
+            if max(abs(dx), abs(dy)) <= world_radius * 0.94:
+                marker = (int(radius + dx * scale), int(radius + dy * scale))
+                shown_label = apartment_labels[0]
+                if len(apartment_labels) > 1:
+                    shown_label += f" +{len(apartment_labels) - 1}"
+                minimap_apartment_markers.append((marker, shown_label, math.hypot(dx, dy)))
         for job in self._job_locations():
             raw_pos = job["pos"]
             role = str(job["role"]).lower()
@@ -3873,6 +4007,10 @@ class Game:
         right = (int(radius + math.cos(heading-2.55)*9), int(radius + math.sin(heading-2.55)*9))
         pygame.draw.polygon(mini, (244,244,237), [tip,left,right])
         pygame.draw.polygon(mini, border, [tip,left,right], width=1)
+        for minimap_apartment_marker, _label, _distance in minimap_apartment_markers:
+            ax, ay = minimap_apartment_marker
+            pygame.draw.polygon(mini, (18, 24, 28), [(ax, ay-9), (ax+9, ay), (ax, ay+9), (ax-9, ay)])
+            pygame.draw.polygon(mini, (241, 221, 116), [(ax, ay-6), (ax+6, ay), (ax, ay+6), (ax-6, ay)])
         for marker_pos, marker_color, role_letter in minimap_job_markers:
             pygame.draw.circle(mini, (18, 24, 28), marker_pos, 11)
             pygame.draw.circle(mini, marker_color, marker_pos, 9, width=3)
@@ -3884,6 +4022,12 @@ class Game:
             else (18, self.screen.get_height() - diameter - 58)
         )
         self.screen.blit(mini, (mini_x, mini_y))
+        if minimap_apartment_markers:
+            _marker, nearest_label, _distance = min(minimap_apartment_markers, key=lambda row: row[2])
+            apartment_label = self.tiny_font.render(nearest_label, True, (241, 221, 116))
+            apartment_label_rect = apartment_label.get_rect(bottomright=(mini_x + diameter, mini_y - 5))
+            pygame.draw.rect(self.screen, (18, 21, 22), apartment_label_rect.inflate(8, 4), border_radius=3)
+            self.screen.blit(apartment_label, apartment_label_rect)
         n = self.small_font.render("N", True, TEXT_COLOR)
         self.screen.blit(n, (mini_x + radius - n.get_width()//2, mini_y + 5))
 
@@ -4104,7 +4248,7 @@ class Game:
         local_chunk = self.server_chunk
         online_count = len(self.map_players) if self.map_players else len(self.players)
         unread = f" SMS:{self.sms_unread}" if self.sms_unread else ""
-        players_text = self.small_font.render(f"{map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}{unread}   [F2] messages  [SHIFT] run/boost  [SPACE×2] double jump  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
+        players_text = self.small_font.render(f"{self.game_mode_name}  •  {map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}{unread}   [F2] messages  [SHIFT] run/boost  [SPACE×2] double jump  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
         self.screen.blit(players_text, (w - players_text.get_width() - 20, 20))
         self._draw_main_audio_icons()
         self.draw_vehicle_status()

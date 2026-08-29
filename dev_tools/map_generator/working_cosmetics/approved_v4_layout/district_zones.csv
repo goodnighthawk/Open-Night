@@ -1,0 +1,7 @@
+﻿zone_id,name,x,y,w,h,density,sprite_mix
+fort_lee_north,Fort Lee North,250,300,6250,3900,medium,"houses,apartments,commercial,trees"
+fort_lee_south,Fort Lee South,250,4450,6250,5450,medium,"houses,apartments,parks,trees"
+hudson,Hudson River,6553,0,3277,10240,water,"water,piers,boats"
+washington_heights,Washington Heights,9830,250,6304,5700,high,"apartments,brownstones,commercial,trees"
+morningside,Morningside Heights,9830,5950,6304,4040,high,"apartments,brownstones,university,parks"
+columbia,Columbia University,11100,7200,4550,2450,campus,"university,quad,trees,athletics"

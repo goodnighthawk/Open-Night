@@ -1,0 +1,22 @@
+﻿street_id,name,side,orientation,x1,y1,x2,y2,road_class
+fl_hudson_terrace,Hudson Terrace,west,vertical,6100,500,6100,9700,secondary
+fl_lemoine,Lemoine Ave,west,vertical,4700,600,4700,9600,primary
+fl_center,Center Ave,west,vertical,3300,900,3300,9300,secondary
+fl_park,Park Ave,west,vertical,1900,1000,1900,9200,secondary
+fl_fletcher,Fletcher Ave,west,vertical,900,1400,900,9000,secondary
+fl_bridge_plaza_n,Bridge Plaza North,west,horizontal,700,3000,6553,3000,primary
+fl_main,Main St,west,horizontal,500,4300,6553,4300,primary
+fl_bruce_reynolds,Bruce Reynolds Blvd,west,horizontal,600,5900,6553,5900,primary
+fl_center_cross,Center Ave Connector,west,horizontal,1200,7350,6100,7350,residential
+ny_riverside,Riverside Dr,east,vertical,10250,500,10250,9800,secondary
+ny_broadway,Broadway,east,vertical,11600,400,12050,9900,primary
+ny_fort_washington,Fort Washington Ave,east,vertical,13100,500,13100,6300,secondary
+ny_cabrini,Cabrini Blvd,east,vertical,14300,700,14300,5700,residential
+ny_amsterdam,Amsterdam Ave,east,vertical,14500,5200,14500,9900,secondary
+ny_claremont,Claremont Ave,east,vertical,10650,6500,10650,9800,residential
+ny_w181,W 181st St,east,horizontal,9830,1800,16000,1800,primary
+ny_w178,W 178th St,east,horizontal,9830,3100,16000,3100,primary
+ny_w168,W 168th St,east,horizontal,9830,4700,16000,4700,secondary
+ny_w120,W 120th St,east,horizontal,9830,7500,16000,7500,secondary
+ny_w116,W 116th St,east,horizontal,9830,8800,16000,8800,primary
+gwb,George Washington Bridge,bridge,horizontal,5700,3560,10680,3560,bridge

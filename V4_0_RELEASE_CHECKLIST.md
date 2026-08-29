@@ -2,6 +2,13 @@
 
 v4.0 is the procedural-city cutover release: the existing GWB corridor becomes the sole normal playable world with a consistent Open Night visual identity and a first-floor blank-house spawn foundation.
 
+## 0. Game-mode authority
+
+- [x] Name the existing/default ruleset **Glorious Car Hijacker**.
+- [x] Publish a stable `glorious_car_hijacker` identifier through discovery and login.
+- [x] Route local server management and Railway through the same explicit game-mode selection.
+- [ ] Verify the game-mode name appears correctly in the launcher and live HUD.
+
 ## 1. Map authority
 
 - [x] Keep `map_001_gwb_corridor` as the only normal playable map exposed by `common.py`.
@@ -11,12 +18,15 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 ## 2. Blank-house first-floor spawn
 
 - [x] Author a distributed pool of blank houses across Fort Lee and Washington Heights.
-- [x] Add stable pseudo-random account-to-house selection with occupied-house avoidance.
-- [ ] Integrate the selector into server login.
-- [ ] Start the player in the assigned room on the first playable frame.
+- [x] Add stable pseudo-random account-to-house selection for shared usual homes.
+- [x] Integrate the selector into server login with stable shared-home assignment.
+- [x] Start the player in the assigned room on the first playable frame.
 - [ ] Preserve outdoor login spawns as a safe recovery fallback only.
 - [ ] Verify exit places the player at the correct exterior entrance and re-entry works.
-- [ ] Verify two or more simultaneous players are distributed across houses when free houses exist.
+- [ ] Verify two or more simultaneous players consistently return to their usual shared homes and can see one another when assigned to the same room.
+- [x] Present the assignment as `1st Floor - <username>'s Apartment` with a separate numeric floor field.
+- [x] Enforce self/friend/nearby-buzzer visibility for apartment residency listings.
+- [ ] Runtime-check buzzer panels, authorized directory labels, and hidden distant-stranger listings.
 
 ## 3. Visual consistency
 
@@ -42,7 +52,7 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 
 - [ ] Capture an actual playable v4.0 runtime view, not only Map Lab or generated preview output.
 - [ ] Compare the runtime capture against the approved city-art direction and fix the largest remaining mismatch.
-- [ ] Run `TEST_FAST.bat`.
+- [x] Run `TEST_FAST.bat`.
 - [ ] Run `BUILD_RELEASE.bat` and retain the verification result.
 
 ## 7. Release/deployment

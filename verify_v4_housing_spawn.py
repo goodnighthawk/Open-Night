@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from housing_spawn import blank_house_interiors, house_spawn_state, select_house_for_account
+from housing_spawn import blank_house_interiors, house_login_state, house_spawn_state, select_house_for_account
 from mapfiles.loader import load_map_folder
 
 
@@ -39,11 +39,17 @@ def main() -> int:
     assert first_pass == second_pass, "account-to-house selection must be stable"
     assert all(state is not None for state in first_pass), "every sample account needs a house"
 
-    chosen = select_house_for_account(cfg, "occupancy-check")
+    shared_account = "shared-home-check"
+    chosen = select_house_for_account(cfg, shared_account)
     assert chosen is not None
-    chosen_id = str(chosen["id"])
-    alternate = select_house_for_account(cfg, "occupancy-check", {chosen_id})
-    assert alternate is not None and str(alternate["id"]) != chosen_id, "occupied house should be avoided when alternatives exist"
+    assert select_house_for_account(cfg, shared_account) == chosen, "an account must always return to its usual shared home"
+
+    login_state = house_login_state(cfg, shared_account)
+    assert login_state is not None, "shared home login state must be available"
+    room_id, exterior_x, exterior_y, tile_x, tile_y = login_state
+    assert room_id == str(chosen["id"]), "login room must match the account's usual home"
+    assert (exterior_x, exterior_y) == tuple(map(float, chosen["entry"])), "exit must use the home's exterior entrance"
+    assert (tile_x, tile_y) == house_spawn_state(cfg, shared_account)[1:], "login must use the first-floor start tile"
 
     used_ids = {str(state[0]) for state in first_pass if state is not None}
     assert len(used_ids) >= 10, f"account hashing is not distributing houses well enough: {len(used_ids)} used"

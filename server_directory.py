@@ -96,6 +96,8 @@ async def probe_public_server(server: dict, timeout: float = 3.0) -> dict | None
             "version": str(data.get("version", "dev")),
             "map_id": str(data.get("map_id", "map_001_gwb_corridor")),
             "map_name": str(data.get("map_name", "Open Night")),
+            "game_mode_id": str(data.get("game_mode_id", "glorious_car_hijacker")),
+            "game_mode_name": str(data.get("game_mode_name", "Glorious Car Hijacker")),
             "host": str(server["host"]),
             # Railway terminates TLS on 443. Never append the container's
             # internal $PORT value to the public WebSocket address.

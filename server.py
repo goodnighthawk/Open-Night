@@ -76,8 +76,10 @@ from gameplay.settings import load_settings
 from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
+from housing_spawn import house_login_state
 from versioning import GAME_VERSION
 from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
+from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES, get_game_mode
 
 HOST = "0.0.0.0"
 PORT = 8765
@@ -92,6 +94,7 @@ BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
 BUG_REPORT_COOLDOWN_SECONDS = 45.0
 BUG_REPORT_SOURCE_COOLDOWN_SECONDS = 15.0
 BUG_REPORT_SESSION_LIMIT = 10
+APARTMENT_BUZZER_VISIBILITY_DISTANCE = 135.0
 BUG_ADMIN_TOKEN = os.getenv("PYMMO_BUG_ADMIN_TOKEN", "").strip()
 BUG_REPORT_SALT = os.getenv("PYMMO_BUG_REPORT_SALT", BUG_ADMIN_TOKEN or "open-night-local").strip()
 
@@ -100,6 +103,7 @@ ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
 GRID_RUNTIME_ACTIVE = ground_grid_enabled(ACTIVE_MAP)
 GRID_WORLD = load_ground_grid() if GRID_RUNTIME_ACTIVE else None
 ACTIVE_MAP_TRANSFER = None
+ACTIVE_GAME_MODE = get_game_mode()
 DB: InventoryDatabase | None = None
 USE_MYSQL = True
 ACTIVE_PORT = PORT
@@ -245,6 +249,8 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "version": SERVER_VERSION,
         "map_id": map_config["id"],
         "map_name": map_config["name"],
+        "game_mode_id": ACTIVE_GAME_MODE["id"],
+        "game_mode_name": ACTIVE_GAME_MODE["name"],
         "map_hash": str(map_config.get("_portable_map_hash", "")),
         "map_payload_mode": "portable_map_v1" if map_config.get("_portable_map_hash") else "local_chunked_v1",
         "traffic_cars": TRAFFIC_COUNT,
@@ -281,6 +287,8 @@ class ClientSession:
     player: PlayerState
     phone: str
     inventory: list[dict | None]
+    apartment_interior_id: str = ""
+    friend_names: set[str] = field(default_factory=set)
     input_x: float = 0.0
     input_y: float = 0.0
     aim: float = 0.0
@@ -1572,6 +1580,19 @@ def safe_name(raw: object) -> str:
     return text[:18] or "Player"
 
 
+def normalize_friend_names(raw_names: object) -> set[str]:
+    """Normalize a bounded client friend list without inventing default names."""
+    if not isinstance(raw_names, list):
+        return set()
+    result: set[str] = set()
+    for raw in raw_names[:200]:
+        text = str(raw or "").strip()
+        text = "".join(ch for ch in text if ch.isalnum() or ch in " _-")[:18].strip()
+        if text:
+            result.add(text.casefold())
+    return result
+
+
 def normalize_phone(raw: object) -> str | None:
     """Normalize formatting to a digit-only persistent key.
 
@@ -2518,6 +2539,29 @@ def _interior_info(interior_id: str) -> dict | None:
     return next((row for row in ACTIVE_MAP.get("interiors", []) or [] if str(row.get("id", "")) == wanted), None)
 
 
+def _near_apartment_buzzer(viewer: ClientSession, interior_id: str) -> bool:
+    """Return whether an outdoor player is close enough to read a buzzer."""
+    if viewer.player.interior_id:
+        return False
+    info = _interior_info(interior_id)
+    if info is None:
+        return False
+    try:
+        ex, ey = float(info["entry"][0]), float(info["entry"][1])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return False
+    return math.hypot(viewer.player.x - ex, viewer.player.y - ey) <= APARTMENT_BUZZER_VISIBILITY_DISTANCE
+
+
+def _can_view_apartment_residency(viewer: ClientSession, resident: ClientSession) -> bool:
+    """Enforce self/friend/buzzer visibility for apartment residency."""
+    if viewer is resident:
+        return True
+    if resident.player.name.casefold() in viewer.friend_names:
+        return True
+    return _near_apartment_buzzer(viewer, resident.apartment_interior_id)
+
+
 def _interior_state_payload(player: PlayerState) -> dict:
     info = _interior_info(player.interior_id) if player.interior_id else None
     return {
@@ -3454,6 +3498,8 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         await send_sms_history(session)
     elif msg_type == "sms_mark_read":
         await mark_sms_read(session)
+    elif msg_type == "friend_sync":
+        session.friend_names = normalize_friend_names(message.get("names", []))
     elif msg_type == "bug_report_submit":
         await process_bug_report(session, message)
     elif msg_type == "inventory_request":
@@ -3621,6 +3667,13 @@ async def client_handler(websocket: ServerConnection) -> None:
             return
 
         spawn_x, spawn_y = choose_safe_player_spawn(ACTIVE_MAP)
+        login_house = house_login_state(ACTIVE_MAP, phone)
+        interior_id = ""
+        interior_x = interior_y = 0
+        interior_aim = 0.0
+        if login_house is not None:
+            interior_id, spawn_x, spawn_y, interior_x, interior_y = login_house
+            interior_aim = -math.pi / 2.0
         player = PlayerState(
             player_id=player_id,
             name=name,
@@ -3629,6 +3682,10 @@ async def client_handler(websocket: ServerConnection) -> None:
             cash=int(cash),
             packages=inventory_count(inventory, "package"),
             appearance=normalize_character(appearance),
+            interior_id=interior_id,
+            interior_x=interior_x,
+            interior_y=interior_y,
+            interior_aim=interior_aim,
         )
         remote_address = getattr(websocket, "remote_address", None)
         remote_host = str(remote_address[0]) if isinstance(remote_address, tuple) and remote_address else "unknown"
@@ -3638,6 +3695,7 @@ async def client_handler(websocket: ServerConnection) -> None:
             player=player,
             phone=phone,
             inventory=inventory,
+            apartment_interior_id=interior_id,
             bug_rate_key=rate_key,
         )
 
@@ -3650,11 +3708,22 @@ async def client_handler(websocket: ServerConnection) -> None:
             "id": player_id,
             "player": player.public_dict(),
             "map": network_map_payload(ACTIVE_MAP),
+            "game_mode": dict(ACTIVE_GAME_MODE),
             "server_version": SERVER_VERSION,
-            "account": {"phone_masked": masked_phone(phone), "created": created},
+            "account": {
+                "phone_masked": masked_phone(phone),
+                "created": created,
+                "apartment": {
+                    "interior_id": player.interior_id,
+                    "floor": 1,
+                    "label": f"1st Floor - {player.name}'s Apartment",
+                } if player.interior_id else None,
+            },
             "inventory": inventory,
             "inventory_weight_kg": round(inventory_weight(inventory), 3),
         })
+        if player.interior_id:
+            await send_json(websocket, _interior_state_payload(player))
         await send_json(websocket, {
             "type": "notice",
             "text": (
@@ -4022,7 +4091,6 @@ async def snapshot_loop() -> None:
             sessions = list(clients.values())
         server_time = time.time()
         push_map_roster = server_time - last_map_roster_push >= 1.0 / MAP_ROSTER_RATE
-        map_players = [session.player.map_marker_dict() for session in sessions] if push_map_roster else None
         if push_map_roster:
             last_map_roster_push = server_time
         all_lights = traffic_light_states(ACTIVE_MAP, server_time)
@@ -4108,10 +4176,23 @@ async def snapshot_loop() -> None:
                 "region": [prx, pry],
                 "region_id": region_label(prx, pry),
             }
-            if map_players is not None:
-                # Global lightweight markers let friends locate each other on M.
-                # Full player/vehicle/NPC records remain chunk-interest limited.
+            if push_map_roster:
+                # Apartment residents are absent from a recipient's global map
+                # and directory unless they are self, a saved friend, or the
+                # recipient is standing beside that apartment's buzzer.
+                map_players = [resident.player.map_marker_dict() for resident in sessions]
+                apartment_directory = []
+                for resident in sessions:
+                    is_resident = bool(resident.apartment_interior_id)
+                    if is_resident and _can_view_apartment_residency(session, resident):
+                        apartment_directory.append({
+                            "interior_id": resident.apartment_interior_id,
+                            "floor": 1,
+                            "resident_name": resident.player.name,
+                            "label": f"1st Floor - {resident.player.name}'s Apartment",
+                        })
                 payload["map_players"] = map_players
+                payload["apartment_directory"] = apartment_directory
             sends.append(send_json(session.websocket, payload))
         if sends:
             await asyncio.gather(*sends, return_exceptions=True)
@@ -4134,6 +4215,7 @@ async def main(host: str, port: int, server_name: str, discovery: bool = True) -
     print(f"  {server_name}")
     print("=" * 70)
     print(f"  Map:           {ACTIVE_MAP['name']} ({ACTIVE_MAP['id']})")
+    print(f"  Game mode:     {ACTIVE_GAME_MODE['name']} ({ACTIVE_GAME_MODE['id']})")
     if ACTIVE_MAP_TRANSFER:
         print(f"  Portable map:  {ACTIVE_MAP_TRANSFER['hash'][:12]}… / {ACTIVE_MAP_TRANSFER['size_bytes']} bytes cached package")
     print(f"  Players:       0/{MAX_PLAYERS}")
@@ -4235,6 +4317,7 @@ def interactive_setup() -> argparse.Namespace:
     port = _prompt_int("Port (LAN auto-detect range 8765-8795)", PORT, 8765, 8795)
     max_players = _prompt_int("Maximum players", MAX_PLAYERS, 1, 2000)
     map_id = _prompt_map(DEFAULT_MAP_ID)
+    game_mode_id = DEFAULT_GAME_MODE_ID
     discovery = _prompt_yes_no("Advertise this server on the LAN", True)
     mysql_enabled = _prompt_yes_no("Use MySQL account/inventory persistence", True)
 
@@ -4256,6 +4339,7 @@ def interactive_setup() -> argparse.Namespace:
     print(f"  Port:         {port}")
     print(f"  Max players:  {max_players}")
     print(f"  Map:          {MAPS[map_id]['name']}")
+    print(f"  Game mode:    {GAME_MODES[game_mode_id]['name']}")
     print(f"  LAN listing:  {'Yes' if discovery else 'No'}")
     print(f"  Persistence:  {'MySQL ' + db_user + '@' + db_host + ':' + str(db_port) + '/' + db_name if mysql_enabled else 'Memory only'}")
     print()
@@ -4263,7 +4347,7 @@ def interactive_setup() -> argparse.Namespace:
         raise SystemExit("Server launch cancelled.")
 
     return argparse.Namespace(
-        host=HOST, port=port, name=name, max_players=max_players, map=map_id,
+        host=HOST, port=port, name=name, max_players=max_players, map=map_id, mode=game_mode_id,
         no_discovery=not discovery, memory_db=not mysql_enabled,
         db_host=db_host, db_port=db_port, db_name=db_name, db_user=db_user,
         db_password=db_password,
@@ -4271,7 +4355,7 @@ def interactive_setup() -> argparse.Namespace:
 
 
 def cli_main() -> None:
-    global MAX_PLAYERS, ACTIVE_MAP_ID, ACTIVE_MAP, DB, USE_MYSQL, TRAFFIC_COUNT, ACTIVE_MAP_TRANSFER
+    global MAX_PLAYERS, ACTIVE_MAP_ID, ACTIVE_MAP, DB, USE_MYSQL, TRAFFIC_COUNT, ACTIVE_MAP_TRANSFER, ACTIVE_GAME_MODE
 
     import sys
     # Load the packaged screenshot-derived authoritative map. Portable .map files
@@ -4289,6 +4373,7 @@ def cli_main() -> None:
     parser.add_argument("--max-players", type=int, default=MAX_PLAYERS)
     parser.add_argument("--traffic", type=int, default=TRAFFIC_DEFAULT_COUNT, help="Number of server-authoritative civilian traffic cars")
     parser.add_argument("--map", choices=list(MAPS), default=DEFAULT_MAP_ID)
+    parser.add_argument("--mode", choices=list(GAME_MODES), default=DEFAULT_GAME_MODE_ID, help="Server gameplay ruleset")
     parser.add_argument("--map-file", default="", help="Load a portable .map file and distribute its data/textures to client caches")
     parser.add_argument("--no-discovery", action="store_true")
     parser.add_argument("--memory-db", action="store_true", help="Development-only: disable MySQL persistence")
@@ -4303,6 +4388,7 @@ def cli_main() -> None:
         parser.error("--port must be from 1 to 65535")
 
     MAX_PLAYERS = max(1, min(2000, args.max_players))
+    ACTIVE_GAME_MODE = get_game_mode(args.mode)
     TRAFFIC_COUNT = max(0, min(120, int(args.traffic)))
     ACTIVE_MAP_TRANSFER = None
     if args.map_file:

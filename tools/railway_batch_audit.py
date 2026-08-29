@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BATCH = ROOT / "DEPLOY_OPEN_NIGHT_SERVER.bat"
 RAILWAY = ROOT / "railway.toml"
 RAILWAY_IGNORE = ROOT / ".railwayignore"
+VERSION = (ROOT / "VERSION.txt").read_text(encoding="utf-8-sig").strip()
 
 # Cloud upload proxies reject an archive near 200 MiB.  Keep a safety margin so
 # a small source update cannot unexpectedly make the next deployment fail.
@@ -29,6 +30,7 @@ def _estimated_upload_bytes() -> int:
         "art_review/",
         "dev_tools/",
         "assets/art_review_targets/",
+        "assets/source_packs/",
     )
     total = 0
     for path in ROOT.rglob("*"):
@@ -37,7 +39,9 @@ def _estimated_upload_bytes() -> int:
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith(ignored_prefixes):
             continue
-        if "/__pycache__/" in f"/{rel}" or rel.endswith((".pyc", ".pyo", ".log")):
+        if "/__pycache__/" in f"/{rel}" or rel.endswith((
+            ".pyc", ".pyo", ".log", ".png", ".tga", ".svg", ".zip", ".b64", ".wav",
+        )):
             continue
         total += path.stat().st_size
     return total
@@ -71,9 +75,10 @@ def main() -> int:
 
     railway = RAILWAY.read_text(encoding="utf-8", errors="strict").lower()
     railway_required = (
-        "pymmo_reset_db_on_patch=true",
-        "pymmo_patch_id=open-night-v0.8.1",
+        "pymmo_reset_db_on_patch=false",
+        f"pymmo_patch_id=open-night-v{VERSION.lower()}",
         "--no-discovery",
+        "--mode glorious_car_hijacker",
     )
     railway_missing = [token for token in railway_required if token not in railway]
     if "--memory-db" in railway:
@@ -87,6 +92,9 @@ def main() -> int:
         "art_review/",
         "dev_tools/",
         "assets/art_review_targets/",
+        "assets/source_packs/",
+        "assets/**/*.png",
+        "assets/**/*.zip",
     )
     ignore_missing = [token for token in ignore_required if token not in railway_ignore]
     if ignore_missing:
@@ -97,7 +105,7 @@ def main() -> int:
         ROOT / "database.py",
         ROOT / "common.py",
         ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "map.csv",
-        ROOT / "assets" / "cars" / "vehicle_manifest.csv",
+        ROOT / "assets" / "cars" / "player_vehicle_manifest.csv",
         ROOT / "assets" / "characters" / "master_dual_camera" / "config" / "paired_parts.csv",
     )
     runtime_missing = [str(path.relative_to(ROOT)) for path in runtime_required if not path.is_file()]
@@ -123,7 +131,7 @@ def main() -> int:
 
     print("RAILWAY BATCH AUDIT: PASS")
     print(
-        "All railway.cmd calls return safely; MySQL patch reset and moderated reports are enabled."
+        "All railway.cmd calls return safely; MySQL persistence, game mode, and moderated reports are configured."
     )
     print(f"Conservative upload estimate: {estimated_bytes / (1024 * 1024):.1f} MiB")
     return 0

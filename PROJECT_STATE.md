@@ -8,6 +8,7 @@ Read this file before starting a development session. Update it whenever a v4.0 
 - Working branch: `v4.0`
 - Integration base: released `main` v3.0 checkpoint (`68a5abce`)
 - Playable world: `map_001_gwb_corridor` only
+- Default game mode: **Glorious Car Hijacker** (`glorious_car_hijacker`)
 - Map corridor: Fort Lee / GWB approaches / George Washington Bridge / Washington Heights
 - Current public version marker remains **3.0** until the v4.0 release gate passes.
 
@@ -21,29 +22,32 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 
 1. **Map cutover** — `map_001_gwb_corridor` is the sole normal playable world. Implemented in architecture; re-verify in v4 runtime.
 2. **Visual consistency** — roads, buildings, roofs, sidewalks, crossings, lighting, and major props use the approved Open Night language. Partial; requires runtime visual pass.
-3. **Indoor spawn** — blank houses, valid first-floor spawn, exits/collision, and multi-player house distribution. In progress.
+3. **Indoor spawn** — shared blank houses, stable account assignment, and first-frame interior delivery are implemented; exits/re-entry and multiplayer room visibility still require runtime proof.
 4. **Multiplayer regression** — movement, player visibility, reconnect/version handling, and server synchronization. v3 baseline exists; v4 regression required.
 5. **Core systems regression** — vehicles, friends/SMS, HUD, and minimap. v3 baseline exists; v4 regression required.
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
+8. **Game-mode authority** — discovery, welcome packets, server manager, Railway, and HUD now identify the default ruleset as Glorious Car Hijacker. Additional modes can be added through the central registry without branching the server entry path.
 
 ## Housing-spawn implementation direction
 
 - Reuse the existing interior system rather than create a second coordinate system for v4.0.
 - Author a distributed `blank_house` interior pool against existing building footprints.
 - Select a provisional home deterministically from the account key so returning players receive the same house until persistent housing is implemented.
-- Prefer an unoccupied house among connected sessions, with stable fallback if all houses are occupied.
+- Always return an account to its deterministic provisional home; v4.0 homes are shared spaces and remain stable even when another player is inside.
 - Keep current outdoor `login_spawn` points as recovery/fallback locations if no valid house is available.
 - Login should send authoritative interior state immediately so the first playable frame is inside the house.
+- Present the assignment as `1st Floor - <username>'s Apartment`; floor remains a separate field for later multi-floor/unit expansion.
+- Treat residency as private directory data: self and saved friends can see it globally; strangers receive it only while standing outside beside that building's buzzer.
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 
 ## Current next pass
 
-1. Add and validate the blank-house pool and deterministic selection helper.
-2. Integrate house selection into `server.py` login creation and immediate `interior_state` delivery.
-3. Verify the client enters the assigned room directly from the welcome/login flow.
-4. Test exiting the house to the authored exterior door and re-entering it.
-5. Run multiplayer/core-system regressions before changing `VERSION.txt` to 4.0.
+1. Verify the client enters its usual shared home directly from the welcome/login flow.
+2. Test exiting the house to the authored exterior door and re-entering it.
+3. Verify two clients assigned to the same room see one another and retain coherent map markers.
+4. Decide whether v4.0 apartments are one shared unit per building/floor or require separate unit numbers now.
+5. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 

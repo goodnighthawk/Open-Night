@@ -14,3 +14,13 @@ build_previews/
 art_review/
 dev_tools/
 assets/art_review_targets/
+assets/source_packs/
+
+# Railway runs the headless authority. Clients carry rendered art and audio;
+# keep only compact manifests/configuration in the server upload.
+assets/**/*.png
+assets/**/*.tga
+assets/**/*.svg
+assets/**/*.zip
+assets/**/*.b64
+assets/**/*.wav

@@ -33,7 +33,7 @@ def main() -> int:
     database = (ROOT / "database.py").read_text(encoding="utf-8")
     updater = (ROOT / "UPDATE_FRIEND_BUILD.bat").read_text(encoding="utf-8")
     assert f'GAME_VERSION = "{GAME_VERSION}"' in (ROOT / "versioning.py").read_text(encoding="utf-8")
-    assert f"Open Night v{GAME_VERSION}" in (ROOT / "VERSION.txt").read_text(encoding="utf-8")
+    assert (ROOT / "VERSION.txt").read_text(encoding="utf-8-sig").strip() == GAME_VERSION
     for token in ("client_version", "Version mismatch", "required_version"):
         assert token in server or token in client, token
     for token in ("sms_messages", "create_sms_message", "load_sms_messages"):
