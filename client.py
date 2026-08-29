@@ -48,6 +48,8 @@ from common import (
     PLAYER_RADIUS,
     SELL_PRICE,
     SUPPLIER_POS,
+    dequantize_movement_angle,
+    dequantize_movement_position,
     empty_inventory,
     get_map,
     inventory_count,
@@ -82,6 +84,11 @@ SCREEN_W = 1280
 SCREEN_H = 720
 FPS = 120
 NETWORK_SEND_RATE = 60
+MOVEMENT_FLAG_IN_VEHICLE = 1 << 0
+MOVEMENT_FLAG_RUNNING = 1 << 1
+MOVEMENT_FLAG_CROUCHING = 1 << 2
+MOVEMENT_FLAG_PRONE = 1 << 3
+MOVEMENT_FLAG_AIRBORNE = 1 << 4
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 DISCOVERY_PORT_START = 8765
 DISCOVERY_PORT_END = 8795
@@ -1024,6 +1031,8 @@ class RemotePlayer:
         self.anim_epoch = time.monotonic()
         self.move_heading = float(self.aim)
         self.pose = str(data.get("pose", "idle"))
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
 
     def update_from_snapshot(self, data: dict, snap_local: bool = False) -> None:
         self.name = data.get("name", self.name)
@@ -1061,6 +1070,37 @@ class RemotePlayer:
         if snap_local:
             self.render_x = self.target_x
             self.render_y = self.target_y
+
+    def update_from_movement(
+        self,
+        x: float,
+        y: float,
+        velocity_x: float,
+        velocity_y: float,
+        aim: float,
+        flags: int,
+        level: int,
+    ) -> None:
+        self.velocity_x = float(velocity_x)
+        self.velocity_y = float(velocity_y)
+        if flags & MOVEMENT_FLAG_PRONE:
+            pose = "prone"
+        elif flags & MOVEMENT_FLAG_CROUCHING:
+            pose = "crouch"
+        elif flags & MOVEMENT_FLAG_AIRBORNE:
+            pose = "jump"
+        elif flags & MOVEMENT_FLAG_RUNNING:
+            pose = "run"
+        else:
+            pose = "idle"
+        self.update_from_snapshot({
+            "x": x,
+            "y": y,
+            "aim": aim,
+            "pose": pose,
+            "in_vehicle": bool(flags & MOVEMENT_FLAG_IN_VEHICLE),
+            "level": level,
+        })
 
     def smooth(self, dt: float, local: bool = False) -> None:
         strength = 22.0 if local else 13.0
@@ -1247,6 +1287,7 @@ class Game:
         self.last_send = 0.0
         self.input_sequence = -1
         self.input_ack_sequence = -1
+        self.last_movement_tick = -1
         self._map_transfer_hash = ""
         self._map_transfer_chunks: list[bytes] = []
         self._map_transfer_expected_chunks = 0
@@ -1299,6 +1340,7 @@ class Game:
         self.server_tick_budget_ms = 1000.0 / 60.0
         self.server_tick_overruns = 0
         self.server_snapshot_rate = 20.0
+        self.server_movement_rate = 60.0
         self.server_ambient_rate = 30.0
         self.settings = load_settings()
         self.audio = GameAudio()
@@ -1370,6 +1412,7 @@ class Game:
             "server_tick_max_time_ms": "server_tick_max_ms",
             "server_tick_budget_ms": "server_tick_budget_ms",
             "snapshot_rate_hz": "server_snapshot_rate",
+            "movement_stream_rate_hz": "server_movement_rate",
             "ambient_sim_rate_hz": "server_ambient_rate",
         }
         for source, target in numeric_fields.items():
@@ -1893,6 +1936,64 @@ class Game:
             cx, cy = self.camera_controller.center((vw, vh))
         return cx + source_dx, cy + source_dy
 
+    def process_movement_packet(self, message: dict) -> None:
+        try:
+            movement_tick = int(message["t"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if movement_tick <= self.last_movement_tick:
+            return
+        self.last_movement_tick = movement_tick
+        self.apply_input_ack(message.get("a"))
+
+        player_rows = message.get("p", [])
+        if isinstance(player_rows, list):
+            for row in player_rows:
+                if not isinstance(row, (list, tuple)) or len(row) < 8:
+                    continue
+                player = self.players.get(str(row[0]))
+                if player is None:
+                    # Rich snapshots remain responsible for spawning entities.
+                    continue
+                try:
+                    player.update_from_movement(
+                        dequantize_movement_position(row[1]),
+                        dequantize_movement_position(row[2]),
+                        float(row[3]),
+                        float(row[4]),
+                        dequantize_movement_angle(row[5]),
+                        int(row[6]),
+                        int(row[7]),
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    continue
+
+        vehicle_rows = message.get("v", [])
+        if isinstance(vehicle_rows, list):
+            for row in vehicle_rows:
+                if not isinstance(row, (list, tuple)) or len(row) < 7:
+                    continue
+                try:
+                    kind = int(row[0])
+                    entity_id = str(row[1])
+                    movement = {
+                        "x": dequantize_movement_position(row[2]),
+                        "y": dequantize_movement_position(row[3]),
+                        "angle": dequantize_movement_angle(row[4]),
+                        "speed": float(row[5]),
+                    }
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if kind == 0:
+                    vehicle = self.vehicles.get(entity_id)
+                    if vehicle is not None:
+                        vehicle.update(movement)
+                elif kind == 1:
+                    bicycle = self.bicycles.get(entity_id)
+                    if bicycle is not None:
+                        movement["controlled_by"] = str(row[6])
+                        bicycle.update(movement)
+
     def process_network(self) -> None:
         pump = getattr(self.network, "pump", None)
         if callable(pump):
@@ -1905,9 +2006,14 @@ class Game:
             kind = message.get("type")
             if kind == "connection":
                 self.connected = bool(message.get("connected"))
-                if not self.connected and not self.network.fatal:
+                if self.connected:
+                    self.last_movement_tick = -1
+                    self.input_ack_sequence = -1
+                elif not self.network.fatal:
                     self.notice = "Disconnected - reconnecting..."
                     self.notice_until = time.monotonic() + 2.0
+            elif kind == "movement":
+                self.process_movement_packet(message)
             elif kind == "login_error":
                 self.notice = "LOGIN FAILED: " + str(message.get("text", "Unknown login error"))
                 self.notice_until = float("inf")
@@ -4205,7 +4311,8 @@ class Game:
             (f"CLIENT FPS       {self.clock.get_fps():5.1f}", TEXT_COLOR),
             (f"SERVER TICK      {tick_text}", tick_color),
             (f"TICK WORK        {self.server_tick_time_ms:.2f} avg  {self.server_tick_max_ms:.2f} max / {self.server_tick_budget_ms:.2f} ms", TEXT_COLOR),
-            (f"RATES            input {NETWORK_SEND_RATE}  snapshot {self.server_snapshot_rate:.0f}  ambient {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
+            (f"RATES            input {NETWORK_SEND_RATE}  movement {self.server_movement_rate:.0f}  snapshot {self.server_snapshot_rate:.0f} Hz", TEXT_COLOR),
+            (f"AMBIENT          simulation {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
             (f"INPUT ACK        sent {self.input_sequence}  ack {self.input_ack_sequence}  pending {pending_inputs}", TEXT_COLOR),
             (f"NETWORK ZONE     {self.server_network_zone_id} ({zone_x},{zone_y})  size {self.network_zone_size}px", TEXT_COLOR),
             (f"SUBSCRIPTIONS    {subscribed} zones (3x3 target)", (145, 226, 160) if subscribed == 9 else (255, 92, 92)),

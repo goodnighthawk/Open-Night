@@ -27,6 +27,8 @@ CHUNK_SIZE = 1024
 NETWORK_INTEREST_RADIUS_CHUNKS = 2
 NETWORK_ZONE_SIZE = CHUNK_SIZE * 3
 NETWORK_ZONE_RADIUS = 1
+MOVEMENT_POSITION_SCALE = 4
+MOVEMENT_ANGLE_STEPS = 65535
 CHUNK_CACHE_LIMIT = 24
 
 # Original modular top-down character system. These are deliberately small
@@ -155,6 +157,23 @@ def world_to_network_zone(x: float, y: float, map_config: dict | None = None) ->
 
 def network_zone_label(zone_x: int, zone_y: int) -> str:
     return f"NZ{max(0, int(zone_x)) + 1}:{max(0, int(zone_y)) + 1}"
+
+
+def quantize_movement_position(value: float) -> int:
+    return int(round(float(value) * MOVEMENT_POSITION_SCALE))
+
+
+def dequantize_movement_position(value: int | float) -> float:
+    return float(value) / MOVEMENT_POSITION_SCALE
+
+
+def quantize_movement_angle(angle: float) -> int:
+    normalized = float(angle) % (math.pi * 2.0)
+    return int(round(normalized / (math.pi * 2.0) * MOVEMENT_ANGLE_STEPS)) % (MOVEMENT_ANGLE_STEPS + 1)
+
+
+def dequantize_movement_angle(value: int | float) -> float:
+    return (int(value) % (MOVEMENT_ANGLE_STEPS + 1)) / MOVEMENT_ANGLE_STEPS * (math.pi * 2.0)
 
 
 def subscribed_network_zones(

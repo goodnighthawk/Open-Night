@@ -48,6 +48,8 @@ from common import (
     NETWORK_ZONE_RADIUS,
     network_zone_size,
     network_zone_label,
+    quantize_movement_angle,
+    quantize_movement_position,
     subscribed_network_zones,
     world_to_chunk,
     world_to_network_zone,
@@ -121,6 +123,8 @@ VEHICLE_SETTINGS = SETTINGS.get("vehicle", {})
 ENGINE_SETTINGS = SETTINGS.get("engine", {})
 MAP_ROSTER_RATE = max(0.25, float(ENGINE_SETTINGS.get("world_map_player_roster_hz", 2.0)))
 AMBIENT_SIM_RATE = min(float(SERVER_TICK_RATE), 30.0)
+MOVEMENT_STREAM_RATE = float(SERVER_TICK_RATE)
+PLAYER_MOVEMENT_RELEVANCE_DISTANCE = 3200.0
 LAYER_TRANSITION_JUMP_SECONDS = max(0.0, float(MOVEMENT_SETTINGS.get("layer_transition_jump_seconds", 0.0)))
 JUMP_DURATION_SECONDS = max(0.1, float(MOVEMENT_SETTINGS.get("jump_duration_seconds", 0.75)))
 DOUBLE_JUMP_WINDOW_SECONDS = max(0.05, float(MOVEMENT_SETTINGS.get("double_jump_window_seconds", 0.55)))
@@ -348,6 +352,7 @@ class ServerTickMetrics:
             "server_tick_budget_ms": round(self.budget_seconds * 1000.0, 3),
             "server_tick_overruns": int(self.overrun_count),
             "snapshot_rate_hz": int(SNAPSHOT_RATE),
+            "movement_stream_rate_hz": round(MOVEMENT_STREAM_RATE, 2),
             "ambient_sim_rate_hz": round(AMBIENT_SIM_RATE, 2),
         }
 
@@ -4210,6 +4215,144 @@ async def simulation_loop() -> None:
         SERVER_TICK_METRICS.record_tick(time.perf_counter() - tick_work_started)
 
 
+MOVEMENT_FLAG_IN_VEHICLE = 1 << 0
+MOVEMENT_FLAG_RUNNING = 1 << 1
+MOVEMENT_FLAG_CROUCHING = 1 << 2
+MOVEMENT_FLAG_PRONE = 1 << 3
+MOVEMENT_FLAG_AIRBORNE = 1 << 4
+MOVEMENT_FLAG_INTERIOR = 1 << 5
+
+
+def _movement_state_flags(session: ClientSession, now: float) -> int:
+    flags = 0
+    if session.player.in_vehicle:
+        flags |= MOVEMENT_FLAG_IN_VEHICLE
+    if session.boost and math.hypot(session.input_x, session.input_y) > 0.05:
+        flags |= MOVEMENT_FLAG_RUNNING
+    if session.crouching:
+        flags |= MOVEMENT_FLAG_CROUCHING
+    if session.prone:
+        flags |= MOVEMENT_FLAG_PRONE
+    if session.jump_kind and now < session.jump_until:
+        flags |= MOVEMENT_FLAG_AIRBORNE
+    if session.player.interior_id:
+        flags |= MOVEMENT_FLAG_INTERIOR
+    return flags
+
+
+def _movement_velocity(
+    session: ClientSession,
+    vehicle_by_id: dict[str, TrafficVehicle],
+    bicycle_by_id: dict[str, BicycleState],
+) -> tuple[float, float]:
+    car_id = session.driving_vehicle_id or session.passenger_vehicle_id
+    if car_id:
+        car = vehicle_by_id.get(car_id)
+        if car is not None:
+            return math.cos(car.angle) * car.speed, math.sin(car.angle) * car.speed
+    if session.riding_bicycle_id:
+        bike = bicycle_by_id.get(session.riding_bicycle_id)
+        if bike is not None:
+            return math.cos(bike.angle) * bike.speed, math.sin(bike.angle) * bike.speed
+    if session.player.interior_id or session.prone or session.crouching:
+        return 0.0, 0.0
+    walk_speed = max(0.0, float(MOVEMENT_SETTINGS.get("walk_speed_px_per_second", PLAYER_SPEED)))
+    speed = walk_speed * (float(MOVEMENT_SETTINGS.get("sprint_multiplier", 3.0)) if session.boost else 1.0)
+    return session.input_x * speed, session.input_y * speed
+
+
+def movement_player_record(
+    session: ClientSession,
+    now: float,
+    vehicle_by_id: dict[str, TrafficVehicle],
+    bicycle_by_id: dict[str, BicycleState],
+) -> list:
+    velocity_x, velocity_y = _movement_velocity(session, vehicle_by_id, bicycle_by_id)
+    player = session.player
+    return [
+        player.player_id,
+        quantize_movement_position(player.x),
+        quantize_movement_position(player.y),
+        int(round(velocity_x)),
+        int(round(velocity_y)),
+        quantize_movement_angle(player.aim),
+        _movement_state_flags(session, now),
+        int(player.level),
+    ]
+
+
+def _movement_player_visible(viewer: ClientSession, other: ClientSession) -> bool:
+    if viewer is other:
+        return True
+    if viewer.player.interior_id != other.player.interior_id:
+        return False
+    return math.hypot(viewer.player.x - other.player.x, viewer.player.y - other.player.y) <= PLAYER_MOVEMENT_RELEVANCE_DISTANCE
+
+
+async def movement_stream_loop() -> None:
+    """Send compact nearby player/player-vehicle motion over the main WebSocket."""
+    interval = 1.0 / MOVEMENT_STREAM_RATE
+    next_send = time.monotonic()
+    movement_tick = 0
+    while True:
+        next_send += interval
+        await asyncio.sleep(max(0.0, next_send - time.monotonic()))
+        if time.monotonic() - next_send > 0.25:
+            next_send = time.monotonic()
+        async with clients_lock:
+            sessions = list(clients.values())
+        if not sessions:
+            movement_tick += 1
+            continue
+
+        now = time.monotonic()
+        player_buckets: dict[tuple[int, int], list[ClientSession]] = {}
+        for other in sessions:
+            key = world_to_network_zone(other.player.x, other.player.y, ACTIVE_MAP)
+            player_buckets.setdefault(key, []).append(other)
+        vehicle_by_id = {car.vehicle_id: car for car in traffic_vehicles}
+        bicycle_by_id = {bike.bicycle_id: bike for bike in bicycles}
+        controlled_cars = [car for car in traffic_vehicles if car.controlled_by]
+        controlled_bicycles = [bike for bike in bicycles if bike.controlled_by]
+
+        sends = []
+        for session in sessions:
+            relevant_players: list[list] = []
+            for key in subscribed_network_zones(session.player.x, session.player.y, ACTIVE_MAP):
+                for other in player_buckets.get(key, ()):
+                    if _movement_player_visible(session, other):
+                        relevant_players.append(movement_player_record(other, now, vehicle_by_id, bicycle_by_id))
+
+            relevant_vehicles: list[list] = []
+            if not session.player.interior_id:
+                for car in controlled_cars:
+                    if math.hypot(session.player.x - car.x, session.player.y - car.y) <= PLAYER_MOVEMENT_RELEVANCE_DISTANCE:
+                        relevant_vehicles.append([
+                            0, car.vehicle_id,
+                            quantize_movement_position(car.x), quantize_movement_position(car.y),
+                            quantize_movement_angle(car.angle), int(round(car.speed)), car.controlled_by,
+                        ])
+                for bike in controlled_bicycles:
+                    if math.hypot(session.player.x - bike.x, session.player.y - bike.y) <= PLAYER_MOVEMENT_RELEVANCE_DISTANCE:
+                        relevant_vehicles.append([
+                            1, bike.bicycle_id,
+                            quantize_movement_position(bike.x), quantize_movement_position(bike.y),
+                            quantize_movement_angle(bike.angle), int(round(bike.speed)), bike.controlled_by,
+                        ])
+
+            payload = {
+                "type": "movement",
+                "t": movement_tick,
+                "a": session.last_processed_input_sequence,
+                "p": relevant_players,
+                "v": relevant_vehicles,
+            }
+            sends.append(send_json(session.websocket, payload))
+        if sends:
+            await asyncio.gather(*sends, return_exceptions=True)
+        movement_tick += 1
+
+
 async def snapshot_loop() -> None:
     """Send per-player snapshots using dedicated network-zone buckets.
 
@@ -4394,7 +4537,7 @@ async def main(host: str, port: int, server_name: str, discovery: bool = True) -
             ping_timeout=20,
             max_size=3 * 1024 * 1024,
         ):
-            await asyncio.gather(simulation_loop(), snapshot_loop())
+            await asyncio.gather(simulation_loop(), movement_stream_loop(), snapshot_loop())
     finally:
         if discovery_transport is not None:
             discovery_transport.close()

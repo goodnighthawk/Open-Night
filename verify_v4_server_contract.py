@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from pathlib import Path
 
 from common import (
@@ -10,7 +11,11 @@ from common import (
     PlayerState,
     SERVER_TICK_RATE,
     SNAPSHOT_RATE,
+    dequantize_movement_angle,
+    dequantize_movement_position,
     empty_inventory,
+    quantize_movement_angle,
+    quantize_movement_position,
     subscribed_network_zones,
     world_to_network_zone,
 )
@@ -21,6 +26,12 @@ import server
 
 class _Socket:
     remote_address = ("127.0.0.1", 0)
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    async def send(self, raw: str) -> None:
+        self.messages.append(raw)
 
 
 async def _probe_live_tick_loop() -> dict:
@@ -33,6 +44,22 @@ async def _probe_live_tick_loop() -> dict:
     except asyncio.CancelledError:
         pass
     return server.SERVER_TICK_METRICS.public_dict()
+
+
+async def _probe_movement_stream(session: server.ClientSession) -> list[dict]:
+    previous_clients = dict(server.clients)
+    server.clients.clear()
+    server.clients[session.player.player_id] = session
+    task = asyncio.create_task(server.movement_stream_loop())
+    await asyncio.sleep(0.07)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    server.clients.clear()
+    server.clients.update(previous_clients)
+    return [json.loads(raw) for raw in session.websocket.messages]
 
 
 def _session(
@@ -70,6 +97,7 @@ def main() -> int:
     assert SNAPSHOT_RATE == 20
     assert server.AMBIENT_SIM_RATE == 30.0
     assert server.MAX_PLAYERS == 64
+    assert server.MOVEMENT_STREAM_RATE == 60.0
     assert NETWORK_ZONE_SIZE == 3072
     assert NETWORK_ZONE_RADIUS == 1
     assert server.ACTIVE_MAP["network_zone_size"] == 3072
@@ -83,6 +111,9 @@ def main() -> int:
     assert len(edge_zones) == len(set(edge_zones)) == 9
     oversized_radius_map = dict(server.ACTIVE_MAP, network_zone_radius=4)
     assert len(subscribed_network_zones(4608.0, 4608.0, oversized_radius_map)) == 9
+    assert dequantize_movement_position(quantize_movement_position(123.37)) == 123.25
+    angle = dequantize_movement_angle(quantize_movement_angle(-0.75))
+    assert abs(math.atan2(math.sin(angle + 0.75), math.cos(angle + 0.75))) < 0.001
 
     metrics = server.ServerTickMetrics(SERVER_TICK_RATE)
     started = metrics.window_started
@@ -124,6 +155,17 @@ def main() -> int:
         "type": "input", "sequence": 5, "x": 0.0, "y": 1.0, "aim": 0.0,
     })))
     assert input_session.last_received_input_sequence == 5, "unreliable input gaps must be accepted"
+    input_session.last_processed_input_sequence = 5
+    movement_record = server.movement_player_record(input_session, 0.0, {}, {})
+    assert len(movement_record) == 8
+    assert movement_record[0] == input_session.player.player_id
+    assert abs(dequantize_movement_position(movement_record[1]) - input_session.player.x) <= 0.125
+    movement_messages = asyncio.run(_probe_movement_stream(input_session))
+    assert len(movement_messages) >= 3
+    assert all(message["type"] == "movement" for message in movement_messages)
+    assert movement_messages[-1]["a"] == 5
+    assert movement_messages[-1]["p"][0][0] == input_session.player.player_id
+    assert len(json.dumps(movement_messages[-1], separators=(",", ":"))) < 256
 
     assert server._can_view_apartment_residency(resident, resident), "a resident must see their own listing"
     assert server._can_view_apartment_residency(friend, resident), "mutually accepted friends must see the resident listing"
@@ -146,7 +188,8 @@ def main() -> int:
     client_source = (Path(__file__).resolve().parent / "client.py").read_text(encoding="utf-8")
     for token in ("SERVER POPULATION", "server_population", "housing_capacity", "(255, 72, 72)",
                   "NETWORK_SEND_RATE = 60", "draw_network_debug_overlay", "pygame.K_F8",
-                  '"sequence": self.next_input_sequence()', "last_processed_input_sequence"):
+                  '"sequence": self.next_input_sequence()', "last_processed_input_sequence",
+                  "process_movement_packet", "server_movement_rate"):
         assert token in client_source, f"population HUD contract missing {token}"
     launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
     assert '"max_players": 64' in launcher_source
