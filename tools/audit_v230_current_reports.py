@@ -67,7 +67,8 @@ async def _passenger_audit(world) -> dict:
     driver_session = server.ClientSession(CaptureSocket(), driver_player, "15550000231", empty_inventory())
     driver_session.driving_vehicle_id = driver.vehicle_id
     await server.handle_message(driver_session, json.dumps({
-        "type": "input", "x": 0.0, "y": 0.0, "aim": 0.0, "handbrake": True,
+        "type": "input", "sequence": 0,
+        "x": 0.0, "y": 0.0, "aim": 0.0, "handbrake": True,
     }))
     require(driver_session.handbrake, "Space handbrake input was not accepted for the authoritative driver")
     source = (ROOT / "client.py").read_text(encoding="utf-8")

@@ -1245,6 +1245,8 @@ class Game:
         self.notice_until = time.monotonic() + 4.0
         self.connected = False
         self.last_send = 0.0
+        self.input_sequence = -1
+        self.input_ack_sequence = -1
         self._map_transfer_hash = ""
         self._map_transfer_chunks: list[bytes] = []
         self._map_transfer_expected_chunks = 0
@@ -1381,6 +1383,14 @@ class Game:
             self.server_tick_overruns = max(0, int(raw.get("server_tick_overruns", self.server_tick_overruns)))
         except (TypeError, ValueError):
             pass
+
+    def apply_input_ack(self, raw: object) -> None:
+        try:
+            sequence = int(raw)
+        except (TypeError, ValueError):
+            return
+        if sequence > self.input_ack_sequence:
+            self.input_ack_sequence = sequence
 
     def toggle_friend(self, name: str) -> None:
         clean = str(name).strip()[:24]
@@ -1992,6 +2002,7 @@ class Game:
                 self.server_population = int(message.get("server_population", 1) or 1)
                 self.housing_capacity = int(message.get("housing_capacity", 0) or 0)
                 self.apply_server_metrics(message.get("server_metrics"))
+                self.apply_input_ack(message.get("last_processed_input_sequence"))
                 self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
                 self.notice = "Connected. WASD move; hold Shift to run; Space jumps (twice for double); C crouches; X toggles prone; MMB rotates; T vehicle; E interact; ESC options."
                 self.notice_until = time.monotonic() + 4.0
@@ -2149,6 +2160,7 @@ class Game:
                 self.server_population = int(message.get("server_population", self.server_population) or 0)
                 self.housing_capacity = int(message.get("housing_capacity", self.housing_capacity) or 0)
                 self.apply_server_metrics(message.get("server_metrics"))
+                self.apply_input_ack(message.get("last_processed_input_sequence"))
                 try:
                     self.interest_radius = int(message.get("interest_radius", self.interest_radius))
                 except (TypeError, ValueError):
@@ -2227,6 +2239,10 @@ class Game:
         c, sn = math.cos(theta), math.sin(theta)
         return c * x - sn * y, sn * x + c * y
 
+    def next_input_sequence(self) -> int:
+        self.input_sequence += 1
+        return self.input_sequence
+
     def send_input(self) -> None:
         now = time.monotonic()
         if now - self.last_send < 1.0 / NETWORK_SEND_RATE:
@@ -2264,7 +2280,8 @@ class Game:
             body_aim = math.atan2(y, x)
 
         payload = {
-            "type": "input", "x": x, "y": y, "aim": body_aim, "boost": boost,
+            "type": "input", "sequence": self.next_input_sequence(),
+            "x": x, "y": y, "aim": body_aim, "boost": boost,
             "handbrake": handbrake,
             "crouch": crouch, "jump": bool(self.jump_request_pending and not blocked_actions),
             "prone_toggle": bool(self.prone_toggle_pending and not blocked_actions),
@@ -2441,7 +2458,10 @@ class Game:
         # Immediately send zero movement so the authoritative outside avatar stops.
         local = self.players.get(self.local_id or "")
         body_aim = float(getattr(local, "move_heading", getattr(local, "aim", 0.0))) if local is not None else 0.0
-        self.network.send({"type": "input", "x": 0.0, "y": 0.0, "aim": body_aim})
+        self.network.send({
+            "type": "input", "sequence": self.next_input_sequence(),
+            "x": 0.0, "y": 0.0, "aim": body_aim,
+        })
         self.notice = f"Entering {self.interior_display_name(info)}..."
         self.notice_until = time.monotonic() + 1.5
         return True
@@ -4179,12 +4199,14 @@ class Game:
         else:
             tick_color = (145, 226, 160) if measured >= target * 0.95 else (255, 92, 92)
             tick_text = f"{measured:.1f} / {target:.0f} Hz"
+        pending_inputs = max(0, self.input_sequence - self.input_ack_sequence)
         lines = [
             ("F8  NETWORK / PERFORMANCE", (116, 204, 238)),
             (f"CLIENT FPS       {self.clock.get_fps():5.1f}", TEXT_COLOR),
             (f"SERVER TICK      {tick_text}", tick_color),
             (f"TICK WORK        {self.server_tick_time_ms:.2f} avg  {self.server_tick_max_ms:.2f} max / {self.server_tick_budget_ms:.2f} ms", TEXT_COLOR),
             (f"RATES            input {NETWORK_SEND_RATE}  snapshot {self.server_snapshot_rate:.0f}  ambient {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
+            (f"INPUT ACK        sent {self.input_sequence}  ack {self.input_ack_sequence}  pending {pending_inputs}", TEXT_COLOR),
             (f"NETWORK ZONE     {self.server_network_zone_id} ({zone_x},{zone_y})  size {self.network_zone_size}px", TEXT_COLOR),
             (f"SUBSCRIPTIONS    {subscribed} zones (3x3 target)", (145, 226, 160) if subscribed == 9 else (255, 92, 92)),
             (f"RELEVANT         players {len(self.players)}  NPCs {len(self.npcs)}  vehicles {len(self.vehicles)}  bikes {len(self.bicycles)}", TEXT_COLOR),

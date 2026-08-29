@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from common import (
@@ -108,6 +109,22 @@ def main() -> int:
     buzzer_visitor = _session("Visitor", "15550000004", "", entry_x, entry_y)
     indoor_visitor = _session("Inside", "15550000005", "", entry_x, entry_y, active_interior="another_room")
 
+    input_session = _session("Sequenced", "15550000007", "", entry_x, entry_y)
+    asyncio.run(server.handle_message(input_session, json.dumps({
+        "type": "input", "sequence": 2, "x": 0.5, "y": 0.0, "aim": 0.0,
+    })))
+    assert input_session.last_received_input_sequence == 2
+    assert input_session.input_x == 0.5
+    asyncio.run(server.handle_message(input_session, json.dumps({
+        "type": "input", "sequence": 1, "x": -1.0, "y": 0.0, "aim": 0.0,
+    })))
+    assert input_session.last_received_input_sequence == 2
+    assert input_session.input_x == 0.5, "stale input must not replace newer authoritative intent"
+    asyncio.run(server.handle_message(input_session, json.dumps({
+        "type": "input", "sequence": 5, "x": 0.0, "y": 1.0, "aim": 0.0,
+    })))
+    assert input_session.last_received_input_sequence == 5, "unreliable input gaps must be accepted"
+
     assert server._can_view_apartment_residency(resident, resident), "a resident must see their own listing"
     assert server._can_view_apartment_residency(friend, resident), "mutually accepted friends must see the resident listing"
     assert not server._can_view_apartment_residency(one_sided, resident), "one-sided friend requests must not reveal residency"
@@ -128,7 +145,8 @@ def main() -> int:
 
     client_source = (Path(__file__).resolve().parent / "client.py").read_text(encoding="utf-8")
     for token in ("SERVER POPULATION", "server_population", "housing_capacity", "(255, 72, 72)",
-                  "NETWORK_SEND_RATE = 60", "draw_network_debug_overlay", "pygame.K_F8"):
+                  "NETWORK_SEND_RATE = 60", "draw_network_debug_overlay", "pygame.K_F8",
+                  '"sequence": self.next_input_sequence()', "last_processed_input_sequence"):
         assert token in client_source, f"population HUD contract missing {token}"
     launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
     assert '"max_players": 64' in launcher_source

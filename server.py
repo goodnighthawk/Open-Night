@@ -366,6 +366,8 @@ class ClientSession:
     input_x: float = 0.0
     input_y: float = 0.0
     aim: float = 0.0
+    last_received_input_sequence: int = -1
+    last_processed_input_sequence: int = -1
     last_input_time: float = field(default_factory=time.monotonic)
     driving_vehicle_id: str = ""
     passenger_vehicle_id: str = ""
@@ -3510,11 +3512,15 @@ async def handle_message(session: ClientSession, raw: str) -> None:
     msg_type = message.get("type")
     if msg_type == "input":
         try:
+            input_sequence = int(message["sequence"])
             ix = float(message.get("x", 0.0))
             iy = float(message.get("y", 0.0))
             aim = float(message.get("aim", 0.0))
-        except (TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):
             return
+        if input_sequence < 0 or input_sequence <= session.last_received_input_sequence:
+            return
+        session.last_received_input_sequence = input_sequence
         ix, iy = normalize_input(ix, iy)
         session.input_x = max(-1.0, min(1.0, ix))
         session.input_y = max(-1.0, min(1.0, iy))
@@ -3821,6 +3827,7 @@ async def client_handler(websocket: ServerConnection) -> None:
             "housing_capacity": housing_capacity,
             "housing_overflow": max(0, server_population - housing_capacity),
             "server_metrics": SERVER_TICK_METRICS.public_dict(),
+            "last_processed_input_sequence": session.last_processed_input_sequence,
             "account": {
                 "phone_masked": masked_phone(phone),
                 "created": created,
@@ -3919,6 +3926,9 @@ async def simulation_loop() -> None:
         vehicle_by_id = {car.vehicle_id: car for car in traffic_vehicles}
         bicycle_by_id = {bike.bicycle_id: bike for bike in bicycles}
         for session in sessions:
+            # Consume the newest input available for this authoritative tick.
+            # Gaps are valid because movement input is non-retransmitted.
+            session.last_processed_input_sequence = session.last_received_input_sequence
             if current - session.last_input_time > 0.5:
                 session.input_x = session.input_y = 0.0
                 session.boost = False
@@ -4299,6 +4309,7 @@ async def snapshot_loop() -> None:
                 "housing_capacity": housing_capacity,
                 "housing_overflow": max(0, len(sessions) - housing_capacity),
                 "server_metrics": SERVER_TICK_METRICS.public_dict(),
+                "last_processed_input_sequence": session.last_processed_input_sequence,
                 "chunk": [pcx, pcy],
                 "chunk_id": chunk_label(pcx, pcy),
                 "interest_radius": static_chunk_radius,

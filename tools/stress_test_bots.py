@@ -108,6 +108,7 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
             next_interact = time.monotonic() + rng.uniform(0.7, max(1.0, fval(cfg,"interaction_interval_seconds",3.0)))
             next_inventory = time.monotonic() + rng.uniform(4.0, 12.0)
             action_done = False
+            input_sequence = -1
 
             while time.monotonic() < stop_at:
                 loop_started = time.perf_counter()
@@ -118,7 +119,11 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
                     action_done = False
                 phase = now * 0.72 + index * 0.43
                 x, y, boost = motion_for(behavior, phase, rng)
-                await ws.send(json.dumps({"type":"input", "x":x, "y":y, "aim":phase, "boost":boost}))
+                input_sequence += 1
+                await ws.send(json.dumps({
+                    "type":"input", "sequence":input_sequence,
+                    "x":x, "y":y, "aim":phase, "boost":boost,
+                }))
                 stats.sent += 1
 
                 if behavior == "shop" and now >= next_interact:
