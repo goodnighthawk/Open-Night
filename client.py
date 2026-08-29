@@ -1281,6 +1281,8 @@ class Game:
         self.apartment_directory: dict[str, list[dict]] = {}
         self.game_mode_id = "glorious_car_hijacker"
         self.game_mode_name = "Glorious Car Hijacker"
+        self.server_population = 0
+        self.housing_capacity = 0
         self.settings = load_settings()
         self.audio = GameAudio()
         self.radio = RadioPlayer()
@@ -1940,6 +1942,8 @@ class Game:
                 game_mode = message.get("game_mode", {}) if isinstance(message.get("game_mode"), dict) else {}
                 self.game_mode_id = str(game_mode.get("id", "glorious_car_hijacker"))
                 self.game_mode_name = str(game_mode.get("name", "Glorious Car Hijacker"))
+                self.server_population = int(message.get("server_population", 1) or 1)
+                self.housing_capacity = int(message.get("housing_capacity", 0) or 0)
                 self.network.send({"type": "friend_sync", "names": list(self.friend_names.values())})
                 self.notice = "Connected. WASD move; hold Shift to run; Space jumps (twice for double); C crouches; X toggles prone; MMB rotates; T vehicle; E interact; ESC options."
                 self.notice_until = time.monotonic() + 4.0
@@ -2065,6 +2069,8 @@ class Game:
                     except (TypeError, ValueError):
                         pass
                 self.server_region_id = str(message.get("region_id", self.server_region_id))
+                self.server_population = int(message.get("server_population", self.server_population) or 0)
+                self.housing_capacity = int(message.get("housing_capacity", self.housing_capacity) or 0)
                 try:
                     self.interest_radius = int(message.get("interest_radius", self.interest_radius))
                 except (TypeError, ValueError):
@@ -4165,6 +4171,20 @@ class Game:
             return "quit"
         return None
 
+    def draw_server_population(self) -> None:
+        """Show live players against current private-floor housing capacity."""
+        if self.housing_capacity <= 0:
+            return
+        text = self.font.render(
+            f"SERVER POPULATION {self.server_population}/{self.housing_capacity}",
+            True,
+            (255, 72, 72),
+        )
+        rect = text.get_rect(topright=(self.screen.get_width() - 18, 16))
+        pygame.draw.rect(self.screen, (35, 7, 9), rect.inflate(16, 8), border_radius=4)
+        pygame.draw.rect(self.screen, (176, 34, 42), rect.inflate(16, 8), width=1, border_radius=4)
+        self.screen.blit(text, rect)
+
     def draw_hud(self) -> None:
         w, h = self.screen.get_size()
         local = self.players.get(self.local_id or "")
@@ -4174,6 +4194,7 @@ class Game:
             self._draw_hud3_interaction_prompt(local)
             self.draw_vehicle_status()
             self.draw_chunk_debug_overlay()
+            self.draw_server_population()
             if bool(self.settings.get("debug", {}).get("show_camera_lookahead", False)):
                 cx, cy = w // 2, h // 2
                 lx = int(cx + self.camera_controller.look_x)
@@ -4249,7 +4270,8 @@ class Game:
         online_count = len(self.map_players) if self.map_players else len(self.players)
         unread = f" SMS:{self.sms_unread}" if self.sms_unread else ""
         players_text = self.small_font.render(f"{self.game_mode_name}  •  {map_name}   chunk {chunk_label(local_chunk[0], local_chunk[1])} / {self.server_region_id}   online:{online_count} nearby:{len(self.players)} cars:{len(self.vehicles)} bikes:{len(self.bicycles)} peds:{len(self.npcs)}{unread}   [F2] messages  [SHIFT] run/boost  [SPACE×2] double jump  [T] mobility  [M] map  [F10] report", True, TEXT_COLOR)
-        self.screen.blit(players_text, (w - players_text.get_width() - 20, 20))
+        self.screen.blit(players_text, (w - players_text.get_width() - 20, 48))
+        self.draw_server_population()
         self._draw_main_audio_icons()
         self.draw_vehicle_status()
         self.draw_local_minimap()
