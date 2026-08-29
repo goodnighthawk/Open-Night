@@ -28,7 +28,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
 8. **Game-mode authority** — discovery, welcome packets, server manager, Railway, and HUD now identify the default ruleset as Glorious Car Hijacker. Additional modes can be added through the central registry without branching the server entry path.
-9. **64-player networking** — the authoritative player/player-vehicle loop and client input stream now run at 60 Hz; ambient traffic/NPC movement remains 30 Hz. Rolling tick work/rate metrics and an initial F8 panel are implemented, but representative 64-client load proof and high-rate player replication remain release blockers.
+9. **64-player networking** — the server and launcher now default to an atomically enforced 64-session limit. The authoritative player/player-vehicle loop and client input stream run at 60 Hz; ambient traffic/NPC movement remains 30 Hz. Dynamic replication uses dedicated 3072 px network zones with a fixed current-plus-eight-neighbors subscription, independent of 1024 px rendering chunks. Rolling tick metrics and an initial F8 panel are implemented, but representative 64-client load proof and high-rate player replication remain release blockers.
 
 ## Housing-spawn implementation direction
 
@@ -51,9 +51,10 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 2. Test exiting the house to the authored exterior door and re-entering it.
 3. Runtime-check the red `population/housing capacity` HUD and private buzzer directory.
 4. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
-5. Add high-rate compact player/controlled-vehicle replication without raising full ambient snapshots above 20 Hz.
-6. Build the representative 64-client load harness and prove stable 60 Hz before changing `VERSION.txt` to 4.0.
-7. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+5. Add high-rate compact player/controlled-vehicle replication within the dedicated 3x3 network-zone set without raising full ambient snapshots above 20 Hz.
+6. Add application ping/loss/bandwidth instrumentation to complete F8.
+7. Build the representative 64-client load harness and prove stable 60 Hz before changing `VERSION.txt` to 4.0.
+8. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 

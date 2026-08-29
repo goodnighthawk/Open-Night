@@ -3,7 +3,16 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from common import PlayerState, SERVER_TICK_RATE, SNAPSHOT_RATE, empty_inventory
+from common import (
+    NETWORK_ZONE_RADIUS,
+    NETWORK_ZONE_SIZE,
+    PlayerState,
+    SERVER_TICK_RATE,
+    SNAPSHOT_RATE,
+    empty_inventory,
+    subscribed_network_zones,
+    world_to_network_zone,
+)
 from game_modes import DEFAULT_GAME_MODE_ID, get_game_mode
 from housing_spawn import blank_house_interiors
 import server
@@ -59,6 +68,20 @@ def main() -> int:
     assert SERVER_TICK_RATE == 60
     assert SNAPSHOT_RATE == 20
     assert server.AMBIENT_SIM_RATE == 30.0
+    assert server.MAX_PLAYERS == 64
+    assert NETWORK_ZONE_SIZE == 3072
+    assert NETWORK_ZONE_RADIUS == 1
+    assert server.ACTIVE_MAP["network_zone_size"] == 3072
+    assert server.ACTIVE_MAP["network_zone_radius"] == 1
+    assert world_to_network_zone(3071.99, 3071.99, server.ACTIVE_MAP) == (0, 0)
+    assert world_to_network_zone(3072.0, 3072.0, server.ACTIVE_MAP) == (1, 1)
+    central_zones = subscribed_network_zones(4608.0, 4608.0, server.ACTIVE_MAP)
+    assert len(central_zones) == len(set(central_zones)) == 9
+    assert set(central_zones) == {(x, y) for y in range(0, 3) for x in range(0, 3)}
+    edge_zones = subscribed_network_zones(0.0, 0.0, server.ACTIVE_MAP)
+    assert len(edge_zones) == len(set(edge_zones)) == 9
+    oversized_radius_map = dict(server.ACTIVE_MAP, network_zone_radius=4)
+    assert len(subscribed_network_zones(4608.0, 4608.0, oversized_radius_map)) == 9
 
     metrics = server.ServerTickMetrics(SERVER_TICK_RATE)
     started = metrics.window_started
@@ -93,17 +116,23 @@ def main() -> int:
     assert not server._can_view_apartment_residency(indoor_visitor, resident), "buzzer access requires standing outside"
     assert server.normalize_friend_names([" ResidentX ", "", "bad!name"]) == {"residentx", "badname"}
 
-    info = server.server_info_payload("Test", 8765, 30, server.ACTIVE_MAP)
+    info = server.server_info_payload("Test", 8765, server.MAX_PLAYERS, server.ACTIVE_MAP)
     assert info["game_mode_id"] == DEFAULT_GAME_MODE_ID
     assert info["game_mode_name"] == "Glorious Car Hijacker"
     assert info["housing_capacity"] == 14
+    assert info["max_players"] == 64
     assert info["server_metrics"]["server_tick_configured_rate_hz"] == 60
+    assert info["network_zone_size"] == 3072
+    assert info["network_zone_radius"] == 1
+    assert info["network_zone_subscription_count"] == 9
 
     client_source = (Path(__file__).resolve().parent / "client.py").read_text(encoding="utf-8")
     for token in ("SERVER POPULATION", "server_population", "housing_capacity", "(255, 72, 72)",
                   "NETWORK_SEND_RATE = 60", "draw_network_debug_overlay", "pygame.K_F8"):
         assert token in client_source, f"population HUD contract missing {token}"
-    print("v4 server contract OK: 60 Hz authority + 30 Hz ambient tier + housing/privacy HUD")
+    launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
+    assert '"max_players": 64' in launcher_source
+    print("v4 server contract OK: 60 Hz authority + dedicated 3x3 network zones + housing/privacy")
     return 0
 
 

@@ -42,8 +42,12 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 
 ## 4. Multiplayer regression
 
+- [x] Set the server and local launcher default capacity to 64 sessions and enforce it atomically during login.
 - [x] Configure the authoritative player/player-vehicle simulation and client input stream for 60 Hz.
 - [x] Keep ambient traffic, bicycles, and pedestrian movement on a separate 30 Hz tier.
+- [x] Separate 3072 px dynamic network zones from 1024 px rendering chunks.
+- [x] Restrict normal dynamic interest to exactly the current network zone plus eight adjacent zones (3x3).
+- [x] Publish current/subscribed network-zone data in snapshots and the F8 panel.
 - [x] Publish measured server tick rate/work/budget metrics and expose the initial F8 performance panel.
 - [ ] Add application ping, loss, bandwidth, and packet-rate instrumentation to complete the F8 contract.
 - [ ] Add compact 60 Hz replication for nearby players and player-controlled vehicles without raising full ambient snapshot cost.

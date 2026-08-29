@@ -56,7 +56,7 @@ def _load_config() -> dict:
     defaults = {
         "server_name": version_label(),
         "port": 8765,
-        "max_players": 128,
+        "max_players": 64,
         "traffic_cars": TRAFFIC_DEFAULT_COUNT,
         "map_id": DEFAULT_MAP_ID,
         "game_mode_id": DEFAULT_GAME_MODE_ID,

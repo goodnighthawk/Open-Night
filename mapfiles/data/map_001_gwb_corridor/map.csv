@@ -9,6 +9,8 @@ chunk_rows,12,int
 world_w,16384,int
 world_h,12288,int
 interest_radius_chunks,2,int
+network_zone_size,3072,int
+network_zone_radius,1,int
 map_area_multiplier,2,int
 chunk_cache_limit,30,int
 procedural_buildings,false,bool

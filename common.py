@@ -25,6 +25,8 @@ DEFAULT_MAP_ID = "map_001_gwb_corridor"
 # ---------------------------------------------------------------------------
 CHUNK_SIZE = 1024
 NETWORK_INTEREST_RADIUS_CHUNKS = 2
+NETWORK_ZONE_SIZE = CHUNK_SIZE * 3
+NETWORK_ZONE_RADIUS = 1
 CHUNK_CACHE_LIMIT = 24
 
 # Original modular top-down character system. These are deliberately small
@@ -95,6 +97,8 @@ if not MAPS:
             "world_w": 2048,
             "world_h": 2048,
             "interest_radius_chunks": NETWORK_INTEREST_RADIUS_CHUNKS,
+            "network_zone_size": NETWORK_ZONE_SIZE,
+            "network_zone_radius": NETWORK_ZONE_RADIUS,
             "chunk_cache_limit": CHUNK_CACHE_LIMIT,
             "procedural_buildings": False,
             "supplier_pos": [700.0, 700.0],
@@ -136,6 +140,37 @@ def world_to_chunk(x: float, y: float, map_config: dict | None = None) -> tuple[
     cfg = map_config or MAPS[DEFAULT_MAP_ID]
     size = int(cfg.get("chunk_size", CHUNK_SIZE))
     return int(max(0.0, x) // size), int(max(0.0, y) // size)
+
+
+def network_zone_size(map_config: dict | None = None) -> int:
+    cfg = map_config or MAPS[DEFAULT_MAP_ID]
+    render_chunk_size = max(1, int(cfg.get("chunk_size", CHUNK_SIZE)))
+    return max(render_chunk_size, int(cfg.get("network_zone_size", render_chunk_size * 3)))
+
+
+def world_to_network_zone(x: float, y: float, map_config: dict | None = None) -> tuple[int, int]:
+    size = network_zone_size(map_config)
+    return int(max(0.0, float(x)) // size), int(max(0.0, float(y)) // size)
+
+
+def network_zone_label(zone_x: int, zone_y: int) -> str:
+    return f"NZ{max(0, int(zone_x)) + 1}:{max(0, int(zone_y)) + 1}"
+
+
+def subscribed_network_zones(
+    x: float,
+    y: float,
+    map_config: dict | None = None,
+) -> tuple[tuple[int, int], ...]:
+    """Return the fixed current-plus-eight-neighbors dynamic interest set."""
+    cfg = map_config or MAPS[DEFAULT_MAP_ID]
+    zone_x, zone_y = world_to_network_zone(x, y, cfg)
+    radius = NETWORK_ZONE_RADIUS
+    return tuple(
+        (candidate_x, candidate_y)
+        for candidate_y in range(zone_y - radius, zone_y + radius + 1)
+        for candidate_x in range(zone_x - radius, zone_x + radius + 1)
+    )
 
 
 

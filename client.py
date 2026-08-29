@@ -1273,6 +1273,11 @@ class Game:
         self.server_region = (0, 0)
         self.server_region_id = "R1C1"
         self.interest_radius = int(self.map_config.get("interest_radius_chunks", 2))
+        self.server_network_zone = (0, 0)
+        self.server_network_zone_id = "NZ1:1"
+        self.network_zone_size = int(self.map_config.get("network_zone_size", 3072))
+        self.network_zone_radius = int(self.map_config.get("network_zone_radius", 1))
+        self.subscribed_network_zones: tuple[tuple[int, int], ...] = tuple()
         self.selected_slot = 0
         self.drag_source: int | None = None
         self.account_masked = ""
@@ -1964,6 +1969,8 @@ class Game:
                     self._world_map_cache = None
                     self._world_map_cache_key = None
                     self.interest_radius = int(self.map_config.get("interest_radius_chunks", 2))
+                    self.network_zone_size = int(self.map_config.get("network_zone_size", 3072))
+                    self.network_zone_radius = int(self.map_config.get("network_zone_radius", 1))
                     self.camera_controller.reset()
                 player = RemotePlayer(message["player"])
                 self.players[player.id] = player
@@ -2109,6 +2116,29 @@ class Game:
                         self.server_chunk = (int(chunk[0]), int(chunk[1]))
                     except (TypeError, ValueError):
                         pass
+                network_zone = message.get("network_zone")
+                if isinstance(network_zone, (list, tuple)) and len(network_zone) >= 2:
+                    try:
+                        self.server_network_zone = (int(network_zone[0]), int(network_zone[1]))
+                    except (TypeError, ValueError):
+                        pass
+                self.server_network_zone_id = str(message.get("network_zone_id", self.server_network_zone_id))
+                try:
+                    self.network_zone_size = max(1, int(message.get("network_zone_size", self.network_zone_size)))
+                    self.network_zone_radius = max(0, int(message.get("network_zone_radius", self.network_zone_radius)))
+                except (TypeError, ValueError):
+                    pass
+                subscribed_rows = message.get("subscribed_network_zones")
+                if isinstance(subscribed_rows, list):
+                    parsed_zones: list[tuple[int, int]] = []
+                    for row in subscribed_rows:
+                        if not isinstance(row, (list, tuple)) or len(row) < 2:
+                            continue
+                        try:
+                            parsed_zones.append((int(row[0]), int(row[1])))
+                        except (TypeError, ValueError):
+                            continue
+                    self.subscribed_network_zones = tuple(parsed_zones)
                 region = message.get("region")
                 if isinstance(region, (list, tuple)) and len(region) >= 2:
                     try:
@@ -2849,6 +2879,20 @@ class Game:
             if interest_rect.width > 0 and interest_rect.height > 0:
                 pygame.draw.rect(self.screen, (116, 164, 186), interest_rect, width=1)
 
+            zone_x, zone_y = self.server_network_zone
+            zone_radius = max(0, int(self.network_zone_radius))
+            zone_size = max(1, int(self.network_zone_size))
+            zx0 = max(0, zone_x - zone_radius) * zone_size
+            zy0 = max(0, zone_y - zone_radius) * zone_size
+            zx1 = min(world_w, (zone_x + zone_radius + 1) * zone_size)
+            zy1 = min(world_h, (zone_y + zone_radius + 1) * zone_size)
+            zone_rect = pygame.Rect(
+                int(map_rect.x + zx0 * sx), int(map_rect.y + zy0 * sy),
+                max(1, int((zx1 - zx0) * sx)), max(1, int((zy1 - zy0) * sy)),
+            ).clip(map_rect)
+            if zone_rect.width > 0 and zone_rect.height > 0:
+                pygame.draw.rect(self.screen, (80, 214, 224), zone_rect, width=2)
+
         for apartment_entry, apartment_labels in self.visible_apartment_entries():
             apartment_pos = mp_dynamic(*apartment_entry)
             if apartment_pos is not None and map_rect.collidepoint(apartment_pos):
@@ -2912,7 +2956,7 @@ class Game:
         cols = max(1, int(self.map_config.get("chunk_cols", math.ceil(world_w / chunk_size))))
         rows = max(1, int(self.map_config.get("chunk_rows", math.ceil(world_h / chunk_size))))
         status = self.small_font.render(
-            f"Chunk {chunk_label(cx, cy)} ({cx},{cy}) of {cols}x{rows} | streamed radius {int(self.interest_radius)}",
+            f"Chunk {chunk_label(cx, cy)} ({cx},{cy}) of {cols}x{rows} | static radius {int(self.interest_radius)} | dynamic {self.server_network_zone_id} 3x3",
             True, TEXT_COLOR,
         )
         self.screen.blit(status, (panel.x + 20, panel.bottom - 24))
@@ -4125,8 +4169,8 @@ class Game:
         """F8 baseline for the v4 authoritative-network performance contract."""
         if not self.network_debug_overlay:
             return
-        cx, cy = self.server_chunk
-        subscribed = (self.interest_radius * 2 + 1) ** 2
+        zone_x, zone_y = self.server_network_zone
+        subscribed = len(self.subscribed_network_zones) or (self.network_zone_radius * 2 + 1) ** 2
         measured = self.server_tick_rate
         target = self.server_tick_configured_rate
         if measured <= 0.0:
@@ -4141,7 +4185,8 @@ class Game:
             (f"SERVER TICK      {tick_text}", tick_color),
             (f"TICK WORK        {self.server_tick_time_ms:.2f} avg  {self.server_tick_max_ms:.2f} max / {self.server_tick_budget_ms:.2f} ms", TEXT_COLOR),
             (f"RATES            input {NETWORK_SEND_RATE}  snapshot {self.server_snapshot_rate:.0f}  ambient {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
-            (f"ZONE             {chunk_label(cx, cy)} ({cx},{cy})  subscribed {subscribed}", TEXT_COLOR),
+            (f"NETWORK ZONE     {self.server_network_zone_id} ({zone_x},{zone_y})  size {self.network_zone_size}px", TEXT_COLOR),
+            (f"SUBSCRIPTIONS    {subscribed} zones (3x3 target)", (145, 226, 160) if subscribed == 9 else (255, 92, 92)),
             (f"RELEVANT         players {len(self.players)}  NPCs {len(self.npcs)}  vehicles {len(self.vehicles)}  bikes {len(self.bicycles)}", TEXT_COLOR),
             (f"POPULATION       {self.server_population}  tick overruns {self.server_tick_overruns}", TEXT_COLOR),
             ("PING / LOSS      pending probe instrumentation", MUTED_TEXT),

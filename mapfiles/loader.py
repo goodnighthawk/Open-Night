@@ -341,6 +341,8 @@ def load_map_folder(folder: Path, *, attach_grid: bool = True) -> dict:
     cfg["chunk_rows"] = max(1, _int(cfg.get("chunk_rows"), (cfg["world_h"] + chunk_size - 1) // chunk_size))
     cfg.setdefault("chunked", True)
     cfg.setdefault("interest_radius_chunks", 2)
+    cfg["network_zone_size"] = max(chunk_size, _int(cfg.get("network_zone_size"), chunk_size * 3))
+    cfg["network_zone_radius"] = 1
     cfg.setdefault("chunk_cache_limit", 24)
     cfg.setdefault("procedural_buildings", True)
     cfg["grid_cell_size"] = max(8, _int(cfg.get("grid_cell_size"), 32))

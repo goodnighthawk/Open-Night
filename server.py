@@ -45,7 +45,12 @@ from common import (
     TRAFFIC_BRAKE_DECEL,
     TRAFFIC_LOOKAHEAD_MIN,
     NETWORK_INTEREST_RADIUS_CHUNKS,
+    NETWORK_ZONE_RADIUS,
+    network_zone_size,
+    network_zone_label,
+    subscribed_network_zones,
     world_to_chunk,
+    world_to_network_zone,
     world_to_region,
     region_label,
     PlayerState,
@@ -84,10 +89,9 @@ from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES, get_game_mode
 HOST = "0.0.0.0"
 PORT = 8765
 SERVER_NAME = "Open Night v3.0"
-# v2.5 runtime validation replaces this fallback with the exact number of
-# enterable GridWorld buildings. Keep the cold-start/default identity aligned
-# with the current 30-building map so discovery is never advertised as 128.
-MAX_PLAYERS = 30
+# v4.0's authoritative networking and stress-test contract targets 64 players.
+# Housing remains intentionally smaller and uses the explicit outdoor overflow flow.
+MAX_PLAYERS = 64
 DISCOVERY_MAGIC = "PYMMO_DISCOVER_V1"
 SERVER_VERSION = GAME_VERSION
 BUG_REPORT_MAX_SCREENSHOT_BYTES = 1_500_000
@@ -189,7 +193,7 @@ def network_map_payload(map_config: dict) -> dict:
     constant as Map 001 grows toward city scale.
     """
     if map_config.get("_portable_map_hash"):
-        keys = ("id","name","description","world_w","world_h","chunked","chunk_size","chunk_cols","chunk_rows","interest_radius_chunks","server_region_chunk_cols","server_region_chunk_rows","map_build_id","default_render_mode","default_lighting_profile","street_lamps_enabled")
+        keys = ("id","name","description","world_w","world_h","chunked","chunk_size","chunk_cols","chunk_rows","interest_radius_chunks","network_zone_size","network_zone_radius","server_region_chunk_cols","server_region_chunk_rows","map_build_id","default_render_mode","default_lighting_profile","street_lamps_enabled")
         out = {key: map_config.get(key) for key in keys if key in map_config}
         out["map_payload_mode"] = "portable_map_v1"
         out["map_hash"] = str(map_config.get("_portable_map_hash"))
@@ -198,12 +202,15 @@ def network_map_payload(map_config: dict) -> dict:
         # comes from a transferred portable cache.
         out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
         out["parking_spots"] = [dict(row) for row in map_config.get("parking_spots", [])]
+        out["network_zone_size"] = network_zone_size(map_config)
+        out["network_zone_radius"] = NETWORK_ZONE_RADIUS
         return out
 
     if bool(map_config.get("chunked", False)):
         keys = (
             "id", "name", "description", "world_w", "world_h", "chunked",
             "chunk_size", "chunk_cols", "chunk_rows", "interest_radius_chunks",
+            "network_zone_size", "network_zone_radius",
             "server_region_chunk_cols", "server_region_chunk_rows",
             "map_area_multiplier", "map_build_id", "scalability_target_players", "target_player_height_px",
             "target_sedan_length_px", "target_lane_width_px", "target_sidewalk_width_px",
@@ -220,6 +227,8 @@ def network_map_payload(map_config: dict) -> dict:
         out["job_locations"] = [dict(row) for row in map_config.get("job_locations", [])]
         out["parking_spots"] = [dict(row) for row in map_config.get("parking_spots", [])]
         out.update(grid_network_metadata(map_config))
+        out["network_zone_size"] = network_zone_size(map_config)
+        out["network_zone_radius"] = NETWORK_ZONE_RADIUS
         return out
 
     def clean(value):
@@ -235,7 +244,10 @@ def network_map_payload(map_config: dict) -> dict:
         if isinstance(value, (list, tuple)):
             return [clean(item) for item in value]
         return value
-    return clean(map_config)
+    out = clean(map_config)
+    out["network_zone_size"] = network_zone_size(map_config)
+    out["network_zone_radius"] = NETWORK_ZONE_RADIUS
+    return out
 
 
 def server_info_payload(server_name: str, game_port: int, max_players: int, map_config: dict) -> dict:
@@ -260,6 +272,9 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "traffic_cars": TRAFFIC_COUNT,
         "bicycles": len(bicycles),
         "npcs": len(npc_pedestrians),
+        "network_zone_size": network_zone_size(map_config),
+        "network_zone_radius": NETWORK_ZONE_RADIUS,
+        "network_zone_subscription_count": 9,
         "server_metrics": SERVER_TICK_METRICS.public_dict(),
     }
 
@@ -3736,10 +3751,14 @@ async def client_handler(websocket: ServerConnection) -> None:
         remote_address = getattr(websocket, "remote_address", None)
         remote_host = str(remote_address[0]) if isinstance(remote_address, tuple) and remote_address else "unknown"
         rate_key = hashlib.sha256(f"{BUG_REPORT_SALT}:{remote_host}".encode("utf-8")).hexdigest()
-        duplicate_after_load = False
+        login_rejection = ""
         async with clients_lock:
             if any(existing.phone == phone for existing in clients.values()):
-                duplicate_after_load = True
+                login_rejection = "duplicate"
+            elif len(clients) >= MAX_PLAYERS:
+                # The early capacity check is only a fast path. This locked check
+                # makes the hard limit atomic across simultaneous account loads.
+                login_rejection = "full"
             else:
                 occupied = {
                     existing.apartment_interior_id for existing in clients.values()
@@ -3780,9 +3799,13 @@ async def client_handler(websocket: ServerConnection) -> None:
                 )
                 clients[player_id] = session
             server_population = len(clients)
-        if duplicate_after_load:
+        if login_rejection == "duplicate":
             await send_json(websocket, {"type": "login_error", "text": "That phone-number account is already logged in."})
             await websocket.close(code=1008, reason="account already online")
+            return
+        if login_rejection == "full":
+            await send_json(websocket, {"type": "login_error", "text": f"Server capacity is {MAX_PLAYERS} players."})
+            await websocket.close(code=1013, reason="server full")
             return
         housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
         print_machine_status()
@@ -4178,11 +4201,10 @@ async def simulation_loop() -> None:
 
 
 async def snapshot_loop() -> None:
-    """Send per-player snapshots using a chunk-bucket interest index.
+    """Send per-player snapshots using dedicated network-zone buckets.
 
-    v2.3 filtered by chunk radius but still rescanned every entity for every
-    connected player. v2.4 builds the spatial buckets once per snapshot and then
-    touches only the nearby 3x3/5x5 interest cells for each recipient.
+    Rendering remains organized in 1024 px chunks. Dynamic entities use larger
+    zones so every recipient touches exactly its current zone and eight neighbors.
     """
     interval = 1.0 / SNAPSHOT_RATE
     last_map_roster_push = 0.0
@@ -4195,7 +4217,9 @@ async def snapshot_loop() -> None:
         if push_map_roster:
             last_map_roster_push = server_time
         all_lights = traffic_light_states(ACTIVE_MAP, server_time)
-        radius = max(0, int(ACTIVE_MAP.get("interest_radius_chunks", NETWORK_INTEREST_RADIUS_CHUNKS)))
+        static_chunk_radius = max(0, int(ACTIVE_MAP.get("interest_radius_chunks", NETWORK_INTEREST_RADIUS_CHUNKS)))
+        zone_radius = NETWORK_ZONE_RADIUS
+        zone_size = network_zone_size(ACTIVE_MAP)
 
         player_buckets: dict[tuple[int,int], list[ClientSession]] = {}
         vehicle_buckets: dict[tuple[int,int], list[TrafficVehicle]] = {}
@@ -4206,25 +4230,27 @@ async def snapshot_loop() -> None:
         light_buckets: dict[tuple[int,int], list[dict]] = {}
 
         for other in sessions:
-            player_buckets.setdefault(world_to_chunk(other.player.x, other.player.y, ACTIVE_MAP), []).append(other)
+            player_buckets.setdefault(world_to_network_zone(other.player.x, other.player.y, ACTIVE_MAP), []).append(other)
         for car in traffic_vehicles:
-            vehicle_buckets.setdefault(world_to_chunk(car.x, car.y, ACTIVE_MAP), []).append(car)
+            vehicle_buckets.setdefault(world_to_network_zone(car.x, car.y, ACTIVE_MAP), []).append(car)
         for npc in npc_pedestrians:
-            npc_buckets.setdefault(world_to_chunk(npc.x, npc.y, ACTIVE_MAP), []).append(npc)
+            npc_buckets.setdefault(world_to_network_zone(npc.x, npc.y, ACTIVE_MAP), []).append(npc)
         for bike in bicycles:
-            bicycle_buckets.setdefault(world_to_chunk(bike.x, bike.y, ACTIVE_MAP), []).append(bike)
+            bicycle_buckets.setdefault(world_to_network_zone(bike.x, bike.y, ACTIVE_MAP), []).append(bike)
         for stain in blood_stains:
-            blood_buckets.setdefault(world_to_chunk(stain.x, stain.y, ACTIVE_MAP), []).append(stain)
+            blood_buckets.setdefault(world_to_network_zone(stain.x, stain.y, ACTIVE_MAP), []).append(stain)
         for hydrant in hydrants.values():
-            hydrant_buckets.setdefault(world_to_chunk(hydrant.x, hydrant.y, ACTIVE_MAP), []).append(hydrant)
+            hydrant_buckets.setdefault(world_to_network_zone(hydrant.x, hydrant.y, ACTIVE_MAP), []).append(hydrant)
         for signal in ACTIVE_MAP.get("traffic_signals", []):
             pos = signal.get("pos", [0, 0])
-            light_buckets.setdefault(world_to_chunk(float(pos[0]), float(pos[1]), ACTIVE_MAP), []).append(signal)
+            light_buckets.setdefault(world_to_network_zone(float(pos[0]), float(pos[1]), ACTIVE_MAP), []).append(signal)
 
         sends = []
         for session in sessions:
             pcx, pcy = world_to_chunk(session.player.x, session.player.y, ACTIVE_MAP)
+            pzx, pzy = world_to_network_zone(session.player.x, session.player.y, ACTIVE_MAP)
             prx, pry = world_to_region(session.player.x, session.player.y, ACTIVE_MAP)
+            zone_keys = subscribed_network_zones(session.player.x, session.player.y, ACTIVE_MAP)
             visible_players = []
             visible_vehicles = []
             visible_npcs = []
@@ -4233,33 +4259,31 @@ async def snapshot_loop() -> None:
             visible_hydrants = []
             visible_lights = {}
 
-            for cy in range(max(0, pcy-radius), pcy+radius+1):
-                for cx in range(max(0, pcx-radius), pcx+radius+1):
-                    key = (cx, cy)
-                    for other in player_buckets.get(key, ()):
-                        pdata = other.player.public_dict()
-                        if other.player.in_vehicle:
-                            pdata["pose"] = "idle"
-                        elif time.monotonic() < other.jump_until:
-                            pdata["pose"] = other.jump_kind if other.jump_kind in {"jump", "double_jump"} else "jump"
-                        elif other.prone:
-                            pdata["pose"] = "prone"
-                        elif other.crouching:
-                            pdata["pose"] = "crouch"
-                        elif other.boost and math.hypot(other.input_x, other.input_y) > 0.05:
-                            pdata["pose"] = "run"
-                        else:
-                            pdata["pose"] = "idle"
-                        visible_players.append(pdata)
-                    visible_vehicles.extend(car.public_dict() for car in vehicle_buckets.get(key, ()))
-                    visible_npcs.extend(npc.public_dict() for npc in npc_buckets.get(key, ()))
-                    visible_bicycles.extend(bike.public_dict() for bike in bicycle_buckets.get(key, ()))
-                    snapshot_mono = time.monotonic()
-                    visible_blood.extend(stain.public_dict(snapshot_mono) for stain in blood_buckets.get(key, ()))
-                    visible_hydrants.extend(hydrant.public_dict(snapshot_mono) for hydrant in hydrant_buckets.get(key, ()))
-                    for signal in light_buckets.get(key, ()):
-                        sid = str(signal.get("id"))
-                        visible_lights[sid] = bool(all_lights.get(sid, False))
+            for key in zone_keys:
+                for other in player_buckets.get(key, ()):
+                    pdata = other.player.public_dict()
+                    if other.player.in_vehicle:
+                        pdata["pose"] = "idle"
+                    elif time.monotonic() < other.jump_until:
+                        pdata["pose"] = other.jump_kind if other.jump_kind in {"jump", "double_jump"} else "jump"
+                    elif other.prone:
+                        pdata["pose"] = "prone"
+                    elif other.crouching:
+                        pdata["pose"] = "crouch"
+                    elif other.boost and math.hypot(other.input_x, other.input_y) > 0.05:
+                        pdata["pose"] = "run"
+                    else:
+                        pdata["pose"] = "idle"
+                    visible_players.append(pdata)
+                visible_vehicles.extend(car.public_dict() for car in vehicle_buckets.get(key, ()))
+                visible_npcs.extend(npc.public_dict() for npc in npc_buckets.get(key, ()))
+                visible_bicycles.extend(bike.public_dict() for bike in bicycle_buckets.get(key, ()))
+                snapshot_mono = time.monotonic()
+                visible_blood.extend(stain.public_dict(snapshot_mono) for stain in blood_buckets.get(key, ()))
+                visible_hydrants.extend(hydrant.public_dict(snapshot_mono) for hydrant in hydrant_buckets.get(key, ()))
+                for signal in light_buckets.get(key, ()):
+                    sid = str(signal.get("id"))
+                    visible_lights[sid] = bool(all_lights.get(sid, False))
 
             payload = {
                 "type": "snapshot",
@@ -4277,7 +4301,12 @@ async def snapshot_loop() -> None:
                 "server_metrics": SERVER_TICK_METRICS.public_dict(),
                 "chunk": [pcx, pcy],
                 "chunk_id": chunk_label(pcx, pcy),
-                "interest_radius": radius,
+                "interest_radius": static_chunk_radius,
+                "network_zone": [pzx, pzy],
+                "network_zone_id": network_zone_label(pzx, pzy),
+                "network_zone_size": zone_size,
+                "network_zone_radius": zone_radius,
+                "subscribed_network_zones": [[zx, zy] for zx, zy in zone_keys],
                 "region": [prx, pry],
                 "region_id": region_label(prx, pry),
             }
