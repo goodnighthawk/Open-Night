@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import deque
 from pathlib import Path
 
 import pygame
@@ -804,6 +805,10 @@ class NetworkClient:
         self.thread = threading.Thread(target=self._thread_main, daemon=True)
         self.connected = False
         self.fatal = False
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.messages_sent = 0
+        self.messages_received = 0
 
     def start(self) -> None:
         self.thread.start()
@@ -834,10 +839,16 @@ class NetworkClient:
             except queue.Empty:
                 await asyncio.sleep(0.002)
                 continue
-            await websocket.send(json.dumps(payload, separators=(",", ":")))
+            raw = json.dumps(payload, separators=(",", ":"))
+            await websocket.send(raw)
+            self.bytes_sent += len(raw.encode("utf-8"))
+            self.messages_sent += 1
 
     async def _receiver(self, websocket) -> None:
         async for raw in websocket:
+            raw_size = len(raw) if isinstance(raw, bytes) else len(raw.encode("utf-8"))
+            self.bytes_received += raw_size
+            self.messages_received += 1
             try:
                 message = json.loads(raw)
             except json.JSONDecodeError:
@@ -859,7 +870,10 @@ class NetworkClient:
                     if self.appearance_changed:
                         hello["appearance"] = self.appearance
                         hello["appearance_changed"] = True
-                    await websocket.send(json.dumps(hello))
+                    raw_hello = json.dumps(hello, separators=(",", ":"))
+                    await websocket.send(raw_hello)
+                    self.bytes_sent += len(raw_hello.encode("utf-8"))
+                    self.messages_sent += 1
                     self.connected = True
                     self.incoming.put({"type": "connection", "connected": True})
                     sender = asyncio.create_task(self._sender(websocket))
@@ -904,6 +918,10 @@ class BrowserNetworkClient:
         self._stopped = False
         self._connecting = False
         self._next_reconnect_at = 0.0
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.messages_sent = 0
+        self.messages_received = 0
 
     def start(self) -> None:
         self._stopped = False
@@ -935,7 +953,10 @@ class BrowserNetworkClient:
                     hello["appearance"] = self.appearance
                     hello["appearance_changed"] = True
                 try:
-                    ws.send(json.dumps(hello, separators=(",", ":")))
+                    raw_hello = json.dumps(hello, separators=(",", ":"))
+                    ws.send(raw_hello)
+                    self.bytes_sent += len(raw_hello.encode("utf-8"))
+                    self.messages_sent += 1
                     self.connected = True
                     self.incoming.put({"type": "connection", "connected": True})
                 except Exception as exc:
@@ -944,7 +965,10 @@ class BrowserNetworkClient:
             def on_message(event):
                 try:
                     raw = event.data
-                    message = json.loads(str(raw))
+                    raw_text = str(raw)
+                    self.bytes_received += len(raw_text.encode("utf-8"))
+                    self.messages_received += 1
+                    message = json.loads(raw_text)
                 except Exception:
                     return
                 self.incoming.put(message)
@@ -1002,7 +1026,10 @@ class BrowserNetworkClient:
         try:
             # OPEN == 1 in the browser WebSocket API.
             if int(ws.readyState) == 1:
-                ws.send(json.dumps(payload, separators=(",", ":")))
+                raw = json.dumps(payload, separators=(",", ":"))
+                ws.send(raw)
+                self.bytes_sent += len(raw.encode("utf-8"))
+                self.messages_sent += 1
         except Exception:
             self.connected = False
 
@@ -1296,6 +1323,22 @@ class Game:
         self.prediction_error = 0.0
         self.prediction_corrections = 0
         self.prediction_snap_distance = 96.0
+        self.network_ping_ms = 0.0
+        self.network_probe_sequence = 0
+        self.network_probe_pending: dict[int, float] = {}
+        self.last_network_probe = 0.0
+        self.network_sample_at = time.monotonic()
+        self.network_previous_bytes_sent = 0
+        self.network_previous_bytes_received = 0
+        self.network_previous_messages_sent = 0
+        self.network_previous_messages_received = 0
+        self.network_outbound_bytes_per_second = 0.0
+        self.network_inbound_bytes_per_second = 0.0
+        self.network_outbound_messages_per_second = 0.0
+        self.network_inbound_messages_per_second = 0.0
+        self.last_movement_arrival = 0.0
+        self.movement_delivery_samples: deque[tuple[float, int, int]] = deque()
+        self.movement_loss_percent = 0.0
         self._map_transfer_hash = ""
         self._map_transfer_chunks: list[bytes] = []
         self._map_transfer_expected_chunks = 0
@@ -1442,6 +1485,66 @@ class Game:
             return
         if sequence > self.input_ack_sequence:
             self.input_ack_sequence = sequence
+
+    def update_network_telemetry(self) -> None:
+        """Update same-WebSocket ping, throughput, message rate, and movement loss."""
+        now = time.monotonic()
+        if self.connected and now - self.last_network_probe >= 1.0:
+            self.last_network_probe = now
+            self.network_probe_sequence += 1
+            probe_id = self.network_probe_sequence
+            self.network_probe_pending[probe_id] = now
+            self.network.send({"type": "network_probe", "id": probe_id})
+
+        for probe_id, sent_at in list(self.network_probe_pending.items()):
+            if now - sent_at > 10.0:
+                del self.network_probe_pending[probe_id]
+
+        while self.movement_delivery_samples and now - self.movement_delivery_samples[0][0] > 10.0:
+            self.movement_delivery_samples.popleft()
+        received = sum(sample[1] for sample in self.movement_delivery_samples)
+        degraded = sum(sample[2] for sample in self.movement_delivery_samples)
+        total = received + degraded
+        self.movement_loss_percent = 100.0 * degraded / total if total else 0.0
+
+        elapsed = now - self.network_sample_at
+        if elapsed < 0.5:
+            return
+        bytes_sent = int(getattr(self.network, "bytes_sent", 0))
+        bytes_received = int(getattr(self.network, "bytes_received", 0))
+        messages_sent = int(getattr(self.network, "messages_sent", 0))
+        messages_received = int(getattr(self.network, "messages_received", 0))
+        self.network_outbound_bytes_per_second = max(
+            0.0, (bytes_sent - self.network_previous_bytes_sent) / elapsed
+        )
+        self.network_inbound_bytes_per_second = max(
+            0.0, (bytes_received - self.network_previous_bytes_received) / elapsed
+        )
+        self.network_outbound_messages_per_second = max(
+            0.0, (messages_sent - self.network_previous_messages_sent) / elapsed
+        )
+        self.network_inbound_messages_per_second = max(
+            0.0, (messages_received - self.network_previous_messages_received) / elapsed
+        )
+        self.network_previous_bytes_sent = bytes_sent
+        self.network_previous_bytes_received = bytes_received
+        self.network_previous_messages_sent = messages_sent
+        self.network_previous_messages_received = messages_received
+        self.network_sample_at = now
+
+    def apply_network_probe_ack(self, raw_probe_id: object) -> None:
+        try:
+            probe_id = int(raw_probe_id)
+        except (TypeError, ValueError):
+            return
+        sent_at = self.network_probe_pending.pop(probe_id, None)
+        if sent_at is None:
+            return
+        sample_ms = max(0.0, (time.monotonic() - sent_at) * 1000.0)
+        if self.network_ping_ms <= 0.0:
+            self.network_ping_ms = sample_ms
+        else:
+            self.network_ping_ms = self.network_ping_ms * 0.8 + sample_ms * 0.2
 
     def toggle_friend(self, name: str) -> None:
         clean = str(name).strip()[:24]
@@ -2116,6 +2219,20 @@ class Game:
             return
         if movement_tick <= self.last_movement_tick:
             return
+        arrival = time.monotonic()
+        if self.last_movement_tick >= 0 and self.last_movement_arrival > 0.0:
+            skipped_ticks = max(0, movement_tick - self.last_movement_tick - 1)
+            movement_rate = max(1.0, self.server_movement_rate)
+            arrival_gap = max(0.0, arrival - self.last_movement_arrival)
+            # A gap of three expected intervals is visibly late even when TCP
+            # eventually delivers every ordered WebSocket message.
+            late_slots = max(0, int(arrival_gap * movement_rate) - 2)
+            late_slots = min(int(movement_rate * 2.0), late_slots)
+            degraded_slots = max(skipped_ticks, late_slots)
+            self.movement_delivery_samples.append((arrival, 1, degraded_slots))
+        else:
+            self.movement_delivery_samples.append((arrival, 1, 0))
+        self.last_movement_arrival = arrival
         self.last_movement_tick = movement_tick
         try:
             acknowledged_sequence = int(message.get("a", -1))
@@ -2196,11 +2313,24 @@ class Game:
                     self.pending_predicted_inputs.clear()
                     self.last_prediction_sample = time.monotonic()
                     self.prediction_error = 0.0
+                    self.network_probe_pending.clear()
+                    self.last_network_probe = 0.0
+                    self.network_ping_ms = 0.0
+                    self.last_movement_arrival = 0.0
+                    self.movement_delivery_samples.clear()
+                    self.movement_loss_percent = 0.0
+                    self.network_sample_at = time.monotonic()
+                    self.network_previous_bytes_sent = int(getattr(self.network, "bytes_sent", 0))
+                    self.network_previous_bytes_received = int(getattr(self.network, "bytes_received", 0))
+                    self.network_previous_messages_sent = int(getattr(self.network, "messages_sent", 0))
+                    self.network_previous_messages_received = int(getattr(self.network, "messages_received", 0))
                 elif not self.network.fatal:
                     self.notice = "Disconnected - reconnecting..."
                     self.notice_until = time.monotonic() + 2.0
             elif kind == "movement":
                 self.process_movement_packet(message)
+            elif kind == "network_probe_ack":
+                self.apply_network_probe_ack(message.get("id"))
             elif kind == "login_error":
                 self.notice = "LOGIN FAILED: " + str(message.get("text", "Unknown login error"))
                 self.notice_until = float("inf")
@@ -4512,6 +4642,13 @@ class Game:
             tick_color = (145, 226, 160) if measured >= target * 0.95 else (255, 92, 92)
             tick_text = f"{measured:.1f} / {target:.0f} Hz"
         pending_inputs = max(0, self.input_sequence - self.input_ack_sequence)
+        ping_color = (145, 226, 160) if 0.0 < self.network_ping_ms <= 100.0 else (
+            (230, 188, 95) if self.network_ping_ms <= 200.0 else (255, 92, 92)
+        )
+        loss_color = (145, 226, 160) if self.movement_loss_percent <= 1.0 else (
+            (230, 188, 95) if self.movement_loss_percent <= 5.0 else (255, 92, 92)
+        )
+        ping_text = f"{self.network_ping_ms:.1f} ms" if self.network_ping_ms > 0.0 else "warming up"
         lines = [
             ("F8  NETWORK / PERFORMANCE", (116, 204, 238)),
             (f"CLIENT FPS       {self.clock.get_fps():5.1f}", TEXT_COLOR),
@@ -4525,7 +4662,10 @@ class Game:
             (f"SUBSCRIPTIONS    {subscribed} zones (3x3 target)", (145, 226, 160) if subscribed == 9 else (255, 92, 92)),
             (f"RELEVANT         players {len(self.players)}  NPCs {len(self.npcs)}  vehicles {len(self.vehicles)}  bikes {len(self.bicycles)}", TEXT_COLOR),
             (f"POPULATION       {self.server_population}  tick overruns {self.server_tick_overruns}", TEXT_COLOR),
-            ("PING / LOSS      pending probe instrumentation", MUTED_TEXT),
+            (f"PING             {ping_text}", ping_color),
+            (f"MOVEMENT LOSS    {self.movement_loss_percent:.2f}%  (10s late/skipped updates)", loss_color),
+            (f"TRAFFIC IN       {self.network_inbound_bytes_per_second / 1024.0:.1f} KiB/s  {self.network_inbound_messages_per_second:.1f} msg/s", TEXT_COLOR),
+            (f"TRAFFIC OUT      {self.network_outbound_bytes_per_second / 1024.0:.1f} KiB/s  {self.network_outbound_messages_per_second:.1f} msg/s", TEXT_COLOR),
         ]
         width = max(self.small_font.size(line)[0] for line, _ in lines) + 24
         height = 14 + len(lines) * 20
@@ -4955,6 +5095,7 @@ class Game:
                 self.hud_v3.update(dt)
                 self.poll_hot_reload()
                 self.process_network()
+                self.update_network_telemetry()
                 for pid, player in self.players.items():
                     player.smooth(dt, local=(pid == self.local_id))
                 for car in self.vehicles.values():

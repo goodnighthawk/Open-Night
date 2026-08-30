@@ -166,6 +166,11 @@ def main() -> int:
     assert movement_messages[-1]["a"] == 5
     assert movement_messages[-1]["p"][0][0] == input_session.player.player_id
     assert len(json.dumps(movement_messages[-1], separators=(",", ":"))) < 256
+    asyncio.run(server.handle_message(input_session, json.dumps({
+        "type": "network_probe", "id": 37,
+    })))
+    probe_ack = json.loads(input_session.websocket.messages[-1])
+    assert probe_ack == {"type": "network_probe_ack", "id": 37}
 
     assert server._can_view_apartment_residency(resident, resident), "a resident must see their own listing"
     assert server._can_view_apartment_residency(friend, resident), "mutually accepted friends must see the resident listing"
@@ -191,11 +196,13 @@ def main() -> int:
                   '"sequence": self.next_input_sequence()', "last_processed_input_sequence",
                   "process_movement_packet", "server_movement_rate",
                   "pending_predicted_inputs", "predict_on_foot_step",
-                  "reconcile_local_on_foot", "prediction_error"):
+                  "reconcile_local_on_foot", "prediction_error",
+                  "update_network_telemetry", "network_probe",
+                  "movement_loss_percent", "network_inbound_bytes_per_second"):
         assert token in client_source, f"population HUD contract missing {token}"
     launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
     assert '"max_players": 64' in launcher_source
-    print("v4 server contract OK: 60 Hz authority + dedicated 3x3 network zones + housing/privacy")
+    print("v4 server contract OK: 60 Hz authority + 3x3 zones + prediction/telemetry + housing/privacy")
     return 0
 
 

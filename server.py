@@ -3515,7 +3515,17 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         return
 
     msg_type = message.get("type")
-    if msg_type == "input":
+    if msg_type == "network_probe":
+        try:
+            probe_id = int(message["id"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if 0 <= probe_id <= 2_147_483_647:
+            await send_json(session.websocket, {
+                "type": "network_probe_ack",
+                "id": probe_id,
+            })
+    elif msg_type == "input":
         try:
             input_sequence = int(message["sequence"])
             ix = float(message.get("x", 0.0))
