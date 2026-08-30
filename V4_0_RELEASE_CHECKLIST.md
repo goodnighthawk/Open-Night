@@ -22,15 +22,16 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Integrate atomic login assignment with one connected player per first floor.
 - [x] Start the player in the assigned room on the first playable frame.
 - [ ] Preserve outdoor login spawns as a safe recovery fallback only.
-- [ ] Verify exit places the player at the correct exterior entrance and re-entry works.
+- [x] Verify exit places the player at the correct exterior entrance and re-entry works through the real network protocol.
 - [x] Spawn player 15+ outdoors at a stable random-looking apartment entrance when all 14 floors are occupied.
 - [x] Publish population, housing capacity, and overflow metrics for future controlled map expansion.
 - [x] Defer all generated/additional housing to v5.0; v4.0 never mutates the playable map from population data.
-- [ ] Verify 14 simultaneous players receive distinct floors and player 15 sees the outdoor overflow flow.
+- [x] Verify 14 simultaneous players receive distinct floors and player 15 sees the outdoor overflow flow.
 - [x] Present the assignment as `1st Floor - <username>'s Apartment` with a separate numeric floor field.
 - [x] Enforce self/mutually-accepted-friend/nearby-buzzer visibility for apartment residency listings; one-sided requests reveal nothing.
 - [x] Keep v4.0 friend saves device-local; reciprocal online saves define mutual acceptance for this release.
-- [ ] Runtime-check buzzer panels, authorized directory labels, and hidden distant-stranger listings.
+- [x] Network-check authorized directory labels plus self/mutual-friend/buzzer access and one-sided/distant privacy.
+- [ ] Visually inspect buzzer panels and their authorized labels in a live client.
 - [ ] Runtime-check the red top-right population/capacity counter (for example `15/14`).
 
 ## 3. Visual consistency

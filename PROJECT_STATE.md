@@ -44,15 +44,14 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Treat residency as private directory data: self and mutually accepted friends can see it globally; one-sided requests reveal nothing, while strangers receive the listing only beside that building's buzzer.
 - Keep v4.0 friend saves device-local. Mutual access exists only while both online clients report each other's saved username; account-backed requests/persistence are deferred.
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
+- The 2026-08-30 real-protocol housing audit connected 15 simultaneous clients, assigned 14 distinct first floors, placed player 15 outside an authored buzzer, and passed label/privacy plus exit/re-entry checks.
 
 ## Current next pass
 
-1. Verify the first 14 clients enter distinct private first floors and client 15 spawns outdoors.
-2. Test exiting the house to the authored exterior door and re-entering it.
-3. Runtime-check the red `population/housing capacity` HUD and private buzzer directory.
-4. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
-5. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
-6. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+1. Visually inspect the red `population/housing capacity` HUD and private buzzer directory in a live client.
+2. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
+3. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
+4. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 
@@ -61,6 +60,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Full verification and render: `BUILD_RELEASE.bat`
 - Build preview: `BUILD_PREVIEW.bat`
 - Isolated 64-player city-wide proof: `RUN_V4_CITY_LOAD_TEST.bat`
+- Isolated 14-apartment + one-overflow proof: `RUN_V4_HOUSING_TEST.bat`
 - Deploy server: `DEPLOY_OPEN_NIGHT_SERVER.bat`
 
 ## Scope discipline

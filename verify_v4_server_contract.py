@@ -207,6 +207,12 @@ def main() -> int:
                   "evaluate_v4_city_proof", "apartment_exit_requests"):
         assert token in stress_source, f"v4 city load contract missing {token}"
     assert (Path(__file__).resolve().parent / "RUN_V4_CITY_LOAD_TEST.bat").is_file()
+    housing_audit = Path(__file__).resolve().parent / "tools" / "v4_housing_network_audit.py"
+    housing_source = housing_audit.read_text(encoding="utf-8")
+    for token in ("distinct_apartments", "one_sided_privacy", "mutual_friend_directory",
+                  "buzzer_directory", "exit_reentry"):
+        assert token in housing_source, f"v4 housing network audit missing {token}"
+    assert (Path(__file__).resolve().parent / "RUN_V4_HOUSING_TEST.bat").is_file()
     print("v4 server contract OK: 60 Hz authority + 3x3 zones + prediction/telemetry + housing/privacy")
     return 0
 
