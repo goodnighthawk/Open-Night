@@ -59,7 +59,8 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Add on-foot local client prediction and rewind/replay reconciliation using processed-input acknowledgements.
 - [x] Regression-check immediate on-foot response, acknowledgement replay, shared collisions, desync snapping, and vehicle handoff.
 - [ ] Human-check on-foot prediction/reconciliation under simulated or real latency.
-- [ ] Extend prediction/reconciliation to player-controlled vehicles after on-foot runtime tuning.
+- [x] Keep player-controlled road vehicles server-authoritative for v4.0 with 60 Hz targets and frame-rate-independent client smoothing; vehicle prediction is out of scope.
+- [x] Regression-check that controlled-vehicle updates change render targets only and smoothing remains stable across render rates.
 - [x] Prove stable 60 Hz authoritative ticks under a representative automated 64-client city-wide load (64/64, 59.93 Hz mean, 57.03 Hz p05, zero movement gaps/overruns).
 - [ ] Movement and remote-player visibility pass with at least two clients.
 - [ ] Disconnect/reconnect and strict client/server version handling pass.

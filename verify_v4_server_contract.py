@@ -219,6 +219,12 @@ def main() -> int:
                   "pending_predicted_inputs", "prediction_snap_distance",
                   "MOVEMENT_FLAG_IN_VEHICLE"):
         assert token in prediction_source, f"v4 prediction audit missing {token}"
+    vehicle_audit = Path(__file__).resolve().parent / "tools" / "v4_vehicle_authority_audit.py"
+    vehicle_source = vehicle_audit.read_text(encoding="utf-8")
+    for token in ("SERVER_TICK_RATE == 60", "MOVEMENT_STREAM_RATE, 60.0",
+                  "vehicle.target_x", "vehicle.smooth(1.0 / 60.0)",
+                  "simulate_render_rate(120)"):
+        assert token in vehicle_source, f"v4 vehicle authority audit missing {token}"
     print("v4 server contract OK: 60 Hz authority + 3x3 zones + prediction/telemetry + housing/privacy")
     return 0
 
