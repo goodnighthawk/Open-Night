@@ -31,8 +31,8 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Enforce self/mutually-accepted-friend/nearby-buzzer visibility for apartment residency listings; one-sided requests reveal nothing.
 - [x] Keep v4.0 friend saves device-local; reciprocal online saves define mutual acceptance for this release.
 - [x] Network-check authorized directory labels plus self/mutual-friend/buzzer access and one-sided/distant privacy.
-- [ ] Visually inspect buzzer panels and their authorized labels in a live client.
-- [ ] Runtime-check the red top-right population/capacity counter (for example `15/14`).
+- [x] Visually inspect the buzzer panel and its authorized apartment label in a live overflow client.
+- [x] Runtime-check the red top-right population/capacity counter at `15/14`.
 
 ## 3. Visual consistency
 

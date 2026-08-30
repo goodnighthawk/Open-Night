@@ -45,13 +45,13 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Keep v4.0 friend saves device-local. Mutual access exists only while both online clients report each other's saved username; account-backed requests/persistence are deferred.
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 - The 2026-08-30 real-protocol housing audit connected 15 simultaneous clients, assigned 14 distinct first floors, placed player 15 outside an authored buzzer, and passed label/privacy plus exit/re-entry checks.
+- A live 15-player client view confirmed the red top-right `SERVER POPULATION 15/14` display and the authorized `1st Floor - <username>'s Apartment` buzzer/minimap label.
 
 ## Current next pass
 
-1. Visually inspect the red `population/housing capacity` HUD and private buzzer directory in a live client.
-2. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
-3. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
-4. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+1. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
+2. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
+3. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 
