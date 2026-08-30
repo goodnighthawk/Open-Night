@@ -4375,6 +4375,7 @@ async def snapshot_loop() -> None:
         await asyncio.sleep(interval)
         async with clients_lock:
             sessions = list(clients.values())
+        housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
         server_time = time.time()
         push_map_roster = server_time - last_map_roster_push >= 1.0 / MAP_ROSTER_RATE
         if push_map_roster:

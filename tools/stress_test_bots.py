@@ -48,6 +48,17 @@ class BotStats:
     errors: int = 0
     connected: bool = False
     latencies_ms: list[float] = field(default_factory=list)
+    movement_messages: int = 0
+    movement_tick_gaps: int = 0
+    last_movement_tick: int = -1
+    network_zones: set[str] = field(default_factory=set)
+    tick_rates_hz: list[float] = field(default_factory=list)
+    tick_work_ms: list[float] = field(default_factory=list)
+    tick_max_work_ms: list[float] = field(default_factory=list)
+    tick_budget_ms: list[float] = field(default_factory=list)
+    tick_overruns: list[int] = field(default_factory=list)
+    population_peak: int = 0
+    apartment_exit_requests: int = 0
 
 
 BEHAVIORS = ("wander", "shop", "vehicle", "bicycle", "idle")
@@ -73,15 +84,65 @@ def motion_for(behavior: str, phase: float, rng: random.Random) -> tuple[float, 
     return x, y, False
 
 
-async def drain_until_welcome(ws, stats: BotStats, timeout: float = 8.0) -> bool:
+def record_server_metrics(stats: BotStats, message: dict) -> None:
+    metrics = message.get("server_metrics")
+    if not isinstance(metrics, dict):
+        return
+    try:
+        rate = float(metrics.get("server_tick_rate_hz", 0.0))
+        work = float(metrics.get("server_tick_time_ms", 0.0))
+        maximum = float(metrics.get("server_tick_max_time_ms", 0.0))
+        budget = float(metrics.get("server_tick_budget_ms", 0.0))
+        overruns = int(metrics.get("server_tick_overruns", 0))
+    except (TypeError, ValueError):
+        return
+    if rate > 0.0:
+        stats.tick_rates_hz.append(rate)
+    if work >= 0.0:
+        stats.tick_work_ms.append(work)
+    if maximum >= 0.0:
+        stats.tick_max_work_ms.append(maximum)
+    if budget > 0.0:
+        stats.tick_budget_ms.append(budget)
+    stats.tick_overruns.append(max(0, overruns))
+
+
+def record_received_message(stats: BotStats, message: dict) -> None:
+    kind = message.get("type")
+    if kind == "movement":
+        stats.movement_messages += 1
+        try:
+            tick = int(message["t"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if stats.last_movement_tick >= 0 and tick > stats.last_movement_tick + 1:
+            stats.movement_tick_gaps += tick - stats.last_movement_tick - 1
+        stats.last_movement_tick = max(stats.last_movement_tick, tick)
+    elif kind == "snapshot":
+        stats.snapshots += 1
+        zone_id = str(message.get("network_zone_id", "")).strip()
+        if zone_id:
+            stats.network_zones.add(zone_id)
+        try:
+            stats.population_peak = max(stats.population_peak, int(message.get("server_population", 0)))
+        except (TypeError, ValueError):
+            pass
+        record_server_metrics(stats, message)
+    elif kind == "notice":
+        stats.notices += 1
+
+
+async def drain_until_welcome(ws, stats: BotStats, timeout: float = 8.0) -> dict | None:
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         raw = await asyncio.wait_for(ws.recv(), timeout=max(0.1, end-time.monotonic()))
         stats.received += 1
         try: msg = json.loads(raw)
         except Exception: continue
-        if msg.get("type") == "welcome": return True
-    return False
+        if msg.get("type") == "welcome":
+            record_server_metrics(stats, msg)
+            return msg
+    return None
 
 
 async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: float = 0.0) -> BotStats:
@@ -89,7 +150,7 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
     rng = random.Random(0xB07 + index * 7919)
     if connect_delay > 0: await asyncio.sleep(connect_delay)
     uri = cfg["server_uri"]
-    phone = f"555{rng.randint(1000000, 9999999):07d}"[-10:]
+    phone = f"555{index % 10_000_000:07d}"
     try:
         async with connect(uri, ping_interval=20, ping_timeout=20, open_timeout=8) as ws:
             await ws.send(json.dumps({
@@ -97,9 +158,17 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
                 "client_version": GAME_VERSION,
             }))
             stats.sent += 1
-            if not await drain_until_welcome(ws, stats):
+            welcome = await drain_until_welcome(ws, stats)
+            if welcome is None:
                 stats.errors += 1; return stats
             stats.connected = True
+            player = welcome.get("player", {}) if isinstance(welcome.get("player"), dict) else {}
+            if str(player.get("interior_id", "")):
+                # Housing is part of the real login path. Move apartment-spawned
+                # bots outdoors before the walking load begins.
+                await ws.send(json.dumps({"type": "interior_exit"}))
+                stats.sent += 1
+                stats.apartment_exit_requests += 1
 
             hz = max(1.0, fval(cfg, "input_hz", 10.0))
             period = 1.0 / hz
@@ -150,9 +219,7 @@ async def bot(index: int, cfg: dict[str, str], stop_at: float, connect_delay: fl
                         stats.latencies_ms.append((time.perf_counter()-loop_started)*1000.0); first=False
                     try: msg=json.loads(raw)
                     except Exception: continue
-                    kind=msg.get("type")
-                    if kind=="snapshot": stats.snapshots += 1
-                    elif kind=="notice": stats.notices += 1
+                    record_received_message(stats, msg)
     except Exception:
         stats.errors += 1
     return stats
@@ -162,6 +229,36 @@ def percentile(values: list[float], p: float) -> float:
     if not values: return 0.0
     vals=sorted(values); idx=min(len(vals)-1,max(0,int(round((len(vals)-1)*p))))
     return vals[idx]
+
+
+def evaluate_v4_city_proof(summary: dict, cfg: dict[str, str]) -> tuple[bool, list[str]]:
+    failures: list[str] = []
+    requested = int(summary["requested_bots"])
+    minimum_zones = min(requested, max(1, ival(cfg, "minimum_city_network_zones", 8)))
+    minimum_tick_rate = max(1.0, fval(cfg, "minimum_tick_rate_hz", 57.0))
+    maximum_loss = max(0.0, fval(cfg, "maximum_movement_loss_percent", 1.0))
+    maximum_response = max(1.0, fval(cfg, "maximum_p95_response_ms", 150.0))
+
+    if int(summary["connected_bots"]) != requested:
+        failures.append(f"connected {summary['connected_bots']}/{requested}")
+    if int(summary["errors"]) != 0:
+        failures.append(f"bot errors {summary['errors']}")
+    if int(summary["population_peak"]) < requested:
+        failures.append(f"population peak {summary['population_peak']}/{requested}")
+    if int(summary["network_zones_covered"]) < minimum_zones:
+        failures.append(f"network zones {summary['network_zones_covered']}/{minimum_zones}")
+    if float(summary["server_tick_p05_hz"]) < minimum_tick_rate:
+        failures.append(f"server tick p05 {summary['server_tick_p05_hz']} < {minimum_tick_rate:.1f} Hz")
+    if float(summary["movement_loss_percent"]) > maximum_loss:
+        failures.append(f"movement loss {summary['movement_loss_percent']}% > {maximum_loss:.2f}%")
+    if float(summary["p95_response_ms"]) > maximum_response:
+        failures.append(f"p95 response {summary['p95_response_ms']} > {maximum_response:.1f} ms")
+    budget = float(summary["server_tick_budget_ms"])
+    if budget <= 0.0 or float(summary["server_tick_average_work_peak_ms"]) >= budget:
+        failures.append(
+            f"tick work {summary['server_tick_average_work_peak_ms']} ms / {budget} ms budget"
+        )
+    return not failures, failures
 
 
 def output_path(cfg: dict[str,str], count: int) -> Path:
@@ -185,17 +282,42 @@ async def run_stage(cfg: dict[str,str], count: int, duration: float) -> dict:
     sent=sum(r.sent for r in results); received=sum(r.received for r in results)
     errors=sum(r.errors for r in results)
     lat=[v for r in results for v in r.latencies_ms]
+    tick_rates = [v for r in results for v in r.tick_rates_hz]
+    tick_work = [v for r in results for v in r.tick_work_ms]
+    tick_max_work = [v for r in results for v in r.tick_max_work_ms]
+    tick_budgets = [v for r in results for v in r.tick_budget_ms]
+    zones = sorted({zone for r in results for zone in r.network_zones})
+    movement_messages = sum(r.movement_messages for r in results)
+    movement_gaps = sum(r.movement_tick_gaps for r in results)
+    movement_total = movement_messages + movement_gaps
     summary={
         "timestamp":time.strftime("%Y-%m-%d %H:%M:%S"),"requested_bots":count,"connected_bots":connected,
         "duration_s":round(elapsed,2),"sent":sent,"received":received,"messages_per_s":round((sent+received)/max(.001,elapsed),2),
         "snapshots":sum(r.snapshots for r in results),"interactions":sum(r.interactions for r in results),
         "vehicle_actions":sum(r.vehicle_actions for r in results),"inventory_requests":sum(r.inventory_requests for r in results),
         "mean_response_ms":round(statistics.mean(lat),2) if lat else 0.0,"p95_response_ms":round(percentile(lat,.95),2),"errors":errors,
+        "population_peak":max((r.population_peak for r in results), default=0),
+        "apartment_exit_requests":sum(r.apartment_exit_requests for r in results),
+        "network_zones_covered":len(zones),"network_zone_ids":" ".join(zones),
+        "movement_messages":movement_messages,"movement_tick_gaps":movement_gaps,
+        "movement_loss_percent":round(100.0*movement_gaps/max(1,movement_total),4),
+        "server_tick_mean_hz":round(statistics.mean(tick_rates),2) if tick_rates else 0.0,
+        "server_tick_p05_hz":round(percentile(tick_rates,.05),2),
+        "server_tick_average_work_peak_ms":round(max(tick_work),3) if tick_work else 0.0,
+        "server_tick_max_work_ms":round(max(tick_max_work),3) if tick_max_work else 0.0,
+        "server_tick_budget_ms":round(max(tick_budgets),3) if tick_budgets else 0.0,
+        "server_tick_overruns":max((max(r.tick_overruns,default=0) for r in results),default=0),
     }
+    passed, failures = evaluate_v4_city_proof(summary, cfg)
+    summary["v4_city_proof"] = "PASS" if passed else "FAIL"
+    summary["proof_failures"] = " | ".join(failures)
     out=output_path(cfg,count)
     with out.open("w",encoding="utf-8",newline="") as f:
         w=csv.DictWriter(f,fieldnames=list(summary)); w.writeheader(); w.writerow(summary)
     print(f"Bots connected: {connected}/{count}; messages: {sent+received}; rate: {summary['messages_per_s']:.1f}/s; p95 response: {summary['p95_response_ms']:.1f} ms")
+    print(f"City zones: {summary['network_zones_covered']} ({summary['network_zone_ids']}); movement loss: {summary['movement_loss_percent']:.4f}%")
+    print(f"Server tick: mean {summary['server_tick_mean_hz']:.2f} Hz; p05 {summary['server_tick_p05_hz']:.2f} Hz; peak average work {summary['server_tick_average_work_peak_ms']:.3f}/{summary['server_tick_budget_ms']:.3f} ms")
+    print(f"V4 CITY LOAD PROOF: {summary['v4_city_proof']}" + (f" — {summary['proof_failures']}" if failures else ""))
     print(f"Report: {out}")
     return summary
 
@@ -207,6 +329,7 @@ async def main() -> None:
     ap.add_argument("--bots",type=int,default=ival(cfg,"bot_count",25))
     ap.add_argument("--duration",type=float,default=fval(cfg,"duration_seconds",60))
     ap.add_argument("--find-limit",action="store_true",help="Ramp through increasingly large bot populations")
+    ap.add_argument("--require-v4-city-pass",action="store_true",help="Exit nonzero unless the representative city-load thresholds pass")
     args=ap.parse_args(); cfg["server_uri"]=args.server
     if args.find_limit:
         stages=[10,25,50,75,100,150,200]
@@ -217,6 +340,8 @@ async def main() -> None:
                 print(f"Approximate practical limit is below {count} bots under the configured pass criteria.")
                 break
     else:
-        await run_stage(cfg,max(1,args.bots),max(1.0,args.duration))
+        result = await run_stage(cfg,max(1,args.bots),max(1.0,args.duration))
+        if args.require_v4_city_pass and result["v4_city_proof"] != "PASS":
+            raise SystemExit(1)
 
 if __name__ == "__main__": asyncio.run(main())

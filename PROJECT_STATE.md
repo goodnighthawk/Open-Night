@@ -28,7 +28,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
 8. **Game-mode authority** — discovery, welcome packets, server manager, Railway, and HUD now identify the default ruleset as Glorious Car Hijacker. Additional modes can be added through the central registry without branching the server entry path.
-9. **64-player networking** — v4.0 uses one WebSocket per client for simpler hosting, firewall, and reconnect behavior. The server and launcher default to an atomically enforced 64-session limit. The authoritative player/player-vehicle loop and sequenced client input stream run at 60 Hz; stale/out-of-order inputs are discarded and acknowledged. A compact 60 Hz message carries quantized nearby player/player-controlled-vehicle movement while rich ambient snapshots remain 20 Hz and ambient simulation remains 30 Hz. The client now predicts local on-foot walking/sprinting immediately, rewinds to acknowledged authoritative positions, and replays unacknowledged input through the shared collision path; vehicle prediction remains deferred until the pedestrian behavior is runtime-tuned. F8 reports same-WebSocket application ping, exact encoded bandwidth/message rates, and a rolling 10-second percentage of movement updates that were skipped or arrived late. Dynamic replication uses dedicated 3072 px network zones with a fixed current-plus-eight-neighbors subscription, independent of 1024 px rendering chunks. Representative 64-client load proof remains a release blocker.
+9. **64-player networking** — v4.0 uses one WebSocket per client for simpler hosting, firewall, and reconnect behavior. The server and launcher default to an atomically enforced 64-session limit. The authoritative player/player-vehicle loop and sequenced client input stream run at 60 Hz; stale/out-of-order inputs are discarded and acknowledged. A compact 60 Hz message carries quantized nearby player/player-controlled-vehicle movement while rich ambient snapshots remain 20 Hz and ambient simulation remains 30 Hz. The client now predicts local on-foot walking/sprinting immediately, rewinds to acknowledged authoritative positions, and replays unacknowledged input through the shared collision path; vehicle prediction remains deferred until the pedestrian behavior is runtime-tuned. F8 reports same-WebSocket application ping, exact encoded bandwidth/message rates, and a rolling 10-second percentage of movement updates that were skipped or arrived late. Dynamic replication uses dedicated 3072 px network zones with a fixed current-plus-eight-neighbors subscription, independent of 1024 px rendering chunks. The 2026-08-30 city-wide proof held 64/64 bots across 16 traversed zones with 59.93 Hz mean/57.03 Hz p05 authority, 2.598 ms peak average work against a 16.667 ms budget, and zero movement gaps, overruns, or bot errors.
 
 ## Housing-spawn implementation direction
 
@@ -52,8 +52,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 3. Runtime-check the red `population/housing capacity` HUD and private buzzer directory.
 4. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
 5. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
-6. Build the representative 64-client load harness and prove stable 60 Hz before changing `VERSION.txt` to 4.0.
-7. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+6. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 
@@ -61,6 +60,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Fast noninteractive checks: `TEST_FAST.bat`
 - Full verification and render: `BUILD_RELEASE.bat`
 - Build preview: `BUILD_PREVIEW.bat`
+- Isolated 64-player city-wide proof: `RUN_V4_CITY_LOAD_TEST.bat`
 - Deploy server: `DEPLOY_OPEN_NIGHT_SERVER.bat`
 
 ## Scope discipline

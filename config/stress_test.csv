@@ -1,6 +1,6 @@
 key,value,notes
 server_uri,ws://127.0.0.1:8765,Authoritative server address
-bot_count,25,Concurrent headless player clients
+bot_count,64,v4 representative concurrent city-wide player clients
 duration_seconds,60,Main run duration excluding connection ramp
 spawn_ramp_seconds,8,Spread bot logins over this period
 input_hz,60,v4 representative player input messages per second
@@ -12,3 +12,7 @@ vehicle_weight,15,Relative probability of attempting a vehicle and driving
 bicycle_weight,15,Relative probability of attempting a nearby bicycle/vehicle action
 idle_weight,5,Relative probability of waiting like a real player
 find_limit_stage_seconds,20,Duration of each --find-limit population stage
+minimum_city_network_zones,8,Required authored housing zones represented during the v4 city-wide proof
+minimum_tick_rate_hz,57,95 percent of the authoritative 60 Hz target
+maximum_movement_loss_percent,1,Maximum missing movement-tick percentage across all bots
+maximum_p95_response_ms,150,Maximum representative first-response delay

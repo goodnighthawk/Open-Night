@@ -202,6 +202,11 @@ def main() -> int:
         assert token in client_source, f"population HUD contract missing {token}"
     launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
     assert '"max_players": 64' in launcher_source
+    stress_source = (Path(__file__).resolve().parent / "tools" / "stress_test_bots.py").read_text(encoding="utf-8")
+    for token in ("network_zones_covered", "server_tick_p05_hz", "movement_loss_percent",
+                  "evaluate_v4_city_proof", "apartment_exit_requests"):
+        assert token in stress_source, f"v4 city load contract missing {token}"
+    assert (Path(__file__).resolve().parent / "RUN_V4_CITY_LOAD_TEST.bat").is_file()
     print("v4 server contract OK: 60 Hz authority + 3x3 zones + prediction/telemetry + housing/privacy")
     return 0
 

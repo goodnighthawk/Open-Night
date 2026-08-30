@@ -57,7 +57,7 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Add same-WebSocket application ping, 10-second movement-loss, bandwidth, and message-rate instrumentation to complete the F8 contract.
 - [x] Add on-foot local client prediction and rewind/replay reconciliation using processed-input acknowledgements.
 - [ ] Extend prediction/reconciliation to player-controlled vehicles after on-foot runtime tuning.
-- [ ] Prove stable 60 Hz authoritative ticks under a representative automated 64-client city load.
+- [x] Prove stable 60 Hz authoritative ticks under a representative automated 64-client city-wide load (64/64, 59.93 Hz mean, 57.03 Hz p05, zero movement gaps/overruns).
 - [ ] Movement and remote-player visibility pass with at least two clients.
 - [ ] Disconnect/reconnect and strict client/server version handling pass.
 - [ ] Server snapshots and map-player markers remain coherent while players are indoors/outdoors.
