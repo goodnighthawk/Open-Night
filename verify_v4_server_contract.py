@@ -189,7 +189,9 @@ def main() -> int:
     for token in ("SERVER POPULATION", "server_population", "housing_capacity", "(255, 72, 72)",
                   "NETWORK_SEND_RATE = 60", "draw_network_debug_overlay", "pygame.K_F8",
                   '"sequence": self.next_input_sequence()', "last_processed_input_sequence",
-                  "process_movement_packet", "server_movement_rate"):
+                  "process_movement_packet", "server_movement_rate",
+                  "pending_predicted_inputs", "predict_on_foot_step",
+                  "reconcile_local_on_foot", "prediction_error"):
         assert token in client_source, f"population HUD contract missing {token}"
     launcher_source = (Path(__file__).resolve().parent / "server_launcher.py").read_text(encoding="utf-8")
     assert '"max_players": 64' in launcher_source

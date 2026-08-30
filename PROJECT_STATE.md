@@ -28,7 +28,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
 8. **Game-mode authority** — discovery, welcome packets, server manager, Railway, and HUD now identify the default ruleset as Glorious Car Hijacker. Additional modes can be added through the central registry without branching the server entry path.
-9. **64-player networking** — v4.0 uses one WebSocket per client for simpler hosting, firewall, and reconnect behavior. The server and launcher default to an atomically enforced 64-session limit. The authoritative player/player-vehicle loop and sequenced client input stream run at 60 Hz; stale/out-of-order inputs are discarded and acknowledged. A compact 60 Hz message carries quantized nearby player/player-controlled-vehicle movement while rich ambient snapshots remain 20 Hz and ambient simulation remains 30 Hz. Dynamic replication uses dedicated 3072 px network zones with a fixed current-plus-eight-neighbors subscription, independent of 1024 px rendering chunks. Representative 64-client load proof remains a release blocker.
+9. **64-player networking** — v4.0 uses one WebSocket per client for simpler hosting, firewall, and reconnect behavior. The server and launcher default to an atomically enforced 64-session limit. The authoritative player/player-vehicle loop and sequenced client input stream run at 60 Hz; stale/out-of-order inputs are discarded and acknowledged. A compact 60 Hz message carries quantized nearby player/player-controlled-vehicle movement while rich ambient snapshots remain 20 Hz and ambient simulation remains 30 Hz. The client now predicts local on-foot walking/sprinting immediately, rewinds to acknowledged authoritative positions, and replays unacknowledged input through the shared collision path; vehicle prediction remains deferred until the pedestrian behavior is runtime-tuned. Dynamic replication uses dedicated 3072 px network zones with a fixed current-plus-eight-neighbors subscription, independent of 1024 px rendering chunks. Representative 64-client load proof remains a release blocker.
 
 ## Housing-spawn implementation direction
 
@@ -52,7 +52,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 3. Runtime-check the red `population/housing capacity` HUD and private buzzer directory.
 4. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
 5. Add application ping/loss/bandwidth instrumentation to complete F8.
-6. Add client prediction/reconciliation against processed input acknowledgements.
+6. Runtime-tune on-foot prediction/reconciliation, then decide whether v4.0 also needs vehicle prediction.
 7. Build the representative 64-client load harness and prove stable 60 Hz before changing `VERSION.txt` to 4.0.
 8. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
 

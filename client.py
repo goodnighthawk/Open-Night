@@ -54,8 +54,11 @@ from common import (
     get_map,
     inventory_count,
     inventory_weight,
+    move_with_collisions,
     normalize_character,
     normalize_inventory,
+    point_in_water,
+    point_near_road,
     world_to_chunk,
 )
 from art_style import load_art_style, StyleWatcher, set_art_style_value
@@ -1288,6 +1291,11 @@ class Game:
         self.input_sequence = -1
         self.input_ack_sequence = -1
         self.last_movement_tick = -1
+        self.pending_predicted_inputs: list[dict] = []
+        self.last_prediction_sample = time.monotonic()
+        self.prediction_error = 0.0
+        self.prediction_corrections = 0
+        self.prediction_snap_distance = 96.0
         self._map_transfer_hash = ""
         self._map_transfer_chunks: list[bytes] = []
         self._map_transfer_expected_chunks = 0
@@ -1936,6 +1944,171 @@ class Game:
             cx, cy = self.camera_controller.center((vw, vh))
         return cx + source_dx, cy + source_dy
 
+    def predict_on_foot_step(
+        self,
+        start_x: float,
+        start_y: float,
+        input_x: float,
+        input_y: float,
+        boost: bool,
+        dt: float,
+        level: int,
+    ) -> tuple[float, float]:
+        """Run one local step through the same settings/collision path as the server."""
+        movement = self.settings.get("movement", {})
+        walk_speed = max(0.0, float(movement.get("walk_speed_px_per_second", 92.5)))
+        sprint_multiplier = float(movement.get("sprint_multiplier", 3.0)) if boost else 1.0
+        magnitude = math.hypot(input_x, input_y)
+        if magnitude > 1.0:
+            input_x, input_y = input_x / magnitude, input_y / magnitude
+        dx = input_x * walk_speed * sprint_multiplier * dt
+        dy = input_y * walk_speed * sprint_multiplier * dt
+
+        if self.grid_world is not None and level in {0, 1}:
+            if level == 1:
+                return self.grid_world.move_circle_roof(
+                    start_x, start_y, dx, dy, PLAYER_RADIUS
+                )
+            return self.grid_world.move_circle(
+                "ground", start_x, start_y, dx, dy, PLAYER_RADIUS
+            )
+
+        probe_x, probe_y = start_x + dx, start_y + dy
+        wading = level == 0 and (
+            point_in_water(start_x, start_y, self.map_config)
+            or point_in_water(probe_x, probe_y, self.map_config)
+        ) and not (
+            point_near_road(
+                start_x, start_y, self.map_config,
+                extra=PLAYER_RADIUS, bridge_only=True, level=0,
+            )
+            or point_near_road(
+                probe_x, probe_y, self.map_config,
+                extra=PLAYER_RADIUS, bridge_only=True, level=0,
+            )
+        )
+        if wading:
+            water_multiplier = max(
+                0.05,
+                min(1.0, float(movement.get("water_walk_speed_multiplier", 0.28))),
+            )
+            dx *= water_multiplier
+            dy *= water_multiplier
+        return move_with_collisions(
+            start_x,
+            start_y,
+            dx,
+            dy,
+            self.map_config,
+            level=level,
+            allow_water=True,
+        )
+
+    def record_and_apply_on_foot_prediction(
+        self,
+        sequence: int,
+        input_x: float,
+        input_y: float,
+        boost: bool,
+        crouch: bool,
+        jump: bool,
+        prone_toggle: bool,
+        now: float,
+    ) -> None:
+        local = self.players.get(self.local_id or "")
+        dt = max(0.0, min(0.05, now - self.last_prediction_sample))
+        self.last_prediction_sample = now
+        if local is None or local.in_vehicle or local.interior_id or self.interior.active:
+            self.pending_predicted_inputs.clear()
+            return
+
+        predictable = not (
+            crouch
+            or jump
+            or prone_toggle
+            or str(local.pose) in {"crouch", "prone", "jump", "double_jump"}
+        )
+        sample = {
+            "sequence": sequence,
+            "x": float(input_x),
+            "y": float(input_y),
+            "boost": bool(boost),
+            "dt": dt,
+            "level": int(local.level),
+            "predictable": predictable,
+        }
+        self.pending_predicted_inputs.append(sample)
+        if len(self.pending_predicted_inputs) > 180:
+            del self.pending_predicted_inputs[:-180]
+        if not predictable or dt <= 0.0:
+            return
+
+        previous_target_x, previous_target_y = local.target_x, local.target_y
+        predicted_x, predicted_y = self.predict_on_foot_step(
+            previous_target_x,
+            previous_target_y,
+            float(input_x),
+            float(input_y),
+            bool(boost),
+            dt,
+            int(local.level),
+        )
+        local.target_x = predicted_x
+        local.target_y = predicted_y
+        # Apply the new input displacement immediately while retaining any small
+        # reconciliation offset for RemotePlayer.smooth() to settle naturally.
+        local.render_x += predicted_x - previous_target_x
+        local.render_y += predicted_y - previous_target_y
+
+    def reconcile_local_on_foot(
+        self,
+        player: RemotePlayer,
+        authoritative_x: float,
+        authoritative_y: float,
+        velocity_x: float,
+        velocity_y: float,
+        aim: float,
+        flags: int,
+        level: int,
+        acknowledged_sequence: int,
+    ) -> None:
+        if flags & MOVEMENT_FLAG_IN_VEHICLE:
+            self.pending_predicted_inputs.clear()
+            player.update_from_movement(
+                authoritative_x, authoritative_y, velocity_x, velocity_y,
+                aim, flags, level,
+            )
+            return
+
+        self.pending_predicted_inputs = [
+            sample for sample in self.pending_predicted_inputs
+            if int(sample["sequence"]) > acknowledged_sequence
+        ]
+        replay_x, replay_y = authoritative_x, authoritative_y
+        for sample in self.pending_predicted_inputs:
+            if not sample["predictable"] or int(sample["level"]) != level:
+                continue
+            replay_x, replay_y = self.predict_on_foot_step(
+                replay_x,
+                replay_y,
+                float(sample["x"]),
+                float(sample["y"]),
+                bool(sample["boost"]),
+                float(sample["dt"]),
+                level,
+            )
+
+        error = math.hypot(player.render_x - replay_x, player.render_y - replay_y)
+        self.prediction_error = error
+        if error > 0.5:
+            self.prediction_corrections += 1
+        player.update_from_movement(
+            replay_x, replay_y, velocity_x, velocity_y, aim, flags, level
+        )
+        if error >= self.prediction_snap_distance:
+            player.render_x = replay_x
+            player.render_y = replay_y
+
     def process_movement_packet(self, message: dict) -> None:
         try:
             movement_tick = int(message["t"])
@@ -1944,7 +2117,11 @@ class Game:
         if movement_tick <= self.last_movement_tick:
             return
         self.last_movement_tick = movement_tick
-        self.apply_input_ack(message.get("a"))
+        try:
+            acknowledged_sequence = int(message.get("a", -1))
+        except (TypeError, ValueError):
+            acknowledged_sequence = -1
+        self.apply_input_ack(acknowledged_sequence)
 
         player_rows = message.get("p", [])
         if isinstance(player_rows, list):
@@ -1956,15 +2133,22 @@ class Game:
                     # Rich snapshots remain responsible for spawning entities.
                     continue
                 try:
-                    player.update_from_movement(
-                        dequantize_movement_position(row[1]),
-                        dequantize_movement_position(row[2]),
-                        float(row[3]),
-                        float(row[4]),
-                        dequantize_movement_angle(row[5]),
-                        int(row[6]),
-                        int(row[7]),
-                    )
+                    x = dequantize_movement_position(row[1])
+                    y = dequantize_movement_position(row[2])
+                    velocity_x = float(row[3])
+                    velocity_y = float(row[4])
+                    aim = dequantize_movement_angle(row[5])
+                    flags = int(row[6])
+                    level = int(row[7])
+                    if player.id == self.local_id:
+                        self.reconcile_local_on_foot(
+                            player, x, y, velocity_x, velocity_y, aim,
+                            flags, level, acknowledged_sequence,
+                        )
+                    else:
+                        player.update_from_movement(
+                            x, y, velocity_x, velocity_y, aim, flags, level
+                        )
                 except (TypeError, ValueError, OverflowError):
                     continue
 
@@ -2009,6 +2193,9 @@ class Game:
                 if self.connected:
                     self.last_movement_tick = -1
                     self.input_ack_sequence = -1
+                    self.pending_predicted_inputs.clear()
+                    self.last_prediction_sample = time.monotonic()
+                    self.prediction_error = 0.0
                 elif not self.network.fatal:
                     self.notice = "Disconnected - reconnecting..."
                     self.notice_until = time.monotonic() + 2.0
@@ -2125,7 +2312,18 @@ class Game:
                     seen.add(pid)
                     if pid not in self.players:
                         self.players[pid] = RemotePlayer(data)
-                    self.players[pid].update_from_snapshot(data)
+                    update_data = data
+                    if (
+                        pid == self.local_id
+                        and not bool(data.get("in_vehicle", False))
+                        and not str(data.get("interior_id", ""))
+                    ):
+                        # Compact movement acknowledgements own local on-foot
+                        # position. Rich snapshots still update appearance/state.
+                        update_data = dict(data)
+                        update_data["x"] = self.players[pid].target_x
+                        update_data["y"] = self.players[pid].target_y
+                    self.players[pid].update_from_snapshot(update_data)
                 for pid in list(self.players):
                     if pid not in seen and pid != self.local_id:
                         del self.players[pid]
@@ -2385,14 +2583,20 @@ class Game:
         if math.hypot(x, y) > 0.05 and not in_vehicle:
             body_aim = math.atan2(y, x)
 
+        sequence = self.next_input_sequence()
+        jump = bool(self.jump_request_pending and not blocked_actions)
+        prone_toggle = bool(self.prone_toggle_pending and not blocked_actions)
         payload = {
-            "type": "input", "sequence": self.next_input_sequence(),
+            "type": "input", "sequence": sequence,
             "x": x, "y": y, "aim": body_aim, "boost": boost,
             "handbrake": handbrake,
-            "crouch": crouch, "jump": bool(self.jump_request_pending and not blocked_actions),
-            "prone_toggle": bool(self.prone_toggle_pending and not blocked_actions),
+            "crouch": crouch, "jump": jump,
+            "prone_toggle": prone_toggle,
         }
         self.network.send(payload)
+        self.record_and_apply_on_foot_prediction(
+            sequence, x, y, boost, crouch, jump, prone_toggle, now
+        )
         self.jump_request_pending = False
         self.prone_toggle_pending = False
 
@@ -2568,6 +2772,8 @@ class Game:
             "type": "input", "sequence": self.next_input_sequence(),
             "x": 0.0, "y": 0.0, "aim": body_aim,
         })
+        self.pending_predicted_inputs.clear()
+        self.last_prediction_sample = time.monotonic()
         self.notice = f"Entering {self.interior_display_name(info)}..."
         self.notice_until = time.monotonic() + 1.5
         return True
@@ -4314,6 +4520,7 @@ class Game:
             (f"RATES            input {NETWORK_SEND_RATE}  movement {self.server_movement_rate:.0f}  snapshot {self.server_snapshot_rate:.0f} Hz", TEXT_COLOR),
             (f"AMBIENT          simulation {self.server_ambient_rate:.0f} Hz", TEXT_COLOR),
             (f"INPUT ACK        sent {self.input_sequence}  ack {self.input_ack_sequence}  pending {pending_inputs}", TEXT_COLOR),
+            (f"PREDICTION       error {self.prediction_error:.2f}px  corrections {self.prediction_corrections}  replay {len(self.pending_predicted_inputs)}", TEXT_COLOR),
             (f"NETWORK ZONE     {self.server_network_zone_id} ({zone_x},{zone_y})  size {self.network_zone_size}px", TEXT_COLOR),
             (f"SUBSCRIPTIONS    {subscribed} zones (3x3 target)", (145, 226, 160) if subscribed == 9 else (255, 92, 92)),
             (f"RELEVANT         players {len(self.players)}  NPCs {len(self.npcs)}  vehicles {len(self.vehicles)}  bikes {len(self.bicycles)}", TEXT_COLOR),
