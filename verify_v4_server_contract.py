@@ -213,6 +213,12 @@ def main() -> int:
                   "buzzer_directory", "exit_reentry"):
         assert token in housing_source, f"v4 housing network audit missing {token}"
     assert (Path(__file__).resolve().parent / "RUN_V4_HOUSING_TEST.bat").is_file()
+    prediction_audit = Path(__file__).resolve().parent / "tools" / "v4_prediction_audit.py"
+    prediction_source = prediction_audit.read_text(encoding="utf-8")
+    for token in ("record_and_apply_on_foot_prediction", "reconcile_local_on_foot",
+                  "pending_predicted_inputs", "prediction_snap_distance",
+                  "MOVEMENT_FLAG_IN_VEHICLE"):
+        assert token in prediction_source, f"v4 prediction audit missing {token}"
     print("v4 server contract OK: 60 Hz authority + 3x3 zones + prediction/telemetry + housing/privacy")
     return 0
 
