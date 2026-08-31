@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "release_version_changed": false,
+  "approved_masters": [
+    "assets/generated_v4_transitions/source/approved_building_transitions.png",
+    "assets/generated_v4_transitions/source/approved_buzzer_and_signal.png",
+    "assets/generated_v4_transitions/source/approved_fire_escape_ladder.png",
+    "assets/generated_v4_transitions/source/approved_traffic_signal_matrix.png"
+  ],
+  "catalog_objects": 14,
+  "traffic_states": [
+    "traffic_red_not_clear",
+    "traffic_yellow_not_clear",
+    "traffic_green_not_clear",
+    "traffic_red_clear",
+    "traffic_yellow_clear",
+    "traffic_green_clear"
+  ],
+  "traffic_canvas_px": [
+    383,
+    499
+  ],
+  "traffic_pivot_px": [
+    63,
+    173
+  ],
+  "runtime_interactions": {
+    "entrance_door": 28,
+    "fire_escape_ladder": 28,
+    "entrance_buzzer": 1,
+    "elevator_transition": 2,
+    "roof_access_door": 28
+  },
+  "hooks": {
+    "entrance": "PASS",
+    "buzzer": "PASS",
+    "roof_access": "PASS",
+    "elevator_floors": [
+      0,
+      1
+    ],
+    "ladder_levels": [
+      0,
+      1
+    ]
+  },
+  "demo_signal_count": 4,
+  "serialization": "grid_object_interactions_v1",
+  "collision": "art=none; triggers=independent",
+  "backward_compatibility": "catalog aliases + optional transparent fallback"
+}

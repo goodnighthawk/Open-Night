@@ -143,9 +143,30 @@ def main() -> None:
         OUT / "02_easy_unimplemented_examples.png",
     )
 
-    generated = OUT / "missing_art_concept_source.png"
-    if generated.exists():
-        wrap_concept(generated, OUT / "03_missing_art_concepts.png")
+    generated = [
+        ("Bench", "integrated in v4", "assets/generated_v4_art/urban_bench.png"),
+        ("Mailbox", "integrated in v4", "assets/generated_v4_art/street_mailbox.png"),
+        ("Dumpster", "integrated in v4", "assets/generated_v4_art/alley_dumpster.png"),
+        ("Fire hydrant", "integrated in v4", "assets/generated_v4_art/fire_hydrant.png"),
+        ("Traffic cone", "integrated in v4", "assets/generated_v4_art/traffic_cone.png"),
+        ("Bollard", "integrated in v4", "assets/generated_v4_art/street_bollard.png"),
+        ("Bus shelter", "integrated in v4", "assets/generated_v4_art/bus_shelter.png"),
+        ("Phone box", "integrated in v4", "assets/generated_v4_art/phone_box.png"),
+        ("Stop sign", "integrated in v4", "assets/generated_v4_art/stop_sign.png"),
+        ("Parking sign", "integrated in v4", "assets/generated_v4_art/parking_sign.png"),
+        ("Street tree", "integrated in v4", "assets/generated_v4_art/street_tree.png"),
+        ("Chain fence", "integrated in v4", "assets/generated_v4_art/chain_fence.png"),
+    ]
+    make_sheet(
+        "V4 GENERATED STREET ART",
+        "Approved grunge replacements, now cataloged and placed in the grid runtime",
+        generated,
+        OUT / "04_v4_generated_street_art.png",
+    )
+
+    concept_source = OUT / "missing_art_concept_source.png"
+    if concept_source.exists():
+        wrap_concept(concept_source, OUT / "03_missing_art_concepts.png")
 
 
 if __name__ == "__main__":

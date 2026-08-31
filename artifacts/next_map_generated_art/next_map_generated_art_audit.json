@@ -1,0 +1,57 @@
+{
+  "status": "PASS",
+  "release_version_changed": false,
+  "modular_building_tiles_loaded": 65,
+  "generated_art_catalog_objects_loaded": 29,
+  "buildings": 28,
+  "shape_counts": {
+    "rectangle": 12,
+    "l_corner": 8,
+    "stepped_side": 4,
+    "courtyard": 2,
+    "recessed_edge": 2
+  },
+  "footprint_cells": 876,
+  "inner_corner_cells": 26,
+  "outer_corner_cells": 130,
+  "exact_shared_edge_pairs": 1406,
+  "street_art_instances": 28,
+  "street_art_assets": [
+    "v4_art_bench",
+    "v4_art_bollard",
+    "v4_art_bus_shelter",
+    "v4_art_chain_fence",
+    "v4_art_cone",
+    "v4_art_dumpster",
+    "v4_art_hydrant",
+    "v4_art_mailbox",
+    "v4_art_parking_sign",
+    "v4_art_phone_box",
+    "v4_art_stop_sign",
+    "v4_art_tree",
+    "v4_concept_stray_dog",
+    "v4_concept_trash_cluster"
+  ],
+  "rooftop_art_instances": 44,
+  "rooftop_art_assets": [
+    "rooflayer_aircon",
+    "rooflayer_aircon_large",
+    "rooflayer_blue_roof",
+    "rooflayer_green_roof",
+    "rooflayer_grey_roof",
+    "rooflayer_orange_roof",
+    "rooflayer_water_brown",
+    "rooflayer_water_green",
+    "rooflayer_water_red"
+  ],
+  "doors": 28,
+  "fire_escapes": 28,
+  "roof_hatches": 28,
+  "roof_registration": "exact_generated_footprint",
+  "decorative_collision": "independent_zero_radius",
+  "previews": [
+    "C:\\Users\\Pepperoni\\Documents\\GitHub\\Open-Night\\artifacts\\next_map_generated_art\\next_map_full_runtime.png",
+    "C:\\Users\\Pepperoni\\Documents\\GitHub\\Open-Night\\artifacts\\next_map_generated_art\\next_map_courtyard_closeup.png",
+    "C:\\Users\\Pepperoni\\Documents\\GitHub\\Open-Night\\artifacts\\next_map_generated_art\\next_map_rooftop_closeup.png"
+  ]
+}

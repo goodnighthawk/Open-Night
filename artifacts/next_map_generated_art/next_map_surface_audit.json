@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "release_marker_changed": false,
+  "tile_size_px": 256,
+  "surface_tiles": 69,
+  "road_overlay_objects": 20,
+  "loaded_images": 89,
+  "seamless_edge_audits": 23,
+  "collision_counts": {
+    "sidewalk": 54,
+    "road": 6,
+    "wade": 9
+  },
+  "road_components": 1,
+  "crossing_ramps": 96,
+  "zebra_overlay_instances": 512,
+  "wade_speed_multiplier": 0.55,
+  "vehicle_water_drivable": false,
+  "desktop_server_loader": "shared grid_runtime.load_ground_grid",
+  "preview": "C:\\Users\\Pepperoni\\Documents\\GitHub\\Open-Night\\artifacts\\next_map_generated_art\\next_map_surface_pack_closeup.png"
+}

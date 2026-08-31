@@ -2,6 +2,12 @@
 
 Scope: the current normal playable world, `map_001_gwb_corridor`, using the v4 grid renderer. This distinction matters because the older freeform map CSVs contain proposed street-detail rows that the current grid renderer does not consume.
 
+## v4 integration update
+
+The generated grunge prop set is now part of the v4 grid catalog and appears in 28 mirrored, decorative-only placements. Every placement was checked against the loaded runtime grid and lands on sidewalk/curb cells, not road or building cells.
+
+The temporary concept sheet now supplies the active images for the existing 25 street-door placeholders, 25 fire-escape placeholders, and 25 roof-hatch placeholders. The full concept source and all individual slices are preserved under `assets/generated_v4_art/` for a later replacement pass.
+
 ## Priority list — unimplemented, easy additions first
 
 These already have matching night artwork in `cosmetic_packs/nyc_gta2_callback/sprites/`. None appears as an object in the current ground or roof grid data.
