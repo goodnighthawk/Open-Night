@@ -111,36 +111,82 @@ def curb_straight(pavement: Image.Image, asphalt: Image.Image) -> Image.Image:
     return image
 
 
-def curb_corner(pavement: Image.Image, asphalt: Image.Image, corner: str, inner: bool) -> Image.Image:
-    image = pavement.copy() if inner else asphalt.copy()
+def curb_corner(
+    pavement: Image.Image,
+    asphalt: Image.Image,
+    corner: str,
+    inner: bool,
+    *,
+    shoreline: bool = False,
+) -> Image.Image:
+    """Build one correctly aligned quarter-round material boundary.
+
+    The tile centre is the theoretical sharp corner.  Moving the curve centre
+    half a radius into the selected quadrant makes its straight arms meet the
+    20px curb band at exactly x/y=128.  The old implementation drew a 180-degree
+    ring around the tile centre, which produced the anti-aligned circular caps
+    visible at every workbench junction.
+    """
+    radius = 64
+    cx = radius if corner.endswith("l") else SIZE - radius
+    cy = radius if corner.startswith("t") else SIZE - radius
     mask = Image.new("L", (SIZE, SIZE), 0)
     draw_mask = ImageDraw.Draw(mask)
-    quadrant = {
-        "tl": (0, 0, CURB_CENTER, CURB_CENTER), "tr": (CURB_CENTER, 0, SIZE, CURB_CENTER),
-        "bl": (0, CURB_CENTER, CURB_CENTER, SIZE), "br": (CURB_CENTER, CURB_CENTER, SIZE, SIZE),
-    }[corner]
-    draw_mask.rectangle(quadrant, fill=255)
-    radius = 56
-    cx = CURB_CENTER if corner.endswith("l") else CURB_CENTER
-    cy = CURB_CENTER
+
     if corner == "tl":
-        draw_mask.ellipse((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), fill=255)
+        draw_mask.rectangle((0, 0, cx, CURB_CENTER), fill=255)
+        draw_mask.rectangle((0, 0, CURB_CENTER, cy), fill=255)
     elif corner == "tr":
-        draw_mask.ellipse((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), fill=255)
+        draw_mask.rectangle((cx, 0, SIZE, CURB_CENTER), fill=255)
+        draw_mask.rectangle((CURB_CENTER, 0, SIZE, cy), fill=255)
     elif corner == "bl":
-        draw_mask.ellipse((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), fill=255)
+        draw_mask.rectangle((0, CURB_CENTER, cx, SIZE), fill=255)
+        draw_mask.rectangle((0, cy, CURB_CENTER, SIZE), fill=255)
     else:
-        draw_mask.ellipse((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), fill=255)
-    if inner:
-        image = Image.composite(asphalt, pavement, mask)
-    else:
-        image = Image.composite(pavement, asphalt, mask)
+        draw_mask.rectangle((cx, CURB_CENTER, SIZE, SIZE), fill=255)
+        draw_mask.rectangle((CURB_CENTER, cy, SIZE, SIZE), fill=255)
+    circle = (cx - radius, cy - radius, cx + radius, cy + radius)
+    draw_mask.ellipse(circle, fill=255)
+
+    image = Image.composite(asphalt, pavement, mask) if inner else Image.composite(pavement, asphalt, mask)
     draw = ImageDraw.Draw(image)
-    # A compact curb cap replaces the source pack's broad grey roadway square.
-    if corner in {"tl", "br"}:
-        draw.arc((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), 135, 315, fill=(155, 159, 155), width=12)
-    else:
-        draw.arc((CURB_CENTER - radius, CURB_CENTER - radius, CURB_CENTER + radius, CURB_CENTER + radius), 45, 225, fill=(155, 159, 155), width=12)
+    arc_angles = {"tl": (0, 90), "tr": (90, 180), "bl": (270, 360), "br": (180, 270)}
+    segments = {
+        "tl": (((0, CURB_CENTER), (cx, CURB_CENTER)), ((CURB_CENTER, 0), (CURB_CENTER, cy))),
+        "tr": (((cx, CURB_CENTER), (SIZE, CURB_CENTER)), ((CURB_CENTER, 0), (CURB_CENTER, cy))),
+        "bl": (((0, CURB_CENTER), (cx, CURB_CENTER)), ((CURB_CENTER, cy), (CURB_CENTER, SIZE))),
+        "br": (((cx, CURB_CENTER), (SIZE, CURB_CENTER)), ((CURB_CENTER, cy), (CURB_CENTER, SIZE))),
+    }[corner]
+
+    if shoreline:
+        # A restrained broken foam edge, rather than a concrete curb, follows
+        # the same corner grammar at the river boundary.
+        edge = (175, 181, 158)
+        for start, end in segments:
+            draw.line((*start, *end), fill=edge, width=2)
+        draw.arc(circle, *arc_angles[corner], fill=edge, width=2)
+        return image
+
+    # Paint the road-side shadow first, then the curb band.  Their widths match
+    # curb_straight(), so every arm registers without a grey square or seam.
+    for width, color in ((26, (24, 28, 30)), (20, (91, 94, 91))):
+        for start, end in segments:
+            draw.line((*start, *end), fill=color, width=width)
+        draw.arc(circle, *arc_angles[corner], fill=color, width=width)
+
+    # The narrow highlight sits on the pavement side of the band and makes the
+    # curve readable without turning it into a bright circular outline.
+    inset = radius - CURB_HALF
+    highlight_circle = (cx - inset, cy - inset, cx + inset, cy + inset)
+    highlight_segments = {
+        "tl": (((0, CURB_CENTER - CURB_HALF), (cx, CURB_CENTER - CURB_HALF)), ((CURB_CENTER - CURB_HALF, 0), (CURB_CENTER - CURB_HALF, cy))),
+        "tr": (((cx, CURB_CENTER - CURB_HALF), (SIZE, CURB_CENTER - CURB_HALF)), ((CURB_CENTER + CURB_HALF, 0), (CURB_CENTER + CURB_HALF, cy))),
+        "bl": (((0, CURB_CENTER + CURB_HALF), (cx, CURB_CENTER + CURB_HALF)), ((CURB_CENTER - CURB_HALF, cy), (CURB_CENTER - CURB_HALF, SIZE))),
+        "br": (((cx, CURB_CENTER + CURB_HALF), (SIZE, CURB_CENTER + CURB_HALF)), ((CURB_CENTER + CURB_HALF, cy), (CURB_CENTER + CURB_HALF, SIZE))),
+    }[corner]
+    for start, end in highlight_segments:
+        draw.line((*start, *end), fill=(157, 162, 158), width=3)
+    draw.arc(highlight_circle, *arc_angles[corner], fill=(157, 162, 158), width=3)
     return image
 
 
@@ -161,9 +207,10 @@ def marking(kind: str) -> Image.Image:
     image = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     white = (211, 214, 207, 232)
+    crossing_white = (181, 186, 180, 190)
     yellow = (194, 157, 58, 235)
     if kind == "white_crossing_piece":
-        draw.rounded_rectangle((74, 12, 182, 244), radius=5, fill=white)
+        draw.rounded_rectangle((74, 12, 182, 244), radius=5, fill=crossing_white)
         digest = hashlib.sha256(kind.encode("ascii")).digest()
         for index in range(24):
             x = 80 + digest[index % len(digest)] % 96
@@ -319,8 +366,8 @@ def main() -> None:
     for side, angle in rotations.items():
         tile(f"shoreline_{side}", shore_top.rotate(-angle), f"shoreline/{side}.png", "sidewalk", "shoreline")
     for corner in ("tl", "tr", "bl", "br"):
-        outer = curb_corner(damp_sand, shallow_water, corner, False)
-        inner = curb_corner(damp_sand, shallow_water, corner, True)
+        outer = curb_corner(damp_sand, shallow_water, corner, False, shoreline=True)
+        inner = curb_corner(damp_sand, shallow_water, corner, True, shoreline=True)
         tile(f"shoreline_{corner}_outer", outer, f"shoreline/{corner}_outer.png", "sidewalk", "shoreline")
         tile(f"shoreline_{corner}_inner", inner, f"shoreline/{corner}_inner.png", "sidewalk", "shoreline")
 

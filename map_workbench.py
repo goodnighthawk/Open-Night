@@ -72,6 +72,30 @@ def number(row: dict, key: str, default: float = 0.0) -> float:
         return default
 
 
+def crossing_curb_offset_world(
+    feature: dict,
+    road_by_id: dict[str, dict],
+    road_widths: dict[str, float],
+    regular_road_width: float,
+) -> float:
+    """Return the crossing endpoint measured from its centre to either curb."""
+    authored_span_world = number(feature, "length", regular_road_width + 130.0)
+    fallback = max(0.0, (authored_span_world - 130.0) * 0.5)
+    group = str(feature.get("group", ""))
+    if ":" not in group:
+        return fallback
+    junction, approach = group.rsplit(":", 1)
+    if "+" not in junction:
+        return fallback
+    horizontal_id, vertical_id = junction.split("+", 1)
+    crossed_id = vertical_id if approach in {"north", "south"} else horizontal_id
+    crossed_road = road_by_id.get(crossed_id)
+    if crossed_road is None:
+        return fallback
+    road_class = str(crossed_road.get("road_class", "residential"))
+    return road_widths.get(road_class, regular_road_width) * 0.5
+
+
 def watched_paths() -> list[Path]:
     files = [
         GRID_DATA_DIR / "ground_grid.json",
@@ -686,11 +710,14 @@ class MapWorkbench:
 
         horizontal = [road for road in land_roads if road.get("orientation") == "horizontal"]
         vertical = [road for road in land_roads if road.get("orientation") == "vertical" and abs(number(road, "x2") - number(road, "x1")) < 1]
+        # A junction exposes the convex corner of each surrounding block.  The
+        # asset name now follows that actual screen quadrant; the previous
+        # opposite-quadrant inner-corner mapping made every cap anti-aligned.
         corner_assets = (
-            (-1, -1, "curb_br_inner"),
-            (1, -1, "curb_bl_inner"),
-            (-1, 1, "curb_tr_inner"),
-            (1, 1, "curb_tl_inner"),
+            (-1, -1, "curb_tl_outer"),
+            (1, -1, "curb_tr_outer"),
+            (-1, 1, "curb_bl_outer"),
+            (1, 1, "curb_br_outer"),
         )
         for hroad in horizontal:
             iy = number(hroad, "y1")
@@ -895,6 +922,15 @@ class MapWorkbench:
     def _draw_street_features(self, target: pygame.Surface) -> None:
         if not self.show_street_detail:
             return
+        regular_road_width = float(self.layout_contract.get("regular_road_width", 420))
+        bridge_road_width = float(self.layout_contract.get("gwb_road_width", 1050))
+        road_widths = {
+            "bridge": bridge_road_width,
+            "primary": regular_road_width,
+            "secondary": regular_road_width,
+            "residential": regular_road_width,
+        }
+        road_by_id = {str(road.get("street_id", "")): road for road in self.layout.get("streets", [])}
         for row in self.layout.get("street_features", []):
             kind = row.get("kind", "")
             p = self.world_to_screen((number(row, "x"), number(row, "y")))
@@ -902,32 +938,39 @@ class MapWorkbench:
             if kind == "crosswalk":
                 # `rotation` is the pedestrian crossing axis. Zebra bars run
                 # perpendicular to that axis (parallel to traffic), and repeat
-                # across the full curb-to-curb span.
-                span_world = number(row, "length", 360)
-                pieces = max(5, int(round(span_world / 62)))
-                stripe_canvas = max(6, int(150 * self.camera.zoom))
-                span = max(8, int(span_world * self.camera.zoom))
+                # across the crossed road's true curb-to-curb span.  Legacy
+                # feature rows include a 65-unit overrun on both ends; using
+                # that value directly painted the outer bars on the sidewalk.
+                curb_offset_world = crossing_curb_offset_world(row, road_by_id, road_widths, regular_road_width)
+                crossing_span_world = curb_offset_world * 2.0
+                pieces = max(5, int(round(crossing_span_world / 62)))
+                stripe_width = max(4, int(56 * self.camera.zoom))
+                stripe_length = max(8, int(144 * self.camera.zoom))
+                span = max(8, int(crossing_span_world * self.camera.zoom))
                 for index in range(pieces):
                     offset = -span / 2 + (index + 0.5) * span / pieces
                     if rotation % 180 == 90:
                         center = (p[0], round(p[1] + offset))
-                        image = self._catalog_art("mark_zebra_crossing", (stripe_canvas, stripe_canvas), 90)
+                        image = self._catalog_art("mark_zebra_crossing", (stripe_width, stripe_length), 90)
                     else:
                         center = (round(p[0] + offset), p[1])
-                        image = self._catalog_art("mark_zebra_crossing", (stripe_canvas, stripe_canvas))
+                        image = self._catalog_art("mark_zebra_crossing", (stripe_width, stripe_length))
                     target.blit(image, image.get_rect(center=center))
                 # Ramps are authored only at actual crossings, never scattered
-                # randomly along a curb or on the river/beach side.
+                # randomly along a curb or on the river/beach side.  Their
+                # centers follow the crossed road's real curb line, not the
+                # zebra artwork's intentionally longer visual span.
+                curb_offset = curb_offset_world * self.camera.zoom
                 ramp_px = max(5, int(CITY_BLOCK_TILE_WORLD * self.camera.zoom))
                 if rotation % 180 == 90:
                     ramps = (
-                        ((p[0], round(p[1] - span / 2)), "curb_ramp_top"),
-                        ((p[0], round(p[1] + span / 2)), "curb_ramp_bottom"),
+                        ((p[0], round(p[1] - curb_offset)), "curb_ramp_top"),
+                        ((p[0], round(p[1] + curb_offset)), "curb_ramp_bottom"),
                     )
                 else:
                     ramps = (
-                        ((round(p[0] - span / 2), p[1]), "curb_ramp_left"),
-                        ((round(p[0] + span / 2), p[1]), "curb_ramp_right"),
+                        ((round(p[0] - curb_offset), p[1]), "curb_ramp_left"),
+                        ((round(p[0] + curb_offset), p[1]), "curb_ramp_right"),
                     )
                 for center, asset_id in ramps:
                     ramp = self._catalog_art(asset_id, (ramp_px, ramp_px))

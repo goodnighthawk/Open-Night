@@ -15,6 +15,8 @@ DATA = ROOT / "dev_tools" / "map_generator" / "working_cosmetics" / "approved_v4
 GENERATOR_TOOLS = ROOT / "dev_tools" / "map_generator" / "tools"
 sys.path.insert(0, str(GENERATOR_TOOLS))
 import build_v4_approved_sprite_layout as layout_builder  # noqa: E402
+sys.path.insert(0, str(ROOT))
+from map_workbench import crossing_curb_offset_world  # noqa: E402
 
 
 def rows(name: str) -> list[dict[str, str]]:
@@ -77,10 +79,25 @@ def main() -> None:
     assert all(row["controller"] == row["group"] for row in signals)
     assert all(len(row["cycle_states"].split("|")) == 6 for row in signals)
     crossing_groups: dict[str, set[str]] = defaultdict(set)
+    road_by_id = {road["street_id"]: road for road in streets}
+    road_widths = {
+        "bridge": float(contract["gwb_road_width"]),
+        "primary": float(contract["regular_road_width"]),
+        "secondary": float(contract["regular_road_width"]),
+        "residential": float(contract["regular_road_width"]),
+    }
     for crossing in crossings:
         junction, approach = crossing["group"].rsplit(":", 1)
         crossing_groups[junction].add(approach)
         assert float(crossing["length"]) >= 550
+        # The authored stripe envelope contains 65 units of legacy overrun on
+        # both ends; visible bars and tactile ramps must stop on the true curb.
+        assert crossing_curb_offset_world(
+            crossing,
+            road_by_id,
+            road_widths,
+            float(contract["regular_road_width"]),
+        ) == float(contract["regular_road_width"]) / 2
     assert crossing_groups
     signal_rotation = {"north": "180", "south": "0", "west": "90", "east": "270"}
     rotation_signal = {value: key for key, value in signal_rotation.items()}
@@ -165,6 +182,24 @@ def main() -> None:
             assert image.getchannel("A").getextrema()[0] == 0, f"opaque exterior box: {tile_id}"
     assert {f"water_deep_ripple_{index}" for index in range(3)} <= surface_catalog["tiles"].keys()
     assert {"mark_dashed_white_lane", "mark_zebra_crossing"} <= surface_catalog["objects"].keys()
+    crossing_art = Image.open(ROOT / surface_catalog["objects"]["mark_zebra_crossing"]["image"]).convert("RGBA")
+    crossing_alpha = crossing_art.getchannel("A")
+    assert crossing_alpha.getextrema()[1] <= 190, "zebra marking reverted to an opaque white slab"
+    assert sum(crossing_alpha.histogram()[1:]) < 256 * 256 // 2
+
+    pavement = Image.open(ROOT / surface_catalog["tiles"]["pavement_standard_variant_0"]["image"]).convert("RGB")
+    asphalt = Image.open(ROOT / surface_catalog["tiles"]["road_asphalt_variant_0"]["image"]).convert("RGB")
+    corner_samples = {
+        "tl": ((90, 90), (224, 224), (124, 124)),
+        "tr": ((166, 90), (32, 224), (132, 124)),
+        "bl": ((90, 166), (224, 32), (124, 132)),
+        "br": ((166, 166), (32, 32), (132, 132)),
+    }
+    for corner, (pavement_point, asphalt_point, rounded_cutout) in corner_samples.items():
+        image = Image.open(ROOT / surface_catalog["tiles"][f"curb_{corner}_outer"]["image"]).convert("RGB")
+        assert image.getpixel(pavement_point) == pavement.getpixel(pavement_point)
+        assert image.getpixel(asphalt_point) == asphalt.getpixel(asphalt_point)
+        assert image.getpixel(rounded_cutout) == asphalt.getpixel(rounded_cutout), f"curb_{corner}_outer is not quarter-round"
     assert {
         "entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition",
         "fire_escape_ladder", "traffic_red_not_clear", "traffic_yellow_not_clear",
