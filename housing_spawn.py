@@ -29,8 +29,8 @@ def select_house_for_account(
     The account key is never stored here. SHA-256 is used only to spread accounts
     across the authored house pool deterministically, which gives a returning
     player the same preferred apartment when it is free. v4.0 permits only one
-    connected resident per authored floor; collision resolution walks the pool
-    deterministically and returns no apartment when every floor is occupied.
+    process-lifetime reservation per authored floor; collision resolution walks
+    the pool deterministically and returns no apartment when every floor is reserved.
     """
     houses = blank_house_interiors(map_config)
     if not houses:
@@ -80,6 +80,25 @@ def house_login_state(
     if not room_id:
         return None
     return room_id, entry_x, entry_y, int(START_TILE[0]), int(START_TILE[1])
+
+
+def reserved_house_login_state(
+    map_config: dict,
+    interior_id: str,
+) -> tuple[str, float, float, int, int] | None:
+    """Restore an in-memory apartment reservation on account reconnect."""
+    wanted = str(interior_id).strip()
+    house = next(
+        (row for row in blank_house_interiors(map_config) if str(row.get("id", "")).strip() == wanted),
+        None,
+    )
+    if house is None:
+        return None
+    try:
+        entry_x, entry_y = float(house["entry"][0]), float(house["entry"][1])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
+    return wanted, entry_x, entry_y, int(START_TILE[0]), int(START_TILE[1])
 
 
 def overflow_exterior_spawn(map_config: dict, account_key: str) -> tuple[float, float] | None:

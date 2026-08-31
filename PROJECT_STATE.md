@@ -34,9 +34,9 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 
 - Reuse the existing interior system rather than create a second coordinate system for v4.0.
 - Author a distributed `blank_house` interior pool against existing building footprints.
-- Select a preferred apartment deterministically from the account key, then walk the pool until an unoccupied first floor is found.
-- Assign at most one connected player to each authored floor. Current housing capacity is 14 while the connection limit remains higher.
-- When capacity is exhausted, spawn the overflow player outdoors at a stable random-looking apartment entrance and expose the overflow count as planning data for v5.0.
+- Select a preferred apartment deterministically from the account key, then walk the pool until an unreserved first floor is found.
+- Assign each authored floor to at most one account. The in-memory reservation survives disconnects and is released only when the server process restarts for an update; the same account reclaims its exact floor on reconnect. Current housing capacity is 14 while the connection limit remains higher.
+- When all floors are reserved, spawn the overflow player outdoors at a stable random-looking apartment entrance and expose the number of currently connected unhoused players as planning data for v5.0.
 - Do not generate, append, or mutate housing geometry in v4.0. Additional housing generation belongs exclusively to the v5.0 map/release project.
 - Keep current outdoor `login_spawn` points as recovery/fallback locations if no valid house is available.
 - Login should send authoritative interior state immediately so the first playable frame is inside the house.
@@ -46,6 +46,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 - The 2026-08-30 real-protocol housing audit connected 15 simultaneous clients, assigned 14 distinct first floors, placed player 15 outside an authored buzzer, and passed label/privacy plus exit/re-entry checks.
 - A live 15-player client view confirmed the red top-right `SERVER POPULATION 15/14` display and the authorized `1st Floor - <username>'s Apartment` buzzer/minimap label.
+- Reservation state is process-local, not stored in MySQL: offline assignments remain protected and buzzer-visible until the next server restart/update, while a reconnecting account receives the same apartment.
 
 ## Current next pass
 

@@ -20,6 +20,8 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Author a distributed pool of blank houses across Fort Lee and Washington Heights.
 - [x] Add stable pseudo-random preferred-apartment selection with occupied-floor avoidance.
 - [x] Integrate atomic login assignment with one connected player per first floor.
+- [x] Keep assigned apartments reserved across disconnects until the next server restart/update and restore the exact floor when that account reconnects.
+- [x] Keep v4.0 reservations process-local rather than adding database persistence.
 - [x] Start the player in the assigned room on the first playable frame.
 - [ ] Preserve outdoor login spawns as a safe recovery fallback only.
 - [x] Verify exit places the player at the correct exterior entrance and re-entry works through the real network protocol.
@@ -31,6 +33,7 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Enforce self/mutually-accepted-friend/nearby-buzzer visibility for apartment residency listings; one-sided requests reveal nothing.
 - [x] Keep v4.0 friend saves device-local; reciprocal online saves define mutual acceptance for this release.
 - [x] Network-check authorized directory labels plus self/mutual-friend/buzzer access and one-sided/distant privacy.
+- [x] Network-check that an offline reservation remains buzzer-visible, blocks reassignment, and returns to its reconnecting account.
 - [x] Visually inspect the buzzer panel and its authorized apartment label in a live overflow client.
 - [x] Runtime-check the red top-right population/capacity counter at `15/14`.
 

@@ -83,7 +83,12 @@ from gameplay.settings import load_settings
 from gameplay.spatial import build_spatial_grid, nearby_from_grid, nearby_at
 from character_catalog import custom_options as character_custom_options, preset_options as character_preset_options, profile_parts as character_profile_parts
 from interior_layout import START_TILE as INTERIOR_START_TILE, interior_step
-from housing_spawn import blank_house_interiors, house_login_state, overflow_exterior_spawn
+from housing_spawn import (
+    blank_house_interiors,
+    house_login_state,
+    overflow_exterior_spawn,
+    reserved_house_login_state,
+)
 from versioning import GAME_VERSION
 from grid_runtime import ground_grid_enabled, load_ground_grid, grid_network_metadata
 from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES, get_game_mode
@@ -265,7 +270,7 @@ def server_info_payload(server_name: str, game_port: int, max_players: int, map_
         "players": len(clients),
         "max_players": int(max_players),
         "housing_capacity": housing_capacity,
-        "housing_overflow": max(0, len(clients) - housing_capacity),
+        "housing_overflow": housing_overflow_count(),
         "version": SERVER_VERSION,
         "map_id": map_config["id"],
         "map_name": map_config["name"],
@@ -396,6 +401,14 @@ class ClientSession:
     last_bug_report_time: float = 0.0
     bug_reports_this_session: int = 0
     bug_rate_key: str = ""
+
+
+@dataclass
+class ApartmentReservation:
+    """Process-lifetime ownership for one authored v4.0 first floor."""
+    account_key: str
+    interior_id: str
+    resident_name: str
 
 
 def reset_on_foot_actions(session: ClientSession) -> None:
@@ -1626,6 +1639,9 @@ def update_traffic(dt: float, sessions: list[ClientSession], server_time: float)
 
 clients: dict[str, ClientSession] = {}
 clients_lock = asyncio.Lock()
+# Apartments remain reserved for the assigning account until this server process
+# restarts. v4.0 intentionally does not persist these reservations to MySQL.
+apartment_reservations: dict[str, ApartmentReservation] = {}
 trade_offers: dict[str, tuple[str, float]] = {}
 # Development-only fallback when --memory-db is selected.
 memory_accounts: dict[str, dict] = {}
@@ -1634,12 +1650,18 @@ memory_sms_messages: list[dict] = []
 bug_report_source_times: dict[str, float] = {}
 
 
+def housing_overflow_count(sessions: list[ClientSession] | None = None) -> int:
+    """Count online players without housing, including reservation pressure."""
+    active = list(clients.values()) if sessions is None else sessions
+    return sum(1 for session in active if not session.apartment_interior_id)
+
+
 def print_machine_status() -> None:
     """Emit a small machine-readable line for the local server-control launcher."""
     housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
     payload = {"players": len(clients), "max_players": MAX_PLAYERS,
                "housing_capacity": housing_capacity,
-               "housing_overflow": max(0, len(clients) - housing_capacity), "map_id": ACTIVE_MAP_ID,
+               "housing_overflow": housing_overflow_count(), "map_id": ACTIVE_MAP_ID,
                "traffic_cars": sum(1 for c in traffic_vehicles if not c.parked),
                "parked_cars": sum(1 for c in traffic_vehicles if c.parked),
                "bicycles": len(bicycles), "npcs": len(npc_pedestrians),
@@ -2640,15 +2662,29 @@ def _near_apartment_buzzer(viewer: ClientSession, interior_id: str) -> bool:
 
 def _can_view_apartment_residency(viewer: ClientSession, resident: ClientSession) -> bool:
     """Enforce self/friend/buzzer visibility for apartment residency."""
-    if viewer is resident:
+    reservation = ApartmentReservation(
+        account_key=resident.phone,
+        interior_id=resident.apartment_interior_id,
+        resident_name=resident.player.name,
+    )
+    return _can_view_apartment_reservation(viewer, reservation, resident)
+
+
+def _can_view_apartment_reservation(
+    viewer: ClientSession,
+    reservation: ApartmentReservation,
+    resident: ClientSession | None,
+) -> bool:
+    """Apply the same privacy rules to online and offline reservations."""
+    if viewer.phone == reservation.account_key:
         return True
-    mutual_friends = (
-        resident.player.name.casefold() in viewer.friend_names
+    mutual_friends = resident is not None and (
+        reservation.resident_name.casefold() in viewer.friend_names
         and viewer.player.name.casefold() in resident.friend_names
     )
     if mutual_friends:
         return True
-    return _near_apartment_buzzer(viewer, resident.apartment_interior_id)
+    return _near_apartment_buzzer(viewer, reservation.interior_id)
 
 
 def _interior_state_payload(player: PlayerState) -> dict:
@@ -3781,12 +3817,23 @@ async def client_handler(websocket: ServerConnection) -> None:
                 # makes the hard limit atomic across simultaneous account loads.
                 login_rejection = "full"
             else:
+                reservation = apartment_reservations.get(phone)
                 occupied = {
-                    existing.apartment_interior_id for existing in clients.values()
-                    if existing.apartment_interior_id
+                    reserved.interior_id for reserved in apartment_reservations.values()
+                    if reserved.interior_id
                 }
                 spawn_x, spawn_y = choose_safe_player_spawn(ACTIVE_MAP)
-                login_house = house_login_state(ACTIVE_MAP, phone, occupied)
+                login_house = (
+                    reserved_house_login_state(ACTIVE_MAP, reservation.interior_id)
+                    if reservation is not None else None
+                )
+                if reservation is not None and login_house is None:
+                    # A hot-loaded map contract must never retain a reservation
+                    # for an apartment that no longer exists.
+                    apartment_reservations.pop(phone, None)
+                    reservation = None
+                if reservation is None:
+                    login_house = house_login_state(ACTIVE_MAP, phone, occupied)
                 interior_id = ""
                 interior_x = interior_y = 0
                 interior_aim = 0.0
@@ -3818,6 +3865,12 @@ async def client_handler(websocket: ServerConnection) -> None:
                     apartment_interior_id=interior_id,
                     bug_rate_key=rate_key,
                 )
+                if interior_id:
+                    apartment_reservations[phone] = ApartmentReservation(
+                        account_key=phone,
+                        interior_id=interior_id,
+                        resident_name=name,
+                    )
                 clients[player_id] = session
             server_population = len(clients)
         if login_rejection == "duplicate":
@@ -3840,7 +3893,7 @@ async def client_handler(websocket: ServerConnection) -> None:
             "server_version": SERVER_VERSION,
             "server_population": server_population,
             "housing_capacity": housing_capacity,
-            "housing_overflow": max(0, server_population - housing_capacity),
+            "housing_overflow": housing_overflow_count(),
             "server_metrics": SERVER_TICK_METRICS.public_dict(),
             "last_processed_input_sequence": session.last_processed_input_sequence,
             "account": {
@@ -4375,6 +4428,7 @@ async def snapshot_loop() -> None:
         await asyncio.sleep(interval)
         async with clients_lock:
             sessions = list(clients.values())
+            reservations = list(apartment_reservations.values())
         housing_capacity = len(blank_house_interiors(ACTIVE_MAP))
         server_time = time.time()
         push_map_roster = server_time - last_map_roster_push >= 1.0 / MAP_ROSTER_RATE
@@ -4461,7 +4515,7 @@ async def snapshot_loop() -> None:
                 "server_time": server_time,
                 "server_population": len(sessions),
                 "housing_capacity": housing_capacity,
-                "housing_overflow": max(0, len(sessions) - housing_capacity),
+                "housing_overflow": housing_overflow_count(sessions),
                 "server_metrics": SERVER_TICK_METRICS.public_dict(),
                 "last_processed_input_sequence": session.last_processed_input_sequence,
                 "chunk": [pcx, pcy],
@@ -4488,14 +4542,15 @@ async def snapshot_loop() -> None:
                     and resident.player.name.casefold() in session.friend_names
                     and session.player.name.casefold() in resident.friend_names
                 )
-                for resident in sessions:
-                    is_resident = bool(resident.apartment_interior_id)
-                    if is_resident and _can_view_apartment_residency(session, resident):
+                online_by_account = {resident.phone: resident for resident in sessions}
+                for reservation in reservations:
+                    resident = online_by_account.get(reservation.account_key)
+                    if _can_view_apartment_reservation(session, reservation, resident):
                         apartment_directory.append({
-                            "interior_id": resident.apartment_interior_id,
+                            "interior_id": reservation.interior_id,
                             "floor": 1,
-                            "resident_name": resident.player.name,
-                            "label": f"1st Floor - {resident.player.name}'s Apartment",
+                            "resident_name": reservation.resident_name,
+                            "label": f"1st Floor - {reservation.resident_name}'s Apartment",
                         })
                 payload["map_players"] = map_players
                 payload["apartment_directory"] = apartment_directory

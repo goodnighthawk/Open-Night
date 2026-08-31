@@ -228,6 +228,69 @@ async def exercise_housing(uri: str) -> dict:
         )
         assert reentered.get("interior_id") == first_id
 
+        # Disconnect the resident whose buzzer the overflow player is already
+        # standing beside. The apartment must remain reserved and its protected
+        # buzzer listing must remain readable until the server process restarts.
+        reserved_index = names.index(buzzer_resident)
+        reserved_id = str(
+            welcomes[reserved_index]["account"]["apartment"]["interior_id"]
+        )
+        reserved_phone = f"556{reserved_index + 1:07d}"
+        await sockets[reserved_index].close()
+        offline_buzzer = await receive_matching(
+            overflow_ws,
+            lambda message: message.get("type") == "snapshot"
+            and int(message.get("server_population", 0)) == 14
+            and buzzer_resident in directory_names(message),
+            "offline reserved buzzer listing",
+            timeout=10.0,
+        )
+        assert int(offline_buzzer.get("housing_overflow", 0)) == 1
+
+        # A different account cannot take the disconnected resident's floor.
+        newcomer = await stack.enter_async_context(
+            connect(uri, ping_interval=None, open_timeout=8, close_timeout=0.2)
+        )
+        await newcomer.send(json.dumps({
+            "type": "hello",
+            "name": "Housing16",
+            "phone": "5560000016",
+            "client_version": GAME_VERSION,
+        }))
+        newcomer_welcome = await receive_kind(newcomer, "welcome")
+        assert int(newcomer_welcome["server_population"]) == 15
+        assert newcomer_welcome.get("account", {}).get("apartment") is None
+        assert int(newcomer_welcome.get("housing_overflow", 0)) == 2
+        await newcomer.close()
+        await receive_matching(
+            overflow_ws,
+            lambda message: message.get("type") == "snapshot"
+            and int(message.get("server_population", 0)) == 14,
+            "newcomer disconnect",
+            timeout=10.0,
+        )
+
+        # The original account reclaims the exact reservation instead of being
+        # sent through ordinary collision resolution or the overflow path.
+        returning = await stack.enter_async_context(
+            connect(uri, ping_interval=None, open_timeout=8, close_timeout=0.2)
+        )
+        await returning.send(json.dumps({
+            "type": "hello",
+            "name": buzzer_resident,
+            "phone": reserved_phone,
+            "client_version": GAME_VERSION,
+        }))
+        returning_welcome = await receive_kind(returning, "welcome")
+        returning_apartment = returning_welcome.get("account", {}).get("apartment")
+        assert isinstance(returning_apartment, dict)
+        assert returning_apartment.get("interior_id") == reserved_id
+        assert returning_apartment.get("label") == f"1st Floor - {buzzer_resident}'s Apartment"
+        assert int(returning_welcome.get("housing_overflow", 0)) == 1
+        returning_state = await receive_kind(returning, "interior_state")
+        assert returning_state.get("active") is True
+        assert returning_state.get("interior_id") == reserved_id
+
         return {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "connected_players": 15,
@@ -240,6 +303,9 @@ async def exercise_housing(uri: str) -> dict:
             "mutual_friend_directory": "PASS",
             "buzzer_directory": "PASS",
             "exit_reentry": "PASS",
+            "offline_buzzer_reservation": "PASS",
+            "reservation_blocks_reassignment": "PASS",
+            "reservation_reconnect": "PASS",
             "result": "PASS",
         }
 
@@ -282,7 +348,7 @@ async def run_audit() -> int:
         writer.writeheader()
         writer.writerow(result)
     print("V4 HOUSING NETWORK AUDIT: PASS")
-    print("  14 private first floors + player 15 overflow + privacy/buzzer + exit/re-entry verified")
+    print("  14 private first floors + overflow + privacy/buzzer + restart-lifetime reservation verified")
     print(f"Report: {report_path}")
     print(f"Server log: {server_log}")
     return 0

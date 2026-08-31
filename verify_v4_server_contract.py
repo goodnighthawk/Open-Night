@@ -20,7 +20,7 @@ from common import (
     world_to_network_zone,
 )
 from game_modes import DEFAULT_GAME_MODE_ID, get_game_mode
-from housing_spawn import blank_house_interiors
+from housing_spawn import blank_house_interiors, reserved_house_login_state
 import server
 
 
@@ -131,6 +131,8 @@ def main() -> int:
 
     house = blank_house_interiors(server.ACTIVE_MAP)[0]
     apartment_id = str(house["id"])
+    reserved_login = reserved_house_login_state(server.ACTIVE_MAP, apartment_id)
+    assert reserved_login is not None and reserved_login[0] == apartment_id
     entry_x, entry_y = map(float, house["entry"])
     resident = _session("ResidentX", "15550000001", apartment_id, entry_x, entry_y, active_interior=apartment_id)
     stranger = _session("Stranger", "15550000002", "", entry_x + 1000.0, entry_y + 1000.0)
@@ -210,7 +212,8 @@ def main() -> int:
     housing_audit = Path(__file__).resolve().parent / "tools" / "v4_housing_network_audit.py"
     housing_source = housing_audit.read_text(encoding="utf-8")
     for token in ("distinct_apartments", "one_sided_privacy", "mutual_friend_directory",
-                  "buzzer_directory", "exit_reentry"):
+                  "buzzer_directory", "exit_reentry", "offline_buzzer_reservation",
+                  "reservation_blocks_reassignment", "reservation_reconnect"):
         assert token in housing_source, f"v4 housing network audit missing {token}"
     assert (Path(__file__).resolve().parent / "RUN_V4_HOUSING_TEST.bat").is_file()
     prediction_audit = Path(__file__).resolve().parent / "tools" / "v4_prediction_audit.py"
