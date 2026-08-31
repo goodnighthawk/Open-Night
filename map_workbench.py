@@ -154,7 +154,9 @@ class MapWorkbench:
         self.show_labels = True
         self.show_static_frontier = True
         self.show_transport = True
-        self.show_population = True
+        # Population currently has editor-only markers rather than approved
+        # character art. Keep that diagnostic layer off in the normal map view.
+        self.show_population = False
         self.show_street_detail = True
         self.show_access = True
         self.auto_reload = True
@@ -948,7 +950,7 @@ class MapWorkbench:
         image = self._catalog_art("entrance_buzzer", size)
         target.blit(image, image.get_rect(midbottom=point))
 
-    def _draw_street_features(self, target: pygame.Surface) -> None:
+    def _draw_street_features(self, target: pygame.Surface, *, signals_only: bool = False) -> None:
         if not self.show_street_detail:
             return
         regular_road_width = float(self.layout_contract.get("regular_road_width", 420))
@@ -962,6 +964,8 @@ class MapWorkbench:
         road_by_id = {str(road.get("street_id", "")): road for road in self.layout.get("streets", [])}
         for row in self.layout.get("street_features", []):
             kind = row.get("kind", "")
+            if signals_only != (kind == "traffic_signal"):
+                continue
             p = self.world_to_screen((number(row, "x"), number(row, "y")))
             rotation = int(number(row, "rotation"))
             if kind == "crosswalk":
@@ -1348,6 +1352,11 @@ class MapWorkbench:
         if self.layer == "ground":
             self._draw_transport(target)
         self._draw_population(target)
+        if self.layer == "ground":
+            # Signals use tall pivoted artwork. Draw them as a final fixture
+            # pass so later buildings, trees, vehicles, or debug markers cannot
+            # cut pieces out of the mast after it has been placed.
+            self._draw_street_features(target, signals_only=True)
 
         if self.show_labels:
             for zone in self.layout.get("zones", []):
@@ -1420,7 +1429,7 @@ class MapWorkbench:
         y = 88
         sections = [
             ("VIEW", ["1  New v4 map", "2  Legacy runtime", "G  Ground", "R  Roof", "U  Underground", "F  Fit whole map"]),
-            ("LAYERS", ["T  Traffic + parking", "Y  People + rooftop jobs", "Ctrl+D  Street detail", "B  Doors + roof access"]),
+            ("LAYERS", ["T  Traffic + parking", "Y  Debug population markers", "Ctrl+D  Street detail", "B  Doors + roof access"]),
             ("INSPECT", ["Mouse wheel  Zoom", "Drag / WASD  Pan", "I  Cell/grid overlay", "C  Collision overlay", "O  Object bounds", "L  Labels", "N  Static frontier"]),
             ("WORKFLOW", ["F5  Reload files", "H  Toggle hot reload", "Ctrl+R  Regenerate layers", "P  Save screenshot", "Q / Esc  Close"]),
         ]
