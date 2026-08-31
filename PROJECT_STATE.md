@@ -42,7 +42,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Login should send authoritative interior state immediately so the first playable frame is inside the house.
 - Present the assignment as `1st Floor - <username>'s Apartment`; floor remains a separate field for later multi-floor/unit expansion.
 - Treat residency as private directory data: self and mutually accepted friends can see it globally; one-sided requests reveal nothing, while strangers receive the listing only beside that building's buzzer.
-- Keep v4.0 friend saves device-local. Mutual access exists only while both online clients report each other's saved username; account-backed requests/persistence are deferred.
+- Keep v4.0 friend saves device-local. Mutual access exists only while both online clients report each other's saved username; an offline reservation is visible only at its buzzer because reciprocity cannot be re-verified. Account-backed requests/persistence are deferred.
 - Do not expand this pass into furnishing/customization/ownership; those belong after v4.0.
 - The 2026-08-30 real-protocol housing audit connected 15 simultaneous clients, assigned 14 distinct first floors, placed player 15 outside an authored buzzer, and passed label/privacy plus exit/re-entry checks.
 - A live 15-player client view confirmed the red top-right `SERVER POPULATION 15/14` display and the authorized `1st Floor - <username>'s Apartment` buzzer/minimap label.

@@ -4531,8 +4531,9 @@ async def snapshot_loop() -> None:
             }
             if push_map_roster:
                 # Apartment residents are absent from a recipient's global map
-                # and directory unless they are self, a saved friend, or the
-                # recipient is standing beside that apartment's buzzer.
+                # and directory unless they are self, a mutually confirmed online
+                # friend, or the recipient is standing beside that buzzer. Offline
+                # reservations deliberately remain buzzer-only in v4.0.
                 map_players = [resident.player.map_marker_dict() for resident in sessions]
                 apartment_directory = []
                 mutual_friends = sorted(

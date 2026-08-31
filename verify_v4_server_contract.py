@@ -176,6 +176,17 @@ def main() -> int:
 
     assert server._can_view_apartment_residency(resident, resident), "a resident must see their own listing"
     assert server._can_view_apartment_residency(friend, resident), "mutually accepted friends must see the resident listing"
+    offline_reservation = server.ApartmentReservation(
+        account_key=resident.phone,
+        interior_id=resident.apartment_interior_id,
+        resident_name=resident.player.name,
+    )
+    assert not server._can_view_apartment_reservation(friend, offline_reservation, None), (
+        "offline residents require buzzer proximity because reciprocal device-local friendship cannot be verified"
+    )
+    assert server._can_view_apartment_reservation(buzzer_visitor, offline_reservation, None), (
+        "offline reservations must remain visible at their buzzer"
+    )
     assert not server._can_view_apartment_residency(one_sided, resident), "one-sided friend requests must not reveal residency"
     assert server._can_view_apartment_residency(buzzer_visitor, resident), "a nearby buzzer visitor must see the listing"
     assert not server._can_view_apartment_residency(stranger, resident), "distant strangers must not see residency"

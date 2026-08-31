@@ -32,6 +32,7 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Present the assignment as `1st Floor - <username>'s Apartment` with a separate numeric floor field.
 - [x] Enforce self/mutually-accepted-friend/nearby-buzzer visibility for apartment residency listings; one-sided requests reveal nothing.
 - [x] Keep v4.0 friend saves device-local; reciprocal online saves define mutual acceptance for this release.
+- [x] Keep offline reservation visibility buzzer-only; friend access requires both clients online so reciprocity can be verified.
 - [x] Network-check authorized directory labels plus self/mutual-friend/buzzer access and one-sided/distant privacy.
 - [x] Network-check that an offline reservation remains buzzer-visible, blocks reassignment, and returns to its reconnecting account.
 - [x] Visually inspect the buzzer panel and its authorized apartment label in a live overflow client.
