@@ -167,26 +167,45 @@ def curb_corner(
         draw.arc(circle, *arc_angles[corner], fill=edge, width=2)
         return image
 
-    # Paint the road-side shadow first, then the curb band.  Their widths match
-    # curb_straight(), so every arm registers without a grey square or seam.
-    for width, color in ((26, (24, 28, 30)), (20, (91, 94, 91))):
-        for start, end in segments:
-            draw.line((*start, *end), fill=color, width=width)
-        draw.arc(circle, *arc_angles[corner], fill=color, width=width)
+    # ImageDraw arcs grow inward from their bounding box, whereas straight
+    # lines grow around their centre.  Expand the arc bounds by half the curb
+    # width so the curve is centred on the same x/y=128 datum as both arms.
+    curb_outer_radius = radius + CURB_HALF
+    curb_circle = (
+        cx - curb_outer_radius, cy - curb_outer_radius,
+        cx + curb_outer_radius, cy + curb_outer_radius,
+    )
+    for start, end in segments:
+        draw.line((*start, *end), fill=(91, 94, 91), width=CURB_HALF * 2 + 1)
+    draw.arc(curb_circle, *arc_angles[corner], fill=(91, 94, 91), width=CURB_HALF * 2 + 1)
 
-    # The narrow highlight sits on the pavement side of the band and makes the
-    # curve readable without turning it into a bright circular outline.
-    inset = radius - CURB_HALF
-    highlight_circle = (cx - inset, cy - inset, cx + inset, cy + inset)
-    highlight_segments = {
+    outer_highlight_segments = {
         "tl": (((0, CURB_CENTER - CURB_HALF), (cx, CURB_CENTER - CURB_HALF)), ((CURB_CENTER - CURB_HALF, 0), (CURB_CENTER - CURB_HALF, cy))),
         "tr": (((cx, CURB_CENTER - CURB_HALF), (SIZE, CURB_CENTER - CURB_HALF)), ((CURB_CENTER + CURB_HALF, 0), (CURB_CENTER + CURB_HALF, cy))),
         "bl": (((0, CURB_CENTER + CURB_HALF), (cx, CURB_CENTER + CURB_HALF)), ((CURB_CENTER - CURB_HALF, cy), (CURB_CENTER - CURB_HALF, SIZE))),
         "br": (((cx, CURB_CENTER + CURB_HALF), (SIZE, CURB_CENTER + CURB_HALF)), ((CURB_CENTER + CURB_HALF, cy), (CURB_CENTER + CURB_HALF, SIZE))),
     }[corner]
+    outer_road_segments = {
+        "tl": (((0, CURB_CENTER + CURB_HALF), (cx, CURB_CENTER + CURB_HALF)), ((CURB_CENTER + CURB_HALF, 0), (CURB_CENTER + CURB_HALF, cy))),
+        "tr": (((cx, CURB_CENTER + CURB_HALF), (SIZE, CURB_CENTER + CURB_HALF)), ((CURB_CENTER - CURB_HALF, 0), (CURB_CENTER - CURB_HALF, cy))),
+        "bl": (((0, CURB_CENTER - CURB_HALF), (cx, CURB_CENTER - CURB_HALF)), ((CURB_CENTER + CURB_HALF, cy), (CURB_CENTER + CURB_HALF, SIZE))),
+        "br": (((cx, CURB_CENTER - CURB_HALF), (SIZE, CURB_CENTER - CURB_HALF)), ((CURB_CENTER - CURB_HALF, cy), (CURB_CENTER - CURB_HALF, SIZE))),
+    }[corner]
+    highlight_segments, road_segments = (
+        (outer_road_segments, outer_highlight_segments) if inner
+        else (outer_highlight_segments, outer_road_segments)
+    )
     for start, end in highlight_segments:
         draw.line((*start, *end), fill=(157, 162, 158), width=3)
-    draw.arc(highlight_circle, *arc_angles[corner], fill=(157, 162, 158), width=3)
+    for start, end in road_segments:
+        draw.line((*start, *end), fill=(24, 28, 30), width=3)
+
+    pavement_radius = radius + CURB_HALF if inner else radius - CURB_HALF
+    road_radius = radius - CURB_HALF if inner else radius + CURB_HALF
+    pavement_circle = (cx - pavement_radius, cy - pavement_radius, cx + pavement_radius, cy + pavement_radius)
+    road_circle = (cx - road_radius, cy - road_radius, cx + road_radius, cy + road_radius)
+    draw.arc(pavement_circle, *arc_angles[corner], fill=(157, 162, 158), width=3)
+    draw.arc(road_circle, *arc_angles[corner], fill=(24, 28, 30), width=3)
     return image
 
 

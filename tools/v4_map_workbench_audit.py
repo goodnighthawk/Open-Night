@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -99,7 +100,9 @@ def main() -> None:
             float(contract["regular_road_width"]),
         ) == float(contract["regular_road_width"]) / 2
     assert crossing_groups
-    signal_rotation = {"north": "180", "south": "0", "west": "90", "east": "270"}
+    # Pole arms point out from the corner; inward rotations make the two
+    # direction-specific assemblies converge into one glitched metal cluster.
+    signal_rotation = {"north": "0", "south": "180", "west": "270", "east": "90"}
     rotation_signal = {value: key for key, value in signal_rotation.items()}
     signal_groups: dict[str, set[str]] = defaultdict(set)
     for signal in signals:
@@ -107,6 +110,13 @@ def main() -> None:
     assert crossing_groups.keys() == signal_groups.keys()
     assert all(len(approaches) in {3, 4} for approaches in signal_groups.values())
     assert Counter(row["group"] for row in signals) == Counter({junction: len(approaches) * 2 for junction, approaches in signal_groups.items()})
+    signal_spacing = min(
+        math.hypot(float(a["x"]) - float(b["x"]), float(a["y"]) - float(b["y"]))
+        for index, a in enumerate(signals)
+        for b in signals[index + 1:]
+        if a["group"] == b["group"]
+    )
+    assert signal_spacing >= 90, f"directional traffic-signal assemblies overlap: {signal_spacing:.1f}"
     assert all(
         crossing_groups[junction] == ({"west"} if "fl_hudson_terrace" in junction else {"east"} if "ny_riverside" in junction else approaches)
         for junction, approaches in signal_groups.items()
@@ -131,6 +141,17 @@ def main() -> None:
     )
     assert pavement_blocks
     assert all(float(block["x"]) + float(block["w"]) <= layout_builder.RIVER_X0 or float(block["x"]) >= layout_builder.RIVER_X1 for block in pavement_blocks)
+    athletic_field = next(row for row in slots if row["sprite_role"] == "athletic_field")
+    fx, fy, fw, fh = (float(athletic_field[key]) for key in ("x", "y", "w", "h"))
+    assert any(
+        float(block["x"]) <= fx
+        and float(block["y"]) <= fy
+        and float(block["x"]) + float(block["w"]) >= fx + fw
+        and float(block["y"]) + float(block["h"]) >= fy + fh
+        for block in pavement_blocks
+    ), "athletic field escaped its pavement block"
+    assert not any(layout_builder._overlaps_reserved_field(building) for building in buildings)
+    assert all(not layout_builder._building_overlaps_road(athletic_field, road) for road in streets)
     for road in streets:
         if road["orientation"] == "vertical":
             assert float(road["y1"]) == 0 and float(road["y2"]) == layout_builder.WORLD_H

@@ -170,6 +170,7 @@ class MapWorkbench:
         self.catalog_tiles: dict[str, dict] = {}
         self.catalog_objects: dict[str, dict] = {}
         self._art_cache: dict[tuple[str, int, int, int], pygame.Surface] = {}
+        self._pivot_art_cache: dict[tuple[str, int, int, int], pygame.Surface] = {}
         self._clean_curb_sources: dict[str, pygame.Surface] = {}
         self.noise_frames = self._make_noise_frames()
         self.reload(reset_camera=True)
@@ -279,6 +280,7 @@ class MapWorkbench:
     def reload(self, *, reset_camera: bool = False) -> None:
         try:
             self._art_cache.clear()
+            self._pivot_art_cache.clear()
             self._clean_curb_sources.clear()
             self.load_layout()
             if self.mode == "city":
@@ -541,6 +543,33 @@ class MapWorkbench:
         native_h = max(1.0, float(definition.get("native_height_px", world_height)))
         height = max(2, int(round(world_height * self.camera.zoom)))
         return max(2, int(round(height * native_w / native_h))), height
+
+    def _catalog_art_at_pivot(
+        self,
+        asset_id: str,
+        size: tuple[int, int],
+        rotation: int = 0,
+    ) -> pygame.Surface:
+        """Return catalog art on a rotation-stable canvas centred on its pivot."""
+        width, height = max(1, int(size[0])), max(1, int(size[1]))
+        rotation = int(rotation) % 360
+        key = (asset_id, width, height, rotation)
+        cached = self._pivot_art_cache.get(key)
+        if cached is not None:
+            return cached
+        definition = self.catalog_objects.get(asset_id, {})
+        native_w = max(1.0, float(definition.get("native_width_px", width)))
+        native_h = max(1.0, float(definition.get("native_height_px", height)))
+        pivot_x = int(round(float(definition.get("pivot_x_px", native_w / 2)) * width / native_w))
+        pivot_y = int(round(float(definition.get("pivot_y_px", native_h / 2)) * height / native_h))
+        radius = max(pivot_x, pivot_y, width - pivot_x, height - pivot_y) + 2
+        canvas = pygame.Surface((radius * 2 + 1, radius * 2 + 1), pygame.SRCALPHA)
+        image = self._catalog_art(asset_id, (width, height))
+        canvas.blit(image, (radius - pivot_x, radius - pivot_y))
+        if rotation:
+            canvas = pygame.transform.rotate(canvas, -rotation)
+        self._pivot_art_cache[key] = canvas
+        return canvas
 
     def _tile_catalog_region(
         self,
@@ -987,8 +1016,8 @@ class MapWorkbench:
                 )
                 group_seed = sum((index + 1) * ord(char) for index, char in enumerate(str(row.get("group", ""))))
                 asset_id = states[(pygame.time.get_ticks() // 800 + group_seed) % len(states)]
-                size = self._catalog_object_size(asset_id, 155)
-                image = self._catalog_art(asset_id, size, rotation)
+                size = self._catalog_object_size(asset_id, 96)
+                image = self._catalog_art_at_pivot(asset_id, size, rotation)
                 target.blit(image, image.get_rect(center=p))
                 continue
             paths = {
@@ -1290,10 +1319,18 @@ class MapWorkbench:
                 image = self._repo_art("cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_pier_03_night.png", rect.size)
                 target.blit(image, rect)
             elif role == "athletic_field":
+                if self.layer != "ground":
+                    continue
                 x, y, w, h = (number(slot, key) for key in ("x", "y", "w", "h"))
                 rect = pygame.Rect(self.world_to_screen((x, y)), (max(2, int(w * self.camera.zoom)), max(2, int(h * self.camera.zoom))))
-                pygame.draw.rect(target, (55, 102, 68), rect)
-                pygame.draw.rect(target, (218, 221, 188), rect, 1)
+                border = max(2, int(18 * self.camera.zoom))
+                pygame.draw.rect(target, (43, 48, 45), rect, border_radius=max(1, border // 2))
+                field = rect.inflate(-border * 2, -border * 2)
+                pygame.draw.rect(target, (55, 102, 68), field, border_radius=max(1, border // 3))
+                line_width = max(1, int(3 * self.camera.zoom))
+                pygame.draw.rect(target, (190, 202, 176), field, line_width, border_radius=max(1, border // 3))
+                pygame.draw.line(target, (190, 202, 176), (field.centerx, field.top), (field.centerx, field.bottom), line_width)
+                pygame.draw.circle(target, (190, 202, 176), field.center, max(2, int(75 * self.camera.zoom)), line_width)
             elif role == "bridge_tower":
                 x, y, w, h = (number(slot, key) for key in ("x", "y", "w", "h"))
                 rect = pygame.Rect(self.world_to_screen((x, y)), (max(3, int(w * self.camera.zoom)), max(3, int(h * self.camera.zoom))))

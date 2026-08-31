@@ -97,6 +97,8 @@ def build(output: Path, *, include_previews: bool = True) -> dict[str, object]:
         "artifacts/map_workbench/gwb_full_updated_roof.png",
         "artifacts/map_workbench/gwb_approved_transition_area.png",
         "artifacts/map_workbench/gwb_approved_transition_roof.png",
+        "artifacts/map_workbench/gwb_junction_signal_curb_fix.png",
+        "artifacts/map_workbench/gwb_columbia_field_contained.png",
     )
     if include_previews:
         for relative in previews:

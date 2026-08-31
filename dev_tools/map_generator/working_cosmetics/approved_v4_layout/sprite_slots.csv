@@ -62,11 +62,9 @@ legal_building_091,apartment_dense,14805,6727,552,468,rectangle,0,morningside,se
 legal_building_092,apartment_dense,15482,6075,523,527,rectangle,0,morningside,semantic,morningside_lot_103,15447,6040,593,597,0.779,exact
 legal_building_093,apartment_dense,15497,6757,493,408,rectangle,0,morningside,semantic,morningside_lot_104,15447,6707,593,508,0.668,exact
 legal_building_095,university_landmark,15527,7820,478,660,rectangle,0,columbia,semantic,morningside_lot_106,15492,7785,548,730,0.789,exact
-legal_building_096,university_landmark,14835,9135,492,715,rectangle,0,columbia,semantic,morningside_lot_107,14785,9085,592,815,0.729,exact
-legal_building_097,university_landmark,15467,9105,553,775,rectangle,0,columbia,semantic,morningside_lot_108,15447,9085,593,815,0.887,exact
 gwb_west_tower,bridge_tower,6400,3300,260,620,rectangle,0,bridge,semantic,landmark,6400,3300,260,620,1.0,exact
 gwb_east_tower,bridge_tower,9720,3300,260,620,rectangle,0,bridge,semantic,landmark,9720,3300,260,620,1.0,exact
-columbia_field,athletic_field,14500,8850,1000,620,rectangle,0,columbia,semantic,landmark,14500,8850,1000,620,1.0,exact
+columbia_field,athletic_field,14913,9183,1000,620,rectangle,0,columbia,semantic,landmark,14913,9183,1000,620,1.0,exact
 west_pier_01,small_pier,6373,900,260,100,rectangle,0,hudson,waterfront,waterfront,6373,900,260,100,1.0,exact
 west_pier_02,small_pier,6373,1950,260,100,rectangle,0,hudson,waterfront,waterfront,6373,1950,260,100,1.0,exact
 west_pier_03,small_pier,6373,3000,260,100,rectangle,0,hudson,waterfront,waterfront,6373,3000,260,100,1.0,exact

@@ -37,6 +37,7 @@ ROAD_WIDTHS = {
 # a narrow but continuous v0.8-style curb/sidewalk/frontage band.
 SIDEWALK_CLEARANCE = 55
 CURB_AND_FRONTAGE = 20
+COLUMBIA_FIELD = (14913, 9183, 1000, 620)
 
 
 def write_csv(name: str, fields: tuple[str, ...], rows: list[dict]) -> None:
@@ -170,7 +171,7 @@ def build_sprite_slots() -> list[dict]:
         ("gwb_east_tower", "bridge_tower", 9760, BRIDGE_Y - 180, 220, 520, 0, "bridge"),
         ("columbia_main", "university_landmark", 12800, 7900, 620, 520, 0, "columbia"),
         ("columbia_dome", "university_dome", 13700, 7900, 440, 440, 0, "columbia"),
-        ("columbia_field", "athletic_field", 14500, 8850, 1000, 620, 0, "columbia"),
+        ("columbia_field", "athletic_field", 14913, 9183, 1000, 620, 0, "columbia"),
         ("fl_bridge_plaza", "commercial_landmark", 5200, 3300, 700, 430, 0, "fort_lee_north"),
     ]
     for sid, role, x, y, w, h, rot, zone in fixed:
@@ -357,11 +358,16 @@ def build_street_features(streets: list[dict]) -> list[dict]:
                 "west": (ix - vclear, iy, 90, ROAD_WIDTHS[hroad["road_class"]] + 130),
                 "east": (ix + vclear, iy, 90, ROAD_WIDTHS[hroad["road_class"]] + 130),
             }
+            # Two direction-specific signal assemblies share each block corner.
+            # Mount their bases along the perpendicular sidewalk legs instead
+            # of nearly on top of one another at a 34x34 diagonal offset.
+            hsignal = round(hhalf + 35)
+            vsignal = round(vhalf + 35)
             signal_specs = {
-                "north": ((ix - vclear, iy - hclear - 34, 180), (ix + vclear, iy - hclear - 34, 180)),
-                "south": ((ix - vclear, iy + hclear + 34, 0), (ix + vclear, iy + hclear + 34, 0)),
-                "west": ((ix - vclear - 34, iy - hclear, 90), (ix - vclear - 34, iy + hclear, 90)),
-                "east": ((ix + vclear + 34, iy - hclear, 270), (ix + vclear + 34, iy + hclear, 270)),
+                "north": ((ix - vsignal, iy - hclear, 0), (ix + vsignal, iy - hclear, 0)),
+                "south": ((ix - vsignal, iy + hclear, 180), (ix + vsignal, iy + hclear, 180)),
+                "west": ((ix - vclear, iy - hsignal, 270), (ix - vclear, iy + hsignal, 270)),
+                "east": ((ix + vclear, iy - hsignal, 90), (ix + vclear, iy + hsignal, 90)),
             }
             crossing_arms = dict(arms)
             if vroad["street_id"] == "fl_hudson_terrace" and not arms["east"]:
@@ -507,6 +513,13 @@ def _building_overlaps_road(building: dict, road: dict) -> bool:
         if t0 > t1:
             return False
     return True
+
+
+def _overlaps_reserved_field(building: dict) -> bool:
+    fx, fy, fw, fh = COLUMBIA_FIELD
+    bx, by = float(building["x"]), float(building["y"])
+    bw, bh = float(building["w"]), float(building["h"])
+    return bx < fx + fw and bx + bw > fx and by < fy + fh and by + bh > fy
 
 
 def build_legal_buildings(streets: list[dict]) -> list[dict]:
@@ -665,11 +678,16 @@ def bind_legal_buildings(buildings: list[dict]) -> tuple[list[dict], list[dict]]
                 "sprite_role": role, "rotation": 0, "collision": "semantic",
             })
 
+    # Preserve the established 32 housing assignments and stable building IDs,
+    # then clear only the two public/NPC masses beneath the field reservation.
+    assert not any(_overlaps_reserved_field(house) for house in houses)
+    slots = [slot for slot in slots if not _overlaps_reserved_field(slot)]
+
     # Infrastructure remains independent of building parcels.
     for sid, role, x, y, w, h, zone in (
         ("gwb_west_tower", "bridge_tower", 6400, BRIDGE_Y - 260, 260, 620, "bridge"),
         ("gwb_east_tower", "bridge_tower", 9720, BRIDGE_Y - 260, 260, 620, "bridge"),
-        ("columbia_field", "athletic_field", 14500, 8850, 1000, 620, "columbia"),
+        ("columbia_field", "athletic_field", *COLUMBIA_FIELD, "columbia"),
     ):
         slots.append({"slot_id": sid, "sprite_role": role, "x": x, "y": y, "w": w, "h": h, "shape": "rectangle", "rotation": 0, "zone_id": zone, "collision": "semantic", "lot_id": "landmark", "lot_x": x, "lot_y": y, "lot_w": w, "lot_h": h, "parcel_occupancy": 1.0, "ground_roof_registration": "exact"})
     for side, x, rotation in (("west", RIVER_X0 - 180, 0), ("east", RIVER_X1 + 80, 180)):
