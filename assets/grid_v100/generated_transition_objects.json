@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "source_policy": "approved_masters_only",
+  "approved_masters": [
+    "assets/generated_v4_transitions/source/approved_building_transitions.png",
+    "assets/generated_v4_transitions/source/approved_buzzer_and_signal.png",
+    "assets/generated_v4_transitions/source/approved_fire_escape_ladder.png",
+    "assets/generated_v4_transitions/source/approved_traffic_signal_matrix.png"
+  ],
+  "objects": {
+    "entrance_door": {
+      "image": "assets/generated_v4_transitions/entrance_door.png",
+      "kind": "transition_art",
+      "layer": "ground",
+      "z": 170,
+      "native_width_px": 112,
+      "native_height_px": 144,
+      "pivot_x_px": 56,
+      "pivot_y_px": 140,
+      "optional": true
+    },
+    "roof_access_door": {
+      "image": "assets/generated_v4_transitions/roof_access_door.png",
+      "kind": "transition_art",
+      "layer": "roof",
+      "z": 170,
+      "native_width_px": 116,
+      "native_height_px": 140,
+      "pivot_x_px": 58,
+      "pivot_y_px": 70,
+      "optional": true
+    },
+    "elevator_transition": {
+      "image": "assets/generated_v4_transitions/elevator_transition.png",
+      "kind": "transition_art",
+      "layer": "ground",
+      "z": 170,
+      "native_width_px": 132,
+      "native_height_px": 120,
+      "pivot_x_px": 66,
+      "pivot_y_px": 112,
+      "optional": true
+    },
+    "entrance_buzzer": {
+      "image": "assets/generated_v4_transitions/entrance_buzzer.png",
+      "kind": "interaction_art",
+      "layer": "ground",
+      "z": 172,
+      "native_width_px": 24,
+      "native_height_px": 58,
+      "pivot_x_px": 12,
+      "pivot_y_px": 54,
+      "optional": true
+    },
+    "fire_escape_ladder": {
+      "image": "assets/generated_v4_transitions/fire_escape_ladder.png",
+      "kind": "transition_art",
+      "layer": "ground",
+      "z": 171,
+      "native_width_px": 62,
+      "native_height_px": 216,
+      "pivot_x_px": 31,
+      "pivot_y_px": 108,
+      "optional": true
+    },
+    "traffic_red_not_clear": {
+      "image": "assets/generated_v4_transitions/traffic_red_not_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "traffic_yellow_not_clear": {
+      "image": "assets/generated_v4_transitions/traffic_yellow_not_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "traffic_green_not_clear": {
+      "image": "assets/generated_v4_transitions/traffic_green_not_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "traffic_red_clear": {
+      "image": "assets/generated_v4_transitions/traffic_red_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "traffic_yellow_clear": {
+      "image": "assets/generated_v4_transitions/traffic_yellow_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "traffic_green_clear": {
+      "image": "assets/generated_v4_transitions/traffic_green_clear.png",
+      "kind": "dynamic_signal_art",
+      "layer": "ground",
+      "z": 176,
+      "native_width_px": 128,
+      "native_height_px": 176,
+      "pivot_x_px": 63,
+      "pivot_y_px": 173,
+      "optional": true
+    },
+    "placeholder_street_door": {
+      "image": "assets/generated_v4_transitions/entrance_door.png",
+      "kind": "transition_art",
+      "layer": "ground",
+      "z": 170,
+      "native_width_px": 112,
+      "native_height_px": 144,
+      "pivot_x_px": 56,
+      "pivot_y_px": 140,
+      "optional": true
+    },
+    "placeholder_roof_hatch": {
+      "image": "assets/generated_v4_transitions/roof_access_door.png",
+      "kind": "transition_art",
+      "layer": "roof",
+      "z": 170,
+      "native_width_px": 116,
+      "native_height_px": 140,
+      "pivot_x_px": 58,
+      "pivot_y_px": 70,
+      "optional": true
+    },
+    "placeholder_fire_escape": {
+      "image": "assets/generated_v4_transitions/fire_escape_ladder.png",
+      "kind": "transition_art",
+      "layer": "ground",
+      "z": 171,
+      "native_width_px": 62,
+      "native_height_px": 216,
+      "pivot_x_px": 31,
+      "pivot_y_px": 108,
+      "optional": true
+    }
+  },
+  "traffic_signal_states": [
+    "traffic_red_not_clear",
+    "traffic_yellow_not_clear",
+    "traffic_green_not_clear",
+    "traffic_red_clear",
+    "traffic_yellow_clear",
+    "traffic_green_clear"
+  ],
+  "traffic_canvas_px": [
+    383,
+    499
+  ],
+  "traffic_source_pivot_px": [
+    188,
+    490
+  ],
+  "traffic_runtime_pivot_px": [
+    63,
+    173
+  ]
+}

@@ -4,6 +4,12 @@ world_height,10240,Large vertical exploration footprint.
 hudson_width,3277,Exactly 20% of world width.
 hudson_west_x,6553,West river boundary.
 hudson_east_x,9830,East river boundary.
+city_block_world_scale,0.5,Native 256px city_block modules render as 128 world units.
+vehicle_width,105,Shared overview car-width unit.
+regular_road_width,420,Four car widths across.
+gwb_road_width,1050,Ten car widths across.
+regular_lane_count,4,Four marked lanes on ordinary roads.
+gwb_lane_count,9,Nine marked lanes across the bridge deck.
 empty_house_count,32,Future player housing; blank interiors.
 primary_crossing,George Washington Bridge,Upper-middle map crossing.
 layout_status,approved,Based on user-approved concept composition.

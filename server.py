@@ -72,6 +72,7 @@ from common import (
     normalize_character,
     normalize_input,
     traffic_light_states,
+    traffic_signal_states,
     traffic_phase_green,
     reload_maps,
 )
@@ -113,6 +114,20 @@ ACTIVE_MAP_ID = DEFAULT_MAP_ID
 ACTIVE_MAP = get_map(ACTIVE_MAP_ID)
 GRID_RUNTIME_ACTIVE = ground_grid_enabled(ACTIVE_MAP)
 GRID_WORLD = load_ground_grid() if GRID_RUNTIME_ACTIVE else None
+if GRID_WORLD is not None:
+    # Grid-authored demonstrations and future transition fixtures are appended
+    # without mutating the shared CSV map object. Older maps simply have no grid
+    # metadata and continue through the existing paths.
+    ACTIVE_MAP = dict(ACTIVE_MAP)
+    ACTIVE_MAP["traffic_signals"] = [
+        *list(ACTIVE_MAP.get("traffic_signals", [])),
+        *[dict(row) for row in GRID_WORLD.data.get("traffic_signals", [])],
+    ]
+    ACTIVE_MAP["interiors"] = [
+        *list(ACTIVE_MAP.get("interiors", [])),
+        *[dict(row) for row in GRID_WORLD.data.get("interiors", [])],
+        *[dict(row) for row in GRID_WORLD.data.get("upper_interiors", [])],
+    ]
 ACTIVE_MAP_TRANSFER = None
 ACTIVE_GAME_MODE = get_game_mode()
 DB: InventoryDatabase | None = None
@@ -518,6 +533,126 @@ def request_grid_fire_escape(session: ClientSession) -> str:
     player.level = int(next_level)
     player.x, player.y = float(target_x), float(target_y)
     return "roof" if next_level == 1 else "ground"
+
+
+async def process_grid_transition_interaction(
+    session: ClientSession,
+    *,
+    requested_object_id: str = "",
+    selected_floor: int | None = None,
+) -> bool:
+    """Run one catalog-backed transition trigger without coupling it to art collision."""
+    if not GRID_RUNTIME_ACTIVE or GRID_WORLD is None:
+        return False
+    player = session.player
+    if session.driving_vehicle_id or session.passenger_vehicle_id or session.riding_bicycle_id:
+        return False
+    requested_object_id = str(requested_object_id).strip()
+    item = None
+    if requested_object_id:
+        item = next(
+            (row for row in GRID_WORLD.objects if str(row.get("object_id", "")) == requested_object_id),
+            None,
+        )
+        if item is not None and not player.interior_id:
+            ix, iy = GRID_WORLD.object_interaction_point(item)
+            if math.hypot(player.x - ix, player.y - iy) > float(item.get("interaction_radius_px", 72.0)):
+                item = None
+    elif not player.interior_id:
+        item = GRID_WORLD.nearest_interaction(
+            player.x, player.y, int(player.level),
+            kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+        )
+    if item is None:
+        return False
+
+    kind = str(item.get("interaction_kind", ""))
+    if kind == "entrance_door":
+        target = str(item.get("target_interior_id", ""))
+        if _interior_info(target) is None:
+            await send_json(session.websocket, {
+                "type": "notice", "text": "This entrance is not connected to an interior yet.",
+            })
+        else:
+            await process_interior_action(session, "enter", {"interior_id": target})
+        return True
+
+    if kind == "entrance_buzzer":
+        await send_json(session.websocket, {
+            "type": "notice",
+            "text": str(item.get(
+                "locked_entry_message",
+                "The entry is locked. The buzzer is waiting for a resident or scripted response.",
+            )),
+            "interaction": "entrance_buzzer",
+            "target_interior_id": str(item.get("target_interior_id", "")),
+        })
+        return True
+
+    if kind == "roof_access_door":
+        target = str(item.get("target_interior_id", "approved_transition_demo_upper_interior"))
+        if player.interior_id == target:
+            player.interior_id = ""
+            player.interior_x = player.interior_y = 0
+            player.interior_aim = 0.0
+            player.level = 1
+            player.x, player.y = GRID_WORLD.object_interaction_point(item)
+            reset_on_foot_actions(session)
+            await send_json(session.websocket, _interior_state_payload(player))
+            return True
+        player.interior_id = target
+        player.interior_x, player.interior_y = INTERIOR_START_TILE
+        player.interior_aim = -math.pi / 2.0
+        reset_on_foot_actions(session)
+        await send_json(session.websocket, _interior_state_payload(player))
+        return True
+
+    if kind == "elevator_transition":
+        available = [int(value) for value in item.get("available_floors", [0, 1])]
+        if not available:
+            return True
+        current = int(getattr(player, "level", 0))
+        requested = int(selected_floor) if selected_floor is not None else next(
+            (floor for floor in available if floor != current), available[0]
+        )
+        if requested not in available:
+            await send_json(session.websocket, {
+                "type": "notice", "text": f"Floor {requested} is not available from this elevator.",
+            })
+            return True
+        source = item
+        if not source.get("floor_targets"):
+            source = next(
+                (
+                    row for row in GRID_WORLD.objects
+                    if row.get("interaction_kind") == "elevator_transition"
+                    and row.get("floor_targets")
+                    and row.get("building_id") == item.get("building_id")
+                ),
+                item,
+            )
+        raw_target = (source.get("floor_targets") or {}).get(str(requested))
+        if not isinstance(raw_target, (list, tuple)) or len(raw_target) < 2:
+            await send_json(session.websocket, {
+                "type": "notice", "text": "That elevator floor is not connected yet.",
+            })
+            return True
+        target_x, target_y = float(raw_target[0]), float(raw_target[1])
+        if requested == 1 and not GRID_WORLD.circle_roof_walkable(target_x, target_y, PLAYER_RADIUS):
+            await send_json(session.websocket, {
+                "type": "notice", "text": "The rooftop elevator landing is unavailable.",
+            })
+            return True
+        player.interior_id = ""
+        player.level = requested
+        player.x, player.y = target_x, target_y
+        reset_on_foot_actions(session)
+        await send_json(session.websocket, {
+            "type": "notice", "text": f"Elevator: floor {requested}.",
+            "interaction": "elevator_transition", "floor": requested,
+        })
+        return True
+    return False
 
 
 @dataclass
@@ -3026,6 +3161,8 @@ async def process_interaction(session: ClientSession) -> None:
             "text": f"Fire escape: {fire_escape_level.upper()} level",
         })
         return
+    if await process_grid_transition_interaction(session):
+        return
     job_locations = ACTIVE_MAP.get("job_locations", []) or []
     supplier_locations = [
         row
@@ -3608,6 +3745,17 @@ async def handle_message(session: ClientSession, raw: str) -> None:
         session.last_input_time = time.monotonic()
     elif msg_type == "interact":
         await process_interaction(session)
+    elif msg_type == "transition_use":
+        floor = message.get("floor")
+        try:
+            selected_floor = None if floor is None else int(floor)
+        except (TypeError, ValueError):
+            selected_floor = None
+        await process_grid_transition_interaction(
+            session,
+            requested_object_id=str(message.get("object_id", "")),
+            selected_floor=selected_floor,
+        )
     elif msg_type == "car_action":
         await process_car_action(session)
     elif msg_type == "passenger_action":
@@ -4435,6 +4583,7 @@ async def snapshot_loop() -> None:
         if push_map_roster:
             last_map_roster_push = server_time
         all_lights = traffic_light_states(ACTIVE_MAP, server_time)
+        all_signal_art = traffic_signal_states(ACTIVE_MAP, server_time)
         static_chunk_radius = max(0, int(ACTIVE_MAP.get("interest_radius_chunks", NETWORK_INTEREST_RADIUS_CHUNKS)))
         zone_radius = NETWORK_ZONE_RADIUS
         zone_size = network_zone_size(ACTIVE_MAP)
@@ -4476,6 +4625,7 @@ async def snapshot_loop() -> None:
             visible_blood = []
             visible_hydrants = []
             visible_lights = {}
+            visible_signal_art = {}
 
             for key in zone_keys:
                 for other in player_buckets.get(key, ()):
@@ -4502,6 +4652,9 @@ async def snapshot_loop() -> None:
                 for signal in light_buckets.get(key, ()):
                     sid = str(signal.get("id"))
                     visible_lights[sid] = bool(all_lights.get(sid, False))
+                    visible_signal_art[sid] = str(
+                        all_signal_art.get(sid, "traffic_red_not_clear")
+                    )
 
             payload = {
                 "type": "snapshot",
@@ -4512,6 +4665,7 @@ async def snapshot_loop() -> None:
                 "blood_stains": visible_blood,
                 "hydrants": visible_hydrants,
                 "traffic_lights": visible_lights,
+                "traffic_signal_states": visible_signal_art,
                 "server_time": server_time,
                 "server_population": len(sessions),
                 "housing_capacity": housing_capacity,

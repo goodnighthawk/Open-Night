@@ -1,0 +1,33 @@
+{
+  "objects": {
+    "placeholder_street_door": {"image":"assets/generated_v4_art/transition_street_door.png","kind":"transition_art","layer":"ground","z":170,"native_width_px":96,"native_height_px":144},
+    "placeholder_fire_escape": {"image":"assets/generated_v4_art/transition_fire_escape.png","kind":"transition_art","layer":"ground","z":171,"native_width_px":128,"native_height_px":256},
+    "placeholder_roof_hatch": {"image":"assets/generated_v4_art/transition_roof_hatch.png","kind":"transition_art","layer":"roof","z":170,"native_width_px":128,"native_height_px":128},
+    "rooflayer_aircon": {"image":"assets/generated_v4_rooftops/roof_hvac_bank.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":190,"native_height_px":103},
+    "rooflayer_aircon_large": {"image":"assets/generated_v4_rooftops/roof_hvac_square.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":160,"native_height_px":167},
+    "rooflayer_blue_roof": {"image":"assets/generated_v4_rooftops/roof_tar_blue.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":180,"native_height_px":177},
+    "rooflayer_green_roof": {"image":"assets/generated_v4_rooftops/roof_tar_green.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":180,"native_height_px":179},
+    "rooflayer_grey_roof": {"image":"assets/generated_v4_rooftops/roof_gravel_grey.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":174,"native_height_px":181},
+    "rooflayer_orange_roof": {"image":"assets/generated_v4_rooftops/roof_tar_umber.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":185,"native_height_px":181},
+    "rooflayer_water_brown": {"image":"assets/generated_v4_rooftops/roof_tank_rust.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":154,"native_height_px":178},
+    "rooflayer_water_green": {"image":"assets/generated_v4_rooftops/roof_tank_moss.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":154,"native_height_px":181},
+    "rooflayer_water_red": {"image":"assets/generated_v4_rooftops/roof_tank_red.png","kind":"roof_prop","layer":"roof","z":150,"native_width_px":154,"native_height_px":193},
+    "v4_art_bench": {"image":"assets/generated_v4_art/urban_bench.png","kind":"street_art","layer":"ground","z":156,"native_width_px":110,"native_height_px":54},
+    "v4_art_mailbox": {"image":"assets/generated_v4_art/street_mailbox.png","kind":"street_art","layer":"ground","z":156,"native_width_px":48,"native_height_px":52},
+    "v4_art_dumpster": {"image":"assets/generated_v4_art/alley_dumpster.png","kind":"street_art","layer":"ground","z":156,"native_width_px":118,"native_height_px":90},
+    "v4_art_hydrant": {"image":"assets/generated_v4_art/fire_hydrant.png","kind":"street_art","layer":"ground","z":156,"native_width_px":44,"native_height_px":44},
+    "v4_art_cone": {"image":"assets/generated_v4_art/traffic_cone.png","kind":"street_art","layer":"ground","z":156,"native_width_px":32,"native_height_px":32},
+    "v4_art_bollard": {"image":"assets/generated_v4_art/street_bollard.png","kind":"street_art","layer":"ground","z":156,"native_width_px":34,"native_height_px":42},
+    "v4_art_bus_shelter": {"image":"assets/generated_v4_art/bus_shelter.png","kind":"street_art","layer":"ground","z":156,"native_width_px":148,"native_height_px":96},
+    "v4_art_phone_box": {"image":"assets/generated_v4_art/phone_box.png","kind":"street_art","layer":"ground","z":156,"native_width_px":54,"native_height_px":64},
+    "v4_art_stop_sign": {"image":"assets/generated_v4_art/stop_sign.png","kind":"street_art","layer":"ground","z":156,"native_width_px":42,"native_height_px":84},
+    "v4_art_parking_sign": {"image":"assets/generated_v4_art/parking_sign.png","kind":"street_art","layer":"ground","z":156,"native_width_px":42,"native_height_px":84},
+    "v4_art_tree": {"image":"assets/generated_v4_art/street_tree.png","kind":"street_art","layer":"ground","z":156,"native_width_px":136,"native_height_px":136},
+    "v4_art_chain_fence": {"image":"assets/generated_v4_art/chain_fence.png","kind":"street_art","layer":"ground","z":156,"native_width_px":178,"native_height_px":54},
+    "v4_concept_storefront": {"image":"assets/generated_v4_art/concept_storefront_door.png","kind":"concept_art","layer":"ground","z":156,"native_width_px":128,"native_height_px":148},
+    "v4_concept_subway_entry": {"image":"assets/generated_v4_art/concept_subway_entry.png","kind":"concept_art","layer":"ground","z":156,"native_width_px":130,"native_height_px":130},
+    "v4_concept_service_drain": {"image":"assets/generated_v4_art/concept_service_drain.png","kind":"concept_art","layer":"ground","z":156,"native_width_px":96,"native_height_px":96},
+    "v4_concept_trash_cluster": {"image":"assets/generated_v4_art/concept_trash_cluster.png","kind":"concept_art","layer":"ground","z":156,"native_width_px":84,"native_height_px":76},
+    "v4_concept_stray_dog": {"image":"assets/generated_v4_art/concept_stray_dog.png","kind":"concept_art","layer":"ground","z":156,"native_width_px":56,"native_height_px":74}
+  }
+}

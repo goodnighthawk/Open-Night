@@ -1,0 +1,459 @@
+{
+  "tiles": {
+    "bld_blue_fill": {
+      "image": "assets/generated_v4_buildings/blue/fill.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_top_center": {
+      "image": "assets/generated_v4_buildings/blue/top_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_bottom_center": {
+      "image": "assets/generated_v4_buildings/blue/bottom_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_left": {
+      "image": "assets/generated_v4_buildings/blue/left.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_right": {
+      "image": "assets/generated_v4_buildings/blue/right.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_top_left_outer": {
+      "image": "assets/generated_v4_buildings/blue/top_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_top_right_outer": {
+      "image": "assets/generated_v4_buildings/blue/top_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_bottom_left_outer": {
+      "image": "assets/generated_v4_buildings/blue/bottom_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_bottom_right_outer": {
+      "image": "assets/generated_v4_buildings/blue/bottom_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_top_left_inner": {
+      "image": "assets/generated_v4_buildings/blue/top_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_top_right_inner": {
+      "image": "assets/generated_v4_buildings/blue/top_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_bottom_left_inner": {
+      "image": "assets/generated_v4_buildings/blue/bottom_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_blue_bottom_right_inner": {
+      "image": "assets/generated_v4_buildings/blue/bottom_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_fill": {
+      "image": "assets/generated_v4_buildings/dark_green/fill.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_top_center": {
+      "image": "assets/generated_v4_buildings/dark_green/top_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_bottom_center": {
+      "image": "assets/generated_v4_buildings/dark_green/bottom_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_left": {
+      "image": "assets/generated_v4_buildings/dark_green/left.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_right": {
+      "image": "assets/generated_v4_buildings/dark_green/right.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_top_left_outer": {
+      "image": "assets/generated_v4_buildings/dark_green/top_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_top_right_outer": {
+      "image": "assets/generated_v4_buildings/dark_green/top_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_bottom_left_outer": {
+      "image": "assets/generated_v4_buildings/dark_green/bottom_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_bottom_right_outer": {
+      "image": "assets/generated_v4_buildings/dark_green/bottom_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_top_left_inner": {
+      "image": "assets/generated_v4_buildings/dark_green/top_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_top_right_inner": {
+      "image": "assets/generated_v4_buildings/dark_green/top_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_bottom_left_inner": {
+      "image": "assets/generated_v4_buildings/dark_green/bottom_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_dark_green_bottom_right_inner": {
+      "image": "assets/generated_v4_buildings/dark_green/bottom_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_fill": {
+      "image": "assets/generated_v4_buildings/green/fill.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_top_center": {
+      "image": "assets/generated_v4_buildings/green/top_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_bottom_center": {
+      "image": "assets/generated_v4_buildings/green/bottom_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_left": {
+      "image": "assets/generated_v4_buildings/green/left.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_right": {
+      "image": "assets/generated_v4_buildings/green/right.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_top_left_outer": {
+      "image": "assets/generated_v4_buildings/green/top_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_top_right_outer": {
+      "image": "assets/generated_v4_buildings/green/top_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_bottom_left_outer": {
+      "image": "assets/generated_v4_buildings/green/bottom_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_bottom_right_outer": {
+      "image": "assets/generated_v4_buildings/green/bottom_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_top_left_inner": {
+      "image": "assets/generated_v4_buildings/green/top_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_top_right_inner": {
+      "image": "assets/generated_v4_buildings/green/top_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_bottom_left_inner": {
+      "image": "assets/generated_v4_buildings/green/bottom_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_green_bottom_right_inner": {
+      "image": "assets/generated_v4_buildings/green/bottom_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_fill": {
+      "image": "assets/generated_v4_buildings/red/fill.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_top_center": {
+      "image": "assets/generated_v4_buildings/red/top_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_bottom_center": {
+      "image": "assets/generated_v4_buildings/red/bottom_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_left": {
+      "image": "assets/generated_v4_buildings/red/left.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_right": {
+      "image": "assets/generated_v4_buildings/red/right.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_top_left_outer": {
+      "image": "assets/generated_v4_buildings/red/top_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_top_right_outer": {
+      "image": "assets/generated_v4_buildings/red/top_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_bottom_left_outer": {
+      "image": "assets/generated_v4_buildings/red/bottom_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_bottom_right_outer": {
+      "image": "assets/generated_v4_buildings/red/bottom_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_top_left_inner": {
+      "image": "assets/generated_v4_buildings/red/top_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_top_right_inner": {
+      "image": "assets/generated_v4_buildings/red/top_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_bottom_left_inner": {
+      "image": "assets/generated_v4_buildings/red/bottom_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_red_bottom_right_inner": {
+      "image": "assets/generated_v4_buildings/red/bottom_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_fill": {
+      "image": "assets/generated_v4_buildings/yellow/fill.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_top_center": {
+      "image": "assets/generated_v4_buildings/yellow/top_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_bottom_center": {
+      "image": "assets/generated_v4_buildings/yellow/bottom_center.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_left": {
+      "image": "assets/generated_v4_buildings/yellow/left.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_right": {
+      "image": "assets/generated_v4_buildings/yellow/right.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_top_left_outer": {
+      "image": "assets/generated_v4_buildings/yellow/top_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_top_right_outer": {
+      "image": "assets/generated_v4_buildings/yellow/top_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_bottom_left_outer": {
+      "image": "assets/generated_v4_buildings/yellow/bottom_left_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_bottom_right_outer": {
+      "image": "assets/generated_v4_buildings/yellow/bottom_right_outer.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_top_left_inner": {
+      "image": "assets/generated_v4_buildings/yellow/top_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_top_right_inner": {
+      "image": "assets/generated_v4_buildings/yellow/top_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_bottom_left_inner": {
+      "image": "assets/generated_v4_buildings/yellow/bottom_left_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    },
+    "bld_yellow_bottom_right_inner": {
+      "image": "assets/generated_v4_buildings/yellow/bottom_right_inner.png",
+      "collision": "blocked",
+      "kind": "building_tile",
+      "layer": "ground",
+      "z": 40
+    }
+  }
+}

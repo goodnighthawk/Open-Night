@@ -1,0 +1,67 @@
+{
+  "status": "generated_and_integrated",
+  "pack": "v4_rooftop_replacements",
+  "perspective": "strict top-down orthographic, 80-90 degree overhead",
+  "style": "grungy nocturnal urban pixel-art treatment matching the current v4 concept art; isolated object on transparent background; no cast shadow beyond a small contact shadow",
+  "integration": {
+    "target_catalog": "assets/grid_v100/generated_art_tiles.json",
+    "asset_directory": "assets/generated_v4_rooftops",
+    "rule": "These existing rooflayer IDs are overridden by the generated PNGs. The city_block source files and collision data remain unchanged."
+  },
+  "assets": [
+    {
+      "filename": "roof_hvac_bank.png",
+      "replaces": "rooflayer_aircon",
+      "draw_size_px": [190, 101],
+      "brief": "A long, battered rooftop HVAC bank: three low metal condenser units, bundled conduit, dark grease stains and scattered leaves."
+    },
+    {
+      "filename": "roof_hvac_square.png",
+      "replaces": "rooflayer_aircon_large",
+      "draw_size_px": [160, 165],
+      "brief": "A square rooftop mechanical plant with two fans, rusted guard rails, cable conduits and a torn maintenance label."
+    },
+    {
+      "filename": "roof_tar_blue.png",
+      "replaces": "rooflayer_blue_roof",
+      "draw_size_px": [190, 135],
+      "brief": "Patched charcoal tar roof section with blue-painted flashing, seams, drains, puddle rings and a few paper scraps."
+    },
+    {
+      "filename": "roof_tar_green.png",
+      "replaces": "rooflayer_green_roof",
+      "draw_size_px": [180, 181],
+      "brief": "Weathered black roof membrane with faded green parapet flashing, repair patches, moss in cracks and a service hatch seam."
+    },
+    {
+      "filename": "roof_gravel_grey.png",
+      "replaces": "rooflayer_grey_roof",
+      "draw_size_px": [180, 181],
+      "brief": "Grey gravel rooftop service section with tar patches, a drain grate, weathering, loose aggregate and faint utility markings."
+    },
+    {
+      "filename": "roof_tar_umber.png",
+      "replaces": "rooflayer_orange_roof",
+      "draw_size_px": [188, 150],
+      "brief": "Brown-umber patched roof membrane, warm rusted flashing, pooled grime around a drain and small maintenance debris."
+    },
+    {
+      "filename": "roof_tank_rust.png",
+      "replaces": "rooflayer_water_brown",
+      "draw_size_px": [154, 154],
+      "brief": "Top-down rusty cylindrical rooftop water tank with ladder cage, fittings, grimy cap and a small puddled contact shadow."
+    },
+    {
+      "filename": "roof_tank_moss.png",
+      "replaces": "rooflayer_water_green",
+      "draw_size_px": [154, 154],
+      "brief": "Top-down mossy green rooftop water tank with aged painted bands, weathered bolts, ladder cage and pipe fittings."
+    },
+    {
+      "filename": "roof_tank_red.png",
+      "replaces": "rooflayer_water_red",
+      "draw_size_px": [154, 154],
+      "brief": "Top-down faded red rooftop water tank with chipped paint, warning stencil, ladder cage and exposed supply pipe."
+    }
+  ]
+}

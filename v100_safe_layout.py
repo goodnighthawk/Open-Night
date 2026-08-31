@@ -4,19 +4,12 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
+from building_morphology import footprint_for as _generated_footprint_for
+
 
 def _footprint(building: dict) -> set[tuple[int, int]]:
     x0, y0, x1, y1 = map(int, building["rect"])
-    cells = {(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)}
-    notch = building.get("notch")
-    if not notch:
-        return cells
-    depth = int(notch["depth_cells"])
-    corner = str(notch["corner"])
-    xs = range(x0, x0 + depth) if corner.endswith("left") else range(x1 - depth + 1, x1 + 1)
-    ys = range(y0, y0 + depth) if corner.startswith("top") else range(y1 - depth + 1, y1 + 1)
-    cells.difference_update((x, y) for y in ys for x in xs)
-    return cells
+    return _generated_footprint_for((x0, y0, x1, y1), building.get("notch"))
 
 
 def _nonroad_components(rows: list[list[str]]) -> tuple[dict[tuple[int, int], int], dict[int, set[tuple[int, int]]]]:

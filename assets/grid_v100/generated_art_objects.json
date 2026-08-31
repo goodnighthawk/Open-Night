@@ -1,0 +1,18 @@
+{
+  "objects": [
+    {"asset":"v4_art_bench","gx":2,"gy":12,"offset_x_px":68,"offset_y_px":168,"width_px":110,"height_px":54,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_mailbox","gx":16,"gy":12,"offset_x_px":104,"offset_y_px":170,"width_px":48,"height_px":52,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_dumpster","gx":25,"gy":13,"offset_x_px":70,"offset_y_px":142,"width_px":118,"height_px":90,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_hydrant","gx":37,"gy":12,"offset_x_px":106,"offset_y_px":174,"width_px":44,"height_px":44,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_cone","gx":55,"gy":12,"offset_x_px":110,"offset_y_px":176,"width_px":32,"height_px":32,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_bollard","gx":62,"gy":13,"offset_x_px":106,"offset_y_px":170,"width_px":34,"height_px":42,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_bus_shelter","gx":33,"gy":28,"offset_x_px":54,"offset_y_px":144,"width_px":148,"height_px":96,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_phone_box","gx":41,"gy":28,"offset_x_px":101,"offset_y_px":158,"width_px":54,"height_px":64,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_stop_sign","gx":8,"gy":35,"offset_x_px":107,"offset_y_px":138,"width_px":42,"height_px":84,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_parking_sign","gx":48,"gy":35,"offset_x_px":107,"offset_y_px":138,"width_px":42,"height_px":84,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_tree","gx":32,"gy":42,"offset_x_px":60,"offset_y_px":80,"width_px":136,"height_px":136,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_art_chain_fence","gx":52,"gy":36,"offset_x_px":38,"offset_y_px":164,"width_px":178,"height_px":54,"decorative_only":true,"art_pass":"v4_generated_street_art"},
+    {"asset":"v4_concept_trash_cluster","gx":1,"gy":35,"offset_x_px":88,"offset_y_px":164,"width_px":84,"height_px":76,"decorative_only":true,"art_pass":"v4_generated_concept_art"},
+    {"asset":"v4_concept_stray_dog","gx":62,"gy":35,"offset_x_px":100,"offset_y_px":158,"width_px":56,"height_px":74,"decorative_only":true,"art_pass":"v4_generated_concept_art"}
+  ]
+}

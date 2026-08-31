@@ -1,0 +1,654 @@
+{
+  "format": "open-night-generated-surface-catalog-v1",
+  "tile_size_px": 256,
+  "source_authority": "assets/generated_v4_pavement/source/v4_pavement_concept_sheet.png",
+  "source_style_master": "assets/generated_v4_surfaces/source/coordinated_surface_style_master.png",
+  "release_marker_changed": false,
+  "tiles": {
+    "pavement_standard_variant_0": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_0.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_standard_variant_1": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_1.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_standard_variant_2": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_2.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_standard_variant_3": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_3.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patched_variant_0": {
+      "image": "assets/generated_v4_surfaces/pavement/patched_0.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patched_variant_1": {
+      "image": "assets/generated_v4_surfaces/pavement/patched_1.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patched_variant_2": {
+      "image": "assets/generated_v4_surfaces/pavement/patched_2.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patched_variant_3": {
+      "image": "assets/generated_v4_surfaces/pavement/patched_3.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_variant_0": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_0.png",
+      "collision": "sidewalk",
+      "kind": "plaza",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_variant_1": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_1.png",
+      "collision": "sidewalk",
+      "kind": "plaza",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_variant_2": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_2.png",
+      "collision": "sidewalk",
+      "kind": "plaza",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_variant_3": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_3.png",
+      "collision": "sidewalk",
+      "kind": "plaza",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_h": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_0.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_v": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_0.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_small": {
+      "image": "assets/generated_v4_surfaces/pavement/standard_0.png",
+      "collision": "sidewalk",
+      "kind": "pavement",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_pattern": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_0.png",
+      "collision": "sidewalk",
+      "kind": "plaza",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patch_connector_h": {
+      "image": "assets/generated_v4_surfaces/pavement/patch_connector_h.png",
+      "collision": "sidewalk",
+      "kind": "pavement_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_patch_connector_v": {
+      "image": "assets/generated_v4_surfaces/pavement/patch_connector_v.png",
+      "collision": "sidewalk",
+      "kind": "pavement_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_connector_h": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_connector_h.png",
+      "collision": "sidewalk",
+      "kind": "pavement_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "pavement_plaza_connector_v": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_connector_v.png",
+      "collision": "sidewalk",
+      "kind": "pavement_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_top": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_top.png",
+      "collision": "sidewalk",
+      "kind": "curb",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_ramp_top": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_ramp_top.png",
+      "collision": "sidewalk",
+      "kind": "curb_ramp",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_right": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_right.png",
+      "collision": "sidewalk",
+      "kind": "curb",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_ramp_right": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_ramp_right.png",
+      "collision": "sidewalk",
+      "kind": "curb_ramp",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_bottom": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_bottom.png",
+      "collision": "sidewalk",
+      "kind": "curb",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_ramp_bottom": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_ramp_bottom.png",
+      "collision": "sidewalk",
+      "kind": "curb_ramp",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_left": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_left.png",
+      "collision": "sidewalk",
+      "kind": "curb",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_ramp_left": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_ramp_left.png",
+      "collision": "sidewalk",
+      "kind": "curb_ramp",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_tl_outer": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_tl_outer.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_tl_inner": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_tl_inner.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_tr_outer": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_tr_outer.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_tr_inner": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_tr_inner.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_bl_outer": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_bl_outer.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_bl_inner": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_bl_inner.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_br_outer": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_br_outer.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "curb_br_inner": {
+      "image": "assets/generated_v4_surfaces/pavement/curb_br_inner.png",
+      "collision": "sidewalk",
+      "kind": "curb_corner",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_asphalt_variant_0": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_0.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_asphalt_variant_1": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_1.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_asphalt_variant_2": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_2.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_asphalt_variant_3": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_3.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_fill": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_0.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "road_patched": {
+      "image": "assets/generated_v4_surfaces/road/asphalt_patched.png",
+      "collision": "road",
+      "kind": "road_surface",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_dry": {
+      "image": "assets/generated_v4_surfaces/sand/sand_dry.png",
+      "collision": "sidewalk",
+      "kind": "sand",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_compacted": {
+      "image": "assets/generated_v4_surfaces/sand/sand_compacted.png",
+      "collision": "sidewalk",
+      "kind": "sand",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_damp": {
+      "image": "assets/generated_v4_surfaces/sand/sand_damp.png",
+      "collision": "sidewalk",
+      "kind": "sand",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_coarse_urban": {
+      "image": "assets/generated_v4_surfaces/sand/sand_coarse_urban.png",
+      "collision": "sidewalk",
+      "kind": "sand",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_dry_to_damp_h": {
+      "image": "assets/generated_v4_surfaces/sand/dry_to_damp_h.png",
+      "collision": "sidewalk",
+      "kind": "sand_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "sand_dry_to_damp_v": {
+      "image": "assets/generated_v4_surfaces/sand/dry_to_damp_v.png",
+      "collision": "sidewalk",
+      "kind": "sand_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep_ripple_0": {
+      "image": "assets/generated_v4_surfaces/water/deep_ripple_0.png",
+      "collision": "wade",
+      "kind": "water",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep_ripple_1": {
+      "image": "assets/generated_v4_surfaces/water/deep_ripple_1.png",
+      "collision": "wade",
+      "kind": "water",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep_ripple_2": {
+      "image": "assets/generated_v4_surfaces/water/deep_ripple_2.png",
+      "collision": "wade",
+      "kind": "water",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep": {
+      "image": "assets/generated_v4_surfaces/water/deep.png",
+      "collision": "wade",
+      "kind": "water",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_shallow": {
+      "image": "assets/generated_v4_surfaces/water/shallow.png",
+      "collision": "wade",
+      "kind": "water",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep_to_shallow_h": {
+      "image": "assets/generated_v4_surfaces/water/deep_to_shallow_h.png",
+      "collision": "wade",
+      "kind": "water_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_deep_to_shallow_v": {
+      "image": "assets/generated_v4_surfaces/water/deep_to_shallow_v.png",
+      "collision": "wade",
+      "kind": "water_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_wet_sand_h": {
+      "image": "assets/generated_v4_surfaces/water/wet_sand_h.png",
+      "collision": "wade",
+      "kind": "shoreline_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "water_wet_sand_v": {
+      "image": "assets/generated_v4_surfaces/water/wet_sand_v.png",
+      "collision": "wade",
+      "kind": "shoreline_transition",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_top": {
+      "image": "assets/generated_v4_surfaces/shoreline/top.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_right": {
+      "image": "assets/generated_v4_surfaces/shoreline/right.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_bottom": {
+      "image": "assets/generated_v4_surfaces/shoreline/bottom.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_left": {
+      "image": "assets/generated_v4_surfaces/shoreline/left.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_tl_outer": {
+      "image": "assets/generated_v4_surfaces/shoreline/tl_outer.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_tl_inner": {
+      "image": "assets/generated_v4_surfaces/shoreline/tl_inner.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_tr_outer": {
+      "image": "assets/generated_v4_surfaces/shoreline/tr_outer.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_tr_inner": {
+      "image": "assets/generated_v4_surfaces/shoreline/tr_inner.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_bl_outer": {
+      "image": "assets/generated_v4_surfaces/shoreline/bl_outer.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_bl_inner": {
+      "image": "assets/generated_v4_surfaces/shoreline/bl_inner.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_br_outer": {
+      "image": "assets/generated_v4_surfaces/shoreline/br_outer.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    },
+    "shoreline_br_inner": {
+      "image": "assets/generated_v4_surfaces/shoreline/br_inner.png",
+      "collision": "sidewalk",
+      "kind": "shoreline",
+      "layer": "ground",
+      "z": 0
+    }
+  },
+  "objects": {
+    "mark_white_crossing_piece": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_crossing_piece.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_long_arrow": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_long_arrow.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_repeating_double": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_repeating_double.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_repeating_single": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_repeating_single.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_short_arrow": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_short_arrow.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_single_long": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_single_long.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_single_short": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_single_short.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_stop": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_stop.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_thick_long": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_thick_long.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_white_thick_short": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_thick_short.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_yellow_repeating_double": {
+      "image": "assets/generated_v4_surfaces/road/markings/yellow_repeating_double.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_yellow_repeating_single": {
+      "image": "assets/generated_v4_surfaces/road/markings/yellow_repeating_single.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_yellow_single_long": {
+      "image": "assets/generated_v4_surfaces/road/markings/yellow_single_long.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_yellow_single_short": {
+      "image": "assets/generated_v4_surfaces/road/markings/yellow_single_short.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_stop_bar": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_stop.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_direction_arrow": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_long_arrow.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_zebra_crossing": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_crossing_piece.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_double_yellow": {
+      "image": "assets/generated_v4_surfaces/road/markings/yellow_repeating_double.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_solid_white_edge": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_single_long.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    },
+    "mark_dashed_white_lane": {
+      "image": "assets/generated_v4_surfaces/road/markings/white_repeating_single.png",
+      "kind": "road_marking",
+      "layer": "ground",
+      "z": 130,
+      "native_width_px": 256,
+      "native_height_px": 256
+    }
+  }
+}

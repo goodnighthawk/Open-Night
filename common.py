@@ -126,6 +126,7 @@ TRAFFIC_PEDESTRIAN_YIELD_DISTANCE = 68.0
 TRAFFIC_LIGHT_CYCLE_S = 16.0
 TRAFFIC_LIGHT_GREEN_S = 7.0
 TRAFFIC_LIGHT_ALL_RED_S = 1.0
+TRAFFIC_LIGHT_YELLOW_S = 1.0
 TRAFFIC_SPATIAL_CELL = 192.0
 TRAFFIC_MIN_SEPARATION = 42.0
 TRAFFIC_BRAKE_DECEL = 250.0
@@ -497,6 +498,41 @@ def traffic_phase_green(phase: int, server_time: float) -> bool:
 def traffic_light_states(map_config: dict, server_time: float) -> dict[str, bool]:
     return {
         str(signal["id"]): traffic_phase_green(int(signal.get("phase", 0)), server_time)
+        for signal in map_config.get("traffic_signals", [])
+    }
+
+
+TRAFFIC_SIGNAL_ART_STATES = (
+    "traffic_red_not_clear", "traffic_yellow_not_clear", "traffic_green_not_clear",
+    "traffic_red_clear", "traffic_yellow_clear", "traffic_green_clear",
+)
+
+
+def traffic_signal_state(signal: dict, server_time: float) -> str:
+    """Return one of the six approved vehicle/pedestrian signal combinations."""
+    if bool(signal.get("signal_cycle_all_six", False)):
+        cycle = max(1.0, float(signal.get("signal_cycle_seconds", 9.0)))
+        offset = float(signal.get("signal_cycle_offset", 0.0))
+        index = int(((float(server_time) + offset) % cycle) / cycle * len(TRAFFIC_SIGNAL_ART_STATES))
+        return TRAFFIC_SIGNAL_ART_STATES[min(index, len(TRAFFIC_SIGNAL_ART_STATES) - 1)]
+
+    phase = int(signal.get("phase", 0)) % 2
+    t = float(server_time) % TRAFFIC_LIGHT_CYCLE_S
+    start = 0.0 if phase == 0 else TRAFFIC_LIGHT_GREEN_S + TRAFFIC_LIGHT_ALL_RED_S
+    elapsed = (t - start) % TRAFFIC_LIGHT_CYCLE_S
+    if elapsed < TRAFFIC_LIGHT_GREEN_S - TRAFFIC_LIGHT_YELLOW_S:
+        vehicle = "green"
+    elif elapsed < TRAFFIC_LIGHT_GREEN_S:
+        vehicle = "yellow"
+    else:
+        vehicle = "red"
+    pedestrian_clear = vehicle == "red" and traffic_phase_green(1 - phase, server_time)
+    return f"traffic_{vehicle}_{'clear' if pedestrian_clear else 'not_clear'}"
+
+
+def traffic_signal_states(map_config: dict, server_time: float) -> dict[str, str]:
+    return {
+        str(signal["id"]): traffic_signal_state(signal, server_time)
         for signal in map_config.get("traffic_signals", [])
     }
 

@@ -18,6 +18,14 @@ sibling `Open-Night-Map-Preview` worktree follows GitHub's `map-preview` branch.
 Preview saves and feedback live under `%LOCALAPPDATA%\OpenNightMapPreview`, not
 inside either Git worktree, so reports and screenshots cannot block updates.
 
+## Standalone GWB workbench release
+
+Each push to GitHub's `map-preview` branch runs the **GWB Map Workbench Preview**
+workflow. Its `open-night-gwb-map-previewer` artifact is a portable review
+bundle: download and extract it, then double-click `MAP_WORKBENCH.bat`. Use `G`
+for Ground, `R` for Roof, and `F` to fit the complete map. The artifact also
+contains the full Ground/Roof PNGs and does not change the stable game version.
+
 ## Map-generation workflow
 
 - Publish incomplete but runnable map passes to `map-preview`.

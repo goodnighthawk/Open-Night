@@ -50,7 +50,7 @@ class TileDef:
 
     @property
     def walkable(self) -> bool:
-        return self.collision in {"walk", "road", "sidewalk", "interior", "transition"}
+        return self.collision in {"walk", "road", "sidewalk", "interior", "transition", "wade"}
 
 
 @dataclass(frozen=True)
@@ -62,6 +62,9 @@ class ObjectDef:
     z: int = 100
     native_width_px: int = 256
     native_height_px: int = 256
+    pivot_x_px: int = 0
+    pivot_y_px: int = 0
+    optional: bool = False
 
 
 class TileCatalog:
@@ -76,16 +79,26 @@ class TileCatalog:
         # The modular 256 px building kit is kept in a companion catalog so the
         # main object catalog stays readable while still making city_block tiles
         # first-class collision/render cells.
-        extra_path = path.with_name("building_tiles.json")
-        if extra_path.is_file():
-            extra = json.loads(extra_path.read_text(encoding="utf-8"))
-            raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
-            raw.setdefault("objects", {}).update(extra.get("objects", {}))
+        for extra_name in (
+            "building_tiles.json",
+            "generated_art_tiles.json",
+            "generated_building_tiles.json",
+            "generated_surface_tiles.json",
+            "generated_transition_objects.json",
+        ):
+            extra_path = path.with_name(extra_name)
+            if extra_path.is_file():
+                extra = json.loads(extra_path.read_text(encoding="utf-8"))
+                raw.setdefault("tiles", {}).update(extra.get("tiles", {}))
+                raw.setdefault("objects", {}).update(extra.get("objects", {}))
 
         # Centralized orientation translation: map authors use world compass
         # semantics, while the pack image names are converted here exactly once.
         for tile_id, image in CURB_WORLD_TO_PACK_IMAGE.items():
-            if tile_id in raw.get("tiles", {}):
+            if (
+                tile_id in raw.get("tiles", {})
+                and str(raw["tiles"][tile_id].get("image", "")).startswith("city_block://")
+            ):
                 raw["tiles"][tile_id]["image"] = image
 
         entries = {
@@ -108,6 +121,9 @@ class TileCatalog:
                 z=int(item.get("z", 100)),
                 native_width_px=int(item.get("native_width_px", GRID_CELL_PX)),
                 native_height_px=int(item.get("native_height_px", GRID_CELL_PX)),
+                pivot_x_px=int(item.get("pivot_x_px", 0)),
+                pivot_y_px=int(item.get("pivot_y_px", 0)),
+                optional=bool(item.get("optional", False)),
             )
             for object_id, item in raw.get("objects", {}).items()
         }
@@ -215,6 +231,10 @@ class GridWorld:
         gx, gy = self.world_to_cell(x, y)
         return self.tile(layer, gx, gy).walkable
 
+    def vehicle_drivable_at(self, x: float, y: float) -> bool:
+        """Vehicles remain restricted to authored road collision cells."""
+        return self.collision_at("ground", x, y) == "road"
+
     def circle_walkable(self, layer: str, x: float, y: float, radius: float) -> bool:
         radius = max(0.0, float(radius))
         margin = 0.5
@@ -258,15 +278,62 @@ class GridWorld:
             for cx, cy, prop_radius, _kind in self.object_collision_circles()
         )
 
+    def object_interaction_point(self, item: dict[str, Any]) -> tuple[float, float]:
+        """Resolve an interaction zone independently from art and collision."""
+        definition = self.catalog.object(str(item["asset"]))
+        width = float(item.get("width_px", definition.native_width_px))
+        height = float(item.get("height_px", definition.native_height_px))
+        left = int(item["gx"]) * self.cell_px + float(item.get("offset_x_px", 0.0))
+        top = int(item["gy"]) * self.cell_px + float(item.get("offset_y_px", 0.0))
+        return (
+            left + float(item.get("interaction_offset_x_px", width * 0.5)),
+            top + float(item.get("interaction_offset_y_px", height * 0.5)),
+        )
+
+    def nearest_interaction(
+        self,
+        x: float,
+        y: float,
+        level: int,
+        *,
+        kinds: set[str] | None = None,
+        max_distance: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Return the nearest active data-authored trigger on the current level."""
+        best: tuple[float, dict[str, Any]] | None = None
+        for item in self.objects:
+            kind = str(item.get("interaction_kind", "")).strip()
+            if not kind or (kinds is not None and kind not in kinds):
+                continue
+            if int(item.get("interaction_level", 0)) != int(level):
+                continue
+            if not bool(item.get("interaction_active", True)):
+                continue
+            radius = float(item.get("interaction_radius_px", 72.0))
+            if max_distance is not None:
+                radius = min(radius, float(max_distance))
+            ix, iy = self.object_interaction_point(item)
+            distance = math.hypot(float(x) - ix, float(y) - iy)
+            candidate = (distance, item)
+            if distance <= radius and (best is None or distance < best[0]):
+                best = candidate
+        return None if best is None else best[1]
+
     def circle_spawnable(self, layer: str, x: float, y: float, radius: float) -> bool:
-        """Accept safe pedestrian login surfaces while explicitly rejecting roads."""
+        """Accept safe login surfaces while rejecting roads and wading water."""
         if not self.circle_walkable(layer, x, y, radius):
             return False
         probes = ((0.0, 0.0), (radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius))
-        return all(self.collision_at(layer, x + ox, y + oy) != "road" for ox, oy in probes)
+        return all(self.collision_at(layer, x + ox, y + oy) not in {"road", "wade"} for ox, oy in probes)
 
     def move_circle(self, layer: str, x: float, y: float, dx: float, dy: float, radius: float, *, max_step: float | None = None) -> tuple[float, float]:
         x, y, dx, dy = map(float, (x, y, dx, dy))
+        if layer == "ground" and (
+            self.collision_at(layer, x, y) == "wade"
+            or self.collision_at(layer, x + dx, y + dy) == "wade"
+        ):
+            dx *= 0.55
+            dy *= 0.55
         distance = max(abs(dx), abs(dy))
         step_limit = max(8.0, min(self.cell_px / 4.0, float(max_step or self.cell_px / 4.0)))
         steps = max(1, int(math.ceil(distance / step_limit)))
@@ -360,7 +427,10 @@ class GridWorld:
             "east": (-1, 0), "west": (1, 0), "south": (0, -1), "north": (0, 1),
         }
         for item in self.objects:
-            if str(item.get("asset", "")) != "placeholder_fire_escape":
+            if (
+                str(item.get("asset", "")) not in {"placeholder_fire_escape", "fire_escape_ladder"}
+                and str(item.get("interaction_kind", "")) != "fire_escape_ladder"
+            ):
                 continue
             gx, gy = int(item["gx"]), int(item["gy"])
             ground_x, ground_y = self.cell_center(gx, gy)
@@ -402,7 +472,7 @@ class GridWorld:
         visible = []
         for item in self.objects:
             asset_id = str(item["asset"]); definition = self.catalog.object(asset_id)
-            if definition.layer != layer:
+            if str(item.get("layer", definition.layer)) != layer:
                 continue
             x, y = self.cell_to_world(int(item["gx"]), int(item["gy"]))
             # Grid anchors keep authored objects registered to collision cells,

@@ -1311,6 +1311,7 @@ class Game:
         self.blood_stains: dict[str, dict] = {}
         self.hydrants: dict[str, dict] = {}
         self.traffic_lights: dict[str, bool] = {}
+        self.traffic_signal_states: dict[str, str] = {}
         self.notice = "Connecting to Open Night Internet Server..." if ".railway.app" in uri.lower() else "Connecting..."
         self.notice_until = time.monotonic() + 4.0
         self.connected = False
@@ -2555,6 +2556,11 @@ class Game:
                 lights = message.get("traffic_lights")
                 if isinstance(lights, dict):
                     self.traffic_lights = {str(k): bool(v) for k, v in lights.items()}
+                signal_states = message.get("traffic_signal_states")
+                if isinstance(signal_states, dict):
+                    self.traffic_signal_states = {
+                        str(k): str(v) for k, v in signal_states.items()
+                    }
                 chunk = message.get("chunk")
                 if isinstance(chunk, (list, tuple)) and len(chunk) >= 2:
                     try:
@@ -2767,7 +2773,27 @@ class Game:
 
     def draw_traffic_signal(self, signal: dict) -> None:
         sx, sy = self.world_to_screen(float(signal["pos"][0]), float(signal["pos"][1]))
-        green = bool(self.traffic_lights.get(str(signal.get("id")), False))
+        signal_id = str(signal.get("id"))
+        green = bool(self.traffic_lights.get(signal_id, False))
+        state = self.traffic_signal_states.get(
+            signal_id,
+            "traffic_green_not_clear" if green else "traffic_red_clear",
+        )
+        if self.grid_renderer is not None:
+            orientation_rotation = {
+                "north": 0.0, "n": 0.0, "nw": 0.0, "ne": 0.0,
+                "east": 90.0, "e": 90.0,
+                "south": 180.0, "s": 180.0, "se": 180.0, "sw": 180.0,
+                "west": 270.0, "w": 270.0,
+            }
+            rotation = float(signal.get(
+                "rotation", orientation_rotation.get(str(signal.get("orientation", "north")).lower(), 0.0)
+            ))
+            approved = self.grid_renderer.catalog_object_at_pivot(state, rotation=rotation)
+            if approved is not None:
+                image, pivot = approved
+                self.screen.blit(image, (int(sx - pivot[0]), int(sy - pivot[1])))
+                return
         # Crosswalk geometry is rendered once by EnvironmentRenderer from
         # crosswalks.csv. Traffic signals now render only their live light state.
         # `signal["pos"]` is the authored fixture anchor.  Keep the live
@@ -2889,6 +2915,16 @@ class Game:
         self.interior.set_player_state(x, y, aim)
 
     def try_enter_interior(self) -> bool:
+        local = self.players.get(self.local_id or "")
+        if self.grid_world is not None and local is not None:
+            grid_trigger = self.grid_world.nearest_interaction(
+                local.render_x, local.render_y, int(getattr(local, "level", 0)),
+                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+            )
+            if grid_trigger is not None and grid_trigger.get("interaction_kind") != "entrance_door":
+                # Let the general interaction request reach the buzzer/elevator/
+                # roof trigger instead of the nearby door swallowing the E key.
+                return False
         info = self.nearest_interior()
         if info is None:
             return False
@@ -2916,7 +2952,7 @@ class Game:
                 continue
             sx, sy = self.world_to_screen(ex, ey)
             is_apartment_door = str(info.get("kind", "")).strip().lower() == "blank_house"
-            if is_apartment_door and -60 <= sx <= self.screen.get_width()+60 and -60 <= sy <= self.screen.get_height()+80:
+            if is_apartment_door and not bool(info.get("grid_native")) and -60 <= sx <= self.screen.get_width()+60 and -60 <= sy <= self.screen.get_height()+80:
                 # Every apartment entrance has a readable buzzer panel. The
                 # server decides which resident labels this client may receive.
                 buzzer = pygame.Rect(sx + 15, sy - 11, 9, 22)
@@ -4699,12 +4735,19 @@ class Game:
         if local is None or self.inventory_open or self.map_open or self.pause_menu_open:
             return
         fire_escape_target = None
+        grid_interaction_target = None
         if self.grid_world is not None and not local.interior_id and not bool(getattr(local, "in_vehicle", False)):
             transition = self.grid_world.fire_escape_transition(
                 local.render_x, local.render_y, int(getattr(local, "level", 0))
             )
             if transition is not None:
                 fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
+            trigger = self.grid_world.nearest_interaction(
+                local.render_x, local.render_y, int(getattr(local, "level", 0)),
+                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+            )
+            if trigger is not None:
+                grid_interaction_target = str(trigger.get("interaction_prompt", "USE TRANSITION"))
 
         near_supplier = False
         for row in self._job_locations():
@@ -4740,9 +4783,9 @@ class Game:
                 if role != "supplier":
                     sales_targets.append((distance, "BUYER" if role == "buyer" else "PEDESTRIAN"))
 
-        if not (fire_escape_target or near_supplier or sales_targets):
+        if not (fire_escape_target or grid_interaction_target or near_supplier or sales_targets):
             return
-        target = fire_escape_target or (
+        target = fire_escape_target or grid_interaction_target or (
             "BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}"
         )
         prompt = self.font.render(f"[ E ] {target}", True, (37, 226, 255))
@@ -4842,6 +4885,7 @@ class Game:
                 for pos in supplier_positions
             )
             fire_escape_target = None
+            grid_interaction_target = None
             if (self.grid_world is not None and not local.interior_id
                     and not bool(getattr(local, "in_vehicle", False))):
                 transition = self.grid_world.fire_escape_transition(
@@ -4849,6 +4893,12 @@ class Game:
                 )
                 if transition is not None:
                     fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
+                trigger = self.grid_world.nearest_interaction(
+                    local.render_x, local.render_y, int(getattr(local, "level", 0)),
+                    kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+                )
+                if trigger is not None:
+                    grid_interaction_target = str(trigger.get("interaction_prompt", "USE TRANSITION"))
             sales_targets: list[tuple[float, str]] = []
             for player in self.players.values():
                 if (player.id == self.local_id or player.in_vehicle
@@ -4867,8 +4917,8 @@ class Game:
                         role = str(getattr(npc, "kind", "pedestrian")).lower()
                         if role != "supplier":
                             sales_targets.append((d, "BUYER" if role == "buyer" else "PEDESTRIAN"))
-            if (fire_escape_target or near_supplier or sales_targets) and not self.inventory_open:
-                target = fire_escape_target or ("BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}")
+            if (fire_escape_target or grid_interaction_target or near_supplier or sales_targets) and not self.inventory_open:
+                target = fire_escape_target or grid_interaction_target or ("BUY" if near_supplier else f"SELL TO {min(sales_targets, key=lambda row: row[0])[1].upper()}")
                 prompt = self.big_font.render(f"[ E ] {target}", True, LOCAL_COLOR)
                 pr = prompt.get_rect(center=(w // 2, h - 72))
                 pygame.draw.rect(self.screen, (10, 10, 10), pr.inflate(32, 22), border_radius=7)
@@ -5010,6 +5060,22 @@ class Game:
                             continue
                         if self.hud_v3.handle_keydown(event, overlay_open=self.inventory_open):
                             continue
+                        if event.key in (pygame.K_0, pygame.K_1, pygame.K_KP0, pygame.K_KP1) and not self.inventory_open and not self.map_open:
+                            local = self.players.get(self.local_id or "")
+                            elevator = None
+                            if self.grid_world is not None and local is not None and not bool(getattr(local, "in_vehicle", False)):
+                                elevator = self.grid_world.nearest_interaction(
+                                    local.render_x, local.render_y, int(getattr(local, "level", 0)),
+                                    kinds={"elevator_transition"},
+                                )
+                            if elevator is not None:
+                                floor = 0 if event.key in (pygame.K_0, pygame.K_KP0) else 1
+                                self.network.send({
+                                    "type": "transition_use",
+                                    "object_id": str(elevator.get("object_id", "")),
+                                    "floor": floor,
+                                })
+                                continue
                         if event.key == pygame.K_SPACE and not self.inventory_open and not self.map_open:
                             local = self.players.get(self.local_id or "")
                             if local is not None and not bool(getattr(local, "in_vehicle", False)):

@@ -230,9 +230,10 @@ class GridRenderer:
         image = self._load_image(tile.image)
         if image.get_size() != (self.world.cell_px, self.world.cell_px):
             image = pygame.transform.scale(image, (self.world.cell_px, self.world.cell_px))
-        if tile_id.startswith("bld_") and not tile_id.endswith("_fill"):
+        generated_modular_building = tile.image.startswith("assets/generated_v4_buildings/")
+        if tile_id.startswith("bld_") and not generated_modular_building and not tile_id.endswith("_fill"):
             image = self._suppress_building_perimeter_outline(image)
-        if tile_id.startswith("bld_"):
+        if tile_id.startswith("bld_") and not generated_modular_building:
             # Expand only inside the already-blocked authoritative tile. This
             # reduces the apparent sidewalk/setback without changing a single
             # collision cell or building footprint (current report #134).
@@ -251,10 +252,34 @@ class GridRenderer:
             return image
         return pygame.transform.scale(image, (max(1, size), max(1, size)))
 
+    def _visual_tile_id(self, tile_id: str, gx: int, gy: int) -> str:
+        """Select deterministic decorative variation without changing collision IDs."""
+        family = None
+        if tile_id in {"pavement_h", "pavement_v", "pavement_small"}:
+            family = "pavement_standard_variant"
+        elif tile_id == "pavement_pattern":
+            family = "pavement_plaza_variant"
+        elif tile_id == "road_fill":
+            family = "road_asphalt_variant"
+        elif tile_id == "water_deep":
+            frame = (pygame.time.get_ticks() // 450 + int(gx) * 3 + int(gy) * 5) % 3
+            candidate = f"water_deep_ripple_{frame}"
+            return candidate if candidate in self.world.catalog.entries else tile_id
+        if family is None:
+            return tile_id
+        variant = (int(gx) * 73856093 ^ int(gy) * 19349663) & 3
+        candidate = f"{family}_{variant}"
+        return candidate if candidate in self.world.catalog.entries else tile_id
+
     @lru_cache(maxsize=512)
     def _scaled_object_surface(self, asset_id: str, width: int, height: int) -> pygame.Surface:
         definition = self.world.catalog.object(asset_id)
-        image = self._load_image(definition.image)
+        try:
+            image = self._load_image(definition.image)
+        except (FileNotFoundError, pygame.error):
+            if not definition.optional:
+                raise
+            return pygame.Surface((max(1, width), max(1, height)), pygame.SRCALPHA)
         if image.get_size() != (width, height):
             image = pygame.transform.scale(image, (max(1, width), max(1, height)))
         if definition.kind == "building":
@@ -266,6 +291,39 @@ class GridRenderer:
         if abs(float(rotation)) > 0.001:
             image = pygame.transform.rotate(image, -float(rotation))
         return image
+
+    def catalog_object_at_pivot(
+        self,
+        asset_id: str,
+        width: int | None = None,
+        height: int | None = None,
+        rotation: float = 0.0,
+    ) -> tuple[pygame.Surface, tuple[int, int]] | None:
+        """Return catalog art on a pivot-centred canvas for dynamic fixtures.
+
+        The renderer resolves only catalog IDs, never source paths.  A square
+        pivot canvas keeps state swaps and cardinal rotations registered to the
+        exact same authored mast base.
+        """
+        definition = self.world.catalog.objects.get(str(asset_id))
+        if definition is None:
+            return None
+        width = int(width or definition.native_width_px)
+        height = int(height or definition.native_height_px)
+        image = self._scaled_object_surface(str(asset_id), width, height)
+        if image.get_bounding_rect(min_alpha=1).width <= 0:
+            return None
+        px = int(round(definition.pivot_x_px * width / max(1, definition.native_width_px)))
+        py = int(round(definition.pivot_y_px * height / max(1, definition.native_height_px)))
+        radius = max(
+            px, py, width - px, height - py,
+        ) + 2
+        canvas = pygame.Surface((radius * 2 + 1, radius * 2 + 1), pygame.SRCALPHA)
+        center = (radius, radius)
+        canvas.blit(image, (center[0] - px, center[1] - py))
+        if abs(float(rotation)) > 0.001:
+            canvas = pygame.transform.rotate(canvas, -float(rotation))
+        return canvas, (canvas.get_width() // 2, canvas.get_height() // 2)
 
     @classmethod
     def _apply_ground_night_grade(cls, target: pygame.Surface, area: pygame.Rect | None = None) -> None:
@@ -342,7 +400,7 @@ class GridRenderer:
             tile_id = self.world.tile_id(layer, gx, gy)
             if skip_void and tile_id == "void":
                 continue
-            image = self._tile_surface(tile_id)
+            image = self._tile_surface(self._visual_tile_id(tile_id, gx, gy))
             position = (int(gx * cell - cam_x), int(gy * cell - cam_y))
             if layer == "ground" and tile_id.startswith("bld_"):
                 # Modular building edge art contains transparent setback padding.
@@ -475,7 +533,8 @@ class GridRenderer:
                     tile_id = self.world.tile_id(name, gx, gy)
                     if skip_void and tile_id == "void":
                         continue
-                    target.blit(self._tile_surface_scaled(tile_id, tile_px), (ox + gx * tile_px, oy + gy * tile_px))
+                    visual_id = self._visual_tile_id(tile_id, gx, gy)
+                    target.blit(self._tile_surface_scaled(visual_id, tile_px), (ox + gx * tile_px, oy + gy * tile_px))
 
         draw_layer_cells(layer)
         object_layers = (layer,)

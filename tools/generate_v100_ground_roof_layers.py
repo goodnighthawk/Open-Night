@@ -5,7 +5,8 @@ Current production scope is Ground + Roof only.
 
 Building rules:
 - existing building components define buildable envelopes;
-- stable component envelopes receive deterministic single-corner notches;
+- stable component envelopes receive deterministic rectangular, L-shaped,
+  stepped, recessed, and courtyard footprints;
 - city_block modular tiles are selected only from filename semantics;
 - modular building tiles are never rotated or stretched;
 - Roof copies the exact generated Ground building footprint cell-for-cell;
@@ -26,7 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from building_morphology import (
-    NOTCH_CORNERS, NOTCH_DEPTH_CELLS, assign_notches,
+    NOTCH_CORNERS, NOTCH_DEPTH_CELLS, assign_notches, footprint_connected,
     footprint_for as _footprint_for, role_for_cell as _role_for_footprint_cell,
     transition_anchors,
 )
@@ -45,11 +46,11 @@ THEMES = ("blue", "dark_green", "green", "red", "yellow")
 MIN_BUILDING_SIDE = 4
 MIN_BUILDING_AREA = 24
 ROOF_PROP_DRAW_SIZES = {
-    "rooflayer_aircon": (190, 101), "rooflayer_aircon_large": (160, 165),
-    "rooflayer_blue_roof": (190, 135), "rooflayer_green_roof": (180, 181),
-    "rooflayer_grey_roof": (180, 181), "rooflayer_orange_roof": (188, 150),
-    "rooflayer_water_brown": (154, 154), "rooflayer_water_green": (154, 154),
-    "rooflayer_water_red": (154, 154), "rooflayer_open_pipe_top": (100, 115),
+    "rooflayer_aircon": (190, 103), "rooflayer_aircon_large": (160, 167),
+    "rooflayer_blue_roof": (180, 177), "rooflayer_green_roof": (180, 179),
+    "rooflayer_grey_roof": (174, 181), "rooflayer_orange_roof": (185, 181),
+    "rooflayer_water_brown": (154, 178), "rooflayer_water_green": (154, 181),
+    "rooflayer_water_red": (154, 193), "rooflayer_open_pipe_top": (100, 115),
     "rooflayer_pipe": (100, 100), "rooflayer_pipe_work_02": (52, 198),
     "rooflayer_pipe_work_04": (190, 145), "rooflayer_white_box": (158, 150),
     "rooflayer_white_box_02": (130, 170), "rooflayer_white_box_03": (97, 124),
@@ -215,6 +216,13 @@ def _role_for_rect_cell(x: int, y: int, rect: tuple[int, int, int, int]) -> str:
 
 def _tile_for(theme: str, role: str) -> str:
     return f"bld_{theme}_{role}"
+
+
+def _footprint_cuts(building: dict) -> tuple[dict, ...]:
+    cuts = building.get("notch")
+    if not cuts:
+        return ()
+    return tuple(cuts) if isinstance(cuts, (list, tuple)) else (cuts,)
 
 
 def _audit_footprint(rows: list[list[str]], cells: set[tuple[int, int]], theme: str) -> None:
@@ -871,6 +879,8 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
         theme = str(building["theme"])
         notch = building.get("notch")
         footprint = _footprint_for(rect, notch)
+        if not footprint_connected(footprint):
+            raise RuntimeError(f"disconnected generated footprint: {building['building_id']}")
         for x, y in footprint:
             rows[y][x] = _tile_for(theme, _role_for_footprint_cell(x, y, footprint))
         _audit_footprint(rows, footprint, theme)
@@ -888,8 +898,8 @@ def synthesize_ground(data: dict, original: list[list[str]]) -> tuple[list[list[
     data.pop("layers_ascii", None)
     data["building_synthesis"] = {
         "version": 4,
-        "shape_family": "rectangles_and_single_corner_notches",
-        "morphology_pass": "building_morphology_v1",
+        "shape_family": "rectangles_l_shapes_stepped_recessed_and_courtyards",
+        "morphology_pass": "building_morphology_next",
         "notched_building_count": sum(b.get("notch") is not None for b in buildings),
         "removed_building_cell_count": sum(int(b["envelope_cells"]) - int(b["generated_cells"]) for b in buildings),
         "notch_depth_cells": NOTCH_DEPTH_CELLS,
@@ -943,30 +953,57 @@ def generate_layers() -> tuple[int, int]:
         footprint = _footprint_for((x0, y0, x1, y1), building.get("notch"))
         area = (x1 - x0 + 1) * (y1 - y0 + 1)
         anchors = transition_anchors(building, footprint)
-        door_x, door_y = anchors["door"]
-        fire_x, fire_y = anchors["fire_escape"]
+        door_edge_x, door_edge_y = anchors["door"]
+        fire_edge_x, fire_edge_y = anchors["fire_escape"]
+        door_x, door_y = door_edge_x, door_edge_y + 1
+        fire_x, fire_y = fire_edge_x + 1, fire_edge_y
         hatch_x, hatch_y = anchors["hatch"]
+
+        if not (0 <= door_y < len(ground) and not ground[door_y][door_x].startswith("bld_") and ground[door_y][door_x] != "road_fill"):
+            raise RuntimeError(f"door approach is not a clear sidewalk surface: {building_id}")
+        if not (0 <= fire_x < len(ground[0]) and not ground[fire_y][fire_x].startswith("bld_") and ground[fire_y][fire_x] != "road_fill"):
+            raise RuntimeError(f"fire-escape approach is not a clear sidewalk surface: {building_id}")
 
         for x, y in footprint:
             roof_rows[y][x] = ground[y][x]
 
         ground_objects.append({
-            "asset": "placeholder_street_door", "gx": door_x, "gy": door_y,
-            "width_px": 96, "height_px": 144, "building_id": building_id,
-            "edge": "south", "rotation": 0, "placeholder": True,
-            "future_transition": "ground_to_first_floor_door",
+            "asset": "entrance_door", "gx": door_x, "gy": door_y,
+            "offset_x_px": 72, "offset_y_px": 2,
+            "width_px": 112, "height_px": 144, "building_id": building_id,
+            "object_id": f"{building_id}_entrance_door",
+            "edge": "south", "rotation": 0,
+            "collision_radius_px": 0, "collision_kind": "none",
+            "interaction_kind": "entrance_door", "interaction_level": 0,
+            "interaction_radius_px": 72, "interaction_offset_x_px": 56,
+            "interaction_offset_y_px": 140, "interaction_active": True,
+            "interaction_prompt": "ENTER BUILDING",
+            "target_interior_id": f"{building_id}_interior",
         })
         ground_objects.append({
-            "asset": "placeholder_fire_escape", "gx": fire_x, "gy": fire_y,
-            "width_px": 128, "height_px": 256, "building_id": building_id,
-            "edge": "east", "rotation": 0, "placeholder": True,
-            "future_transition": "stationary_jump_ground_to_roof",
+            "asset": "fire_escape_ladder", "gx": fire_x, "gy": fire_y,
+            "offset_x_px": 97, "offset_y_px": 20,
+            "width_px": 62, "height_px": 216, "building_id": building_id,
+            "object_id": f"{building_id}_fire_escape_ladder",
+            "edge": "east", "rotation": 0,
+            "collision_radius_px": 0, "collision_kind": "none",
+            "interaction_kind": "fire_escape_ladder", "interaction_level": 0,
+            "interaction_radius_px": 76, "interaction_offset_x_px": 31,
+            "interaction_offset_y_px": 108, "interaction_active": True,
+            "interaction_prompt": "CLIMB FIRE ESCAPE", "connected_levels": [0, 1],
         })
         roof_objects.append({
-            "asset": "placeholder_roof_hatch", "gx": hatch_x, "gy": hatch_y,
-            "width_px": 128, "height_px": 128, "building_id": building_id,
-            "rotation": 0, "placeholder": True,
-            "future_transition": "second_floor_to_roof",
+            "asset": "roof_access_door", "gx": hatch_x, "gy": hatch_y,
+            "offset_x_px": 70, "offset_y_px": 58,
+            "width_px": 116, "height_px": 140, "building_id": building_id,
+            "object_id": f"{building_id}_roof_access_door",
+            "rotation": 0, "collision_radius_px": 0, "collision_kind": "none",
+            "interaction_kind": "roof_access_door", "interaction_level": 1,
+            "interaction_radius_px": 72, "interaction_offset_x_px": 58,
+            "interaction_offset_y_px": 70, "interaction_active": True,
+            "interaction_prompt": "ENTER UPPER INTERIOR",
+            "target_interior_id": f"{building_id}_upper_interior",
+            "connected_levels": ["upper_interior", 1],
         })
 
         detail_cells = _detail_cells((x0, y0, x1, y1), (hatch_x, hatch_y), footprint)
@@ -1015,11 +1052,17 @@ def generate_layers() -> tuple[int, int]:
         "generation_scope": ["ground", "roof"],
         "building_synthesis": "filename_semantics_no_rotation_minimum_scale",
         "building_morphology": {
-            "composition_pass": "building_morphology_v1",
-            "notched_building_count": sum(b.get("footprint_type") == "corner_notched" for b in buildings),
+            "composition_pass": "building_morphology_next",
+            "shape_counts": {
+                shape: sum(b.get("shape_variant") == shape for b in buildings)
+                for shape in ("rectangle", "l_corner", "stepped_side", "recessed_edge", "courtyard")
+            },
             "notch_depth_cells": NOTCH_DEPTH_CELLS,
             "corner_distribution": {
-                corner: sum((b.get("notch") or {}).get("corner") == corner for b in buildings)
+                corner: sum(
+                    cut.get("kind", "corner") == "corner" and cut.get("corner") == corner
+                    for b in buildings for cut in _footprint_cuts(b)
+                )
                 for corner in NOTCH_CORNERS
             },
         },
@@ -1074,8 +1117,11 @@ def generate_layers() -> tuple[int, int]:
             "version": 4,
             "matching_ground": True,
             "registration": "exact_ground_footprint",
-            "shape_family": "rectangles_with_corner_notches",
-            "notched_building_count": sum(b.get("footprint_type") == "corner_notched" for b in buildings),
+            "shape_family": "rectangles_l_shapes_stepped_recessed_and_courtyards",
+            "shape_counts": {
+                shape: sum(b.get("shape_variant") == shape for b in buildings)
+                for shape in ("rectangle", "l_corner", "stepped_side", "recessed_edge", "courtyard")
+            },
             "orientation_reference": "assets/source_packs/city_block/example.png",
             "orientation_authority": "filename_semantics",
             "random_rotation": False,
@@ -1118,7 +1164,7 @@ def main() -> None:
         f"silhouette_v1={buildings - STREET_EDGE_AWNING_TARGET}facade+{buildings}roof-edge",
         f"roof_palette_v1={len(ROOF_PROP_DRAW_SIZES)}families+{len(ROOF_ARCHETYPE_NAMES)}archetypes",
         f"roof_surface_v1={sum(ROOF_SURFACE_EFFECT_QUOTAS.values())}native-effects",
-        f"morphology_v1={sum(b.get('footprint_type') == 'corner_notched' for b in json.loads(GROUND_PATH.read_text())['building_synthesis']['buildings'])}notched",
+        "morphology_next=rectangle+l+stepped+recessed+courtyard",
         "roof_registration=exact_ground_footprint", "scope=ground,roof",
     )
 
