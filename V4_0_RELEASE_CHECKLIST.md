@@ -66,9 +66,9 @@ v4.0 is the procedural-city cutover release: the existing GWB corridor becomes t
 - [x] Keep player-controlled road vehicles server-authoritative for v4.0 with 60 Hz targets and frame-rate-independent client smoothing; vehicle prediction is out of scope.
 - [x] Regression-check that controlled-vehicle updates change render targets only and smoothing remains stable across render rates.
 - [x] Prove stable 60 Hz authoritative ticks under a representative automated 64-client city-wide load (64/64, 59.93 Hz mean, 57.03 Hz p05, zero movement gaps/overruns).
-- [ ] Movement and remote-player visibility pass with at least two clients.
-- [ ] Disconnect/reconnect and strict client/server version handling pass.
-- [ ] Server snapshots and map-player markers remain coherent while players are indoors/outdoors.
+- [x] Movement and remote-player visibility pass with at least two clients.
+- [x] Disconnect/reconnect and strict client/server version handling pass; reconnect always begins inside the reserved apartment.
+- [x] Server snapshots and map-player markers remain coherent while players are indoors/outdoors, with unauthorized interior IDs redacted.
 
 ## 5. Core-system regression
 

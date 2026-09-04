@@ -227,6 +227,13 @@ def main() -> int:
                   "reservation_blocks_reassignment", "reservation_reconnect"):
         assert token in housing_source, f"v4 housing network audit missing {token}"
     assert (Path(__file__).resolve().parent / "RUN_V4_HOUSING_TEST.bat").is_file()
+    session_audit = Path(__file__).resolve().parent / "tools" / "multiplayer_map_roster_audit.py"
+    session_source = session_audit.read_text(encoding="utf-8")
+    for token in ("outdated", "outdoor_pair", "movement_pair",
+                  "disconnected player removal", "reconnect_apartment",
+                  "reconnected indoor player redaction"):
+        assert token in session_source, f"v4 multiplayer session audit missing {token}"
+    assert (Path(__file__).resolve().parent / "RUN_V4_MULTIPLAYER_SESSION_TEST.bat").is_file()
     prediction_audit = Path(__file__).resolve().parent / "tools" / "v4_prediction_audit.py"
     prediction_source = prediction_audit.read_text(encoding="utf-8")
     for token in ("record_and_apply_on_foot_prediction", "reconcile_local_on_foot",

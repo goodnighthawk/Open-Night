@@ -4492,12 +4492,17 @@ def movement_player_record(
     ]
 
 
-def _movement_player_visible(viewer: ClientSession, other: ClientSession) -> bool:
+def _same_player_space(viewer: ClientSession, other: ClientSession) -> bool:
     if viewer is other:
         return True
-    if viewer.player.interior_id != other.player.interior_id:
-        return False
-    return math.hypot(viewer.player.x - other.player.x, viewer.player.y - other.player.y) <= PLAYER_MOVEMENT_RELEVANCE_DISTANCE
+    return viewer.player.interior_id == other.player.interior_id
+
+
+def _movement_player_visible(viewer: ClientSession, other: ClientSession) -> bool:
+    return _same_player_space(viewer, other) and (
+        math.hypot(viewer.player.x - other.player.x, viewer.player.y - other.player.y)
+        <= PLAYER_MOVEMENT_RELEVANCE_DISTANCE
+    )
 
 
 async def movement_stream_loop() -> None:
@@ -4629,6 +4634,8 @@ async def snapshot_loop() -> None:
 
             for key in zone_keys:
                 for other in player_buckets.get(key, ()):
+                    if not _same_player_space(session, other):
+                        continue
                     pdata = other.player.public_dict()
                     if other.player.in_vehicle:
                         pdata["pose"] = "idle"
@@ -4688,7 +4695,15 @@ async def snapshot_loop() -> None:
                 # and directory unless they are self, a mutually confirmed online
                 # friend, or the recipient is standing beside that buzzer. Offline
                 # reservations deliberately remain buzzer-only in v4.0.
-                map_players = [resident.player.map_marker_dict() for resident in sessions]
+                map_players = []
+                for resident in sessions:
+                    marker = resident.player.map_marker_dict()
+                    if (
+                        resident.player.interior_id
+                        and not _can_view_apartment_residency(session, resident)
+                    ):
+                        marker["interior_id"] = ""
+                    map_players.append(marker)
                 apartment_directory = []
                 mutual_friends = sorted(
                     resident.player.name

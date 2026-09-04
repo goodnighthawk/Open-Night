@@ -23,7 +23,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 1. **Map cutover** — `map_001_gwb_corridor` is the sole normal playable world. Implemented in architecture; re-verify in v4 runtime.
 2. **Visual consistency** — roads, buildings, roofs, sidewalks, crossings, lighting, and major props use the approved Open Night language. Partial; requires runtime visual pass.
 3. **Indoor spawn** — 14 private first-floor apartments use collision-free online assignment and first-frame interior delivery. Overflow players spawn outside an apartment; assignment, privacy, exit/re-entry, and the live `15/14` flow are proven.
-4. **Multiplayer regression** — movement, player visibility, reconnect/version handling, and server synchronization. v3 baseline exists; v4 regression required.
+4. **Multiplayer regression** — the isolated v4 session proof now covers two-client indoor privacy, nearby outdoor visibility on snapshots and the 60 Hz movement stream, disconnect cleanup, strict version rejection, and reserved-apartment reconnect. Broader core-system regression remains.
 5. **Core systems regression** — vehicles, friends/SMS, HUD, and minimap. v3 baseline exists; v4 regression required.
 6. **Runtime/art verification** — actual playable runtime must match the approved map/art direction; preview-only improvements do not count. Pending.
 7. **Release/deployment** — align version 4.0, packaged/local build, Railway deployment, and updater. Pending.
@@ -47,12 +47,13 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - The 2026-08-30 real-protocol housing audit connected 15 simultaneous clients, assigned 14 distinct first floors, placed player 15 outside an authored buzzer, and passed label/privacy plus exit/re-entry checks.
 - A live 15-player client view confirmed the red top-right `SERVER POPULATION 15/14` display and the authorized `1st Floor - <username>'s Apartment` buzzer/minimap label.
 - Reservation state is process-local, not stored in MySQL: offline assignments remain protected and buzzer-visible until the next server restart/update, while a reconnecting account receives the same apartment.
+- Every login/reconnect starts inside the account's reserved apartment, even when the previous session disconnected outdoors elsewhere in the city.
 
 ## Current next pass
 
 1. Retain overflow metrics for v5.0 planning without adding a v4.0 generation trigger.
 2. Perform a human latency-feel check for on-foot prediction/reconciliation and server-authoritative vehicle smoothing.
-3. Complete the runtime visual-consistency pass and full multiplayer proof before changing `VERSION.txt` to 4.0.
+3. Complete the runtime visual-consistency pass and remaining core-system multiplayer proof before changing `VERSION.txt` to 4.0.
 
 ## Existing development commands
 
@@ -62,6 +63,7 @@ Full player housing is post-v4.0. v4.0 establishes the foundation by distributin
 - Build preview: `BUILD_PREVIEW.bat`
 - Isolated 64-player city-wide proof: `RUN_V4_CITY_LOAD_TEST.bat`
 - Isolated 14-apartment + one-overflow proof: `RUN_V4_HOUSING_TEST.bat`
+- Isolated two-player visibility/reconnect/version proof: `RUN_V4_MULTIPLAYER_SESSION_TEST.bat`
 - Deploy server: `DEPLOY_OPEN_NIGHT_SERVER.bat`
 
 ## Scope discipline
