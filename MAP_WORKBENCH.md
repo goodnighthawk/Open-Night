@@ -8,9 +8,7 @@ server, networking, NPCs, or gameplay simulation.
 - The current Fort Lee / Hudson / Manhattan GWB map, with the approved generated
   building, surface, rooftop, street, and transition catalogs layered onto its
   existing authored geometry. This is not a second replacement map.
-- The older GridWorld Ground and Roof renderer remains available as a legacy
-  comparison, but is no longer the default map view.
-- Pan, zoom, fit-to-map, hover coordinates, tile IDs, and collision inspection.
+- Pan, zoom, fit-to-map, hover coordinates, parcel identities, and collision inspection.
 - Optional cell grid, collision colors, object bounds, and street labels.
 - Four-frame animated static strictly outside the authored world boundary.
 - A continuous Hudson River occupying 20% of the map width.
@@ -57,7 +55,7 @@ server, networking, NPCs, or gameplay simulation.
   buyer jobs, crosswalks, synchronized signal fixtures, lamps, street trees,
   hydrants, telephones, a five-cone closure, manholes, 30 public entrances,
   fire escapes, rooftop equipment, and the nine-piece GWB landmark.
-- Hot reload when map CSV/JSON, renderer code, generated catalogs, or source-pack
+- Hot reload when map CSV/JSON, workbench code, generated catalogs, or source-pack
   PNG files change.
 - Manual Ground/Roof regeneration with `Ctrl+R`.
 - PNG screenshots with `P`, saved under `artifacts/map_workbench/`.
@@ -67,7 +65,7 @@ Run it by double-clicking `MAP_WORKBENCH.bat`.
 For a panel-free full-map PNG:
 
 ```powershell
-.\.venv\Scripts\python.exe map_workbench.py --mode layout --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_map.png
+.\.venv\Scripts\python.exe map_workbench.py --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_map.png
 ```
 
 The `map-preview` branch also produces a downloadable GitHub Actions artifact
@@ -78,7 +76,6 @@ no game server or client is started.
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` | GWB next-map workbench / legacy GridWorld comparison |
 | `G` / `R` / `U` | Ground / Roof / Underground |
 | Mouse wheel | Zoom |
 | Drag or `WASD` | Pan |

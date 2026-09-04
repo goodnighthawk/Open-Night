@@ -17,7 +17,7 @@ GENERATOR_TOOLS = ROOT / "dev_tools" / "map_generator" / "tools"
 sys.path.insert(0, str(GENERATOR_TOOLS))
 import build_v4_approved_sprite_layout as layout_builder  # noqa: E402
 sys.path.insert(0, str(ROOT))
-from map_workbench import crossing_curb_offset_world  # noqa: E402
+from map_workbench import crossing_curb_offset_world, pavement_asset_for_block  # noqa: E402
 
 
 def rows(name: str) -> list[dict[str, str]]:
@@ -109,6 +109,16 @@ def main() -> None:
         signal_groups[signal["group"]].add(rotation_signal[signal["rotation"]])
     assert crossing_groups.keys() == signal_groups.keys()
     assert all(len(approaches) in {3, 4} for approaches in signal_groups.values())
+    crossing_by_group = {row["group"]: row for row in crossings}
+    for signal in signals:
+        approach = rotation_signal[signal["rotation"]]
+        crossing = crossing_by_group.get(f"{signal['group']}:{approach}")
+        if crossing is None:
+            # Shoreline junctions intentionally suppress the crossing that
+            # would lead into sand/water while retaining road-facing signals.
+            continue
+        axis = "y" if approach in {"north", "south"} else "x"
+        assert abs(float(signal[axis]) - float(crossing[axis])) >= 90
     assert Counter(row["group"] for row in signals) == Counter({junction: len(approaches) * 2 for junction, approaches in signal_groups.items()})
     signal_spacing = min(
         math.hypot(float(a["x"]) - float(b["x"]), float(a["y"]) - float(b["y"]))
@@ -140,6 +150,7 @@ def main() -> None:
         for road in streets
     )
     assert pavement_blocks
+    assert all(pavement_asset_for_block(block).startswith("pavement_") for block in pavement_blocks)
     assert all(float(block["x"]) + float(block["w"]) <= layout_builder.RIVER_X0 or float(block["x"]) >= layout_builder.RIVER_X1 for block in pavement_blocks)
     athletic_field = next(row for row in slots if row["sprite_role"] == "athletic_field")
     fx, fy, fw, fh = (float(athletic_field[key]) for key in ("x", "y", "w", "h"))

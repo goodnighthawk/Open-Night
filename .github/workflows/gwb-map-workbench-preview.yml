@@ -42,8 +42,8 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: |
-          python map_workbench.py --mode layout --layer ground --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_map.png
-          python map_workbench.py --mode layout --layer roof --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_roof.png
+          python map_workbench.py --layer ground --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_map.png
+          python map_workbench.py --layer roof --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_roof.png
 
       - name: Assemble portable previewer
         run: python tools/package_gwb_map_previewer.py --output build/gwb_map_previewer
@@ -53,7 +53,7 @@ jobs:
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
-        run: python map_workbench.py --mode layout --layer ground --size 1440x900 --map-only --screenshot packaged_smoke.png
+        run: python map_workbench.py --layer ground --size 1440x900 --map-only --screenshot packaged_smoke.png
 
       - name: Upload downloadable GWB map previewer
         uses: actions/upload-artifact@v4

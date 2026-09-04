@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone visual workbench for Open Night's city_block and v4 map data.
+"""Standalone visual workbench for Open Night's current GWB map data.
 
 This intentionally starts no game client, server, networking, NPC simulation, or
 gameplay systems.  It reads the same generated GridWorld data and authored v4
@@ -24,7 +24,6 @@ import pygame
 
 ROOT = Path(__file__).resolve().parent
 V4_LAYOUT_DIR = ROOT / "dev_tools" / "map_generator" / "working_cosmetics" / "approved_v4_layout"
-GRID_DATA_DIR = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor" / "grid_v100"
 CITY_BLOCK_DIR = ROOT / "assets" / "source_packs" / "city_block"
 GENERATED_BUILDING_CATALOG = ROOT / "assets" / "grid_v100" / "generated_building_tiles.json"
 GENERATED_ART_CATALOG = ROOT / "assets" / "grid_v100" / "generated_art_tiles.json"
@@ -96,19 +95,28 @@ def crossing_curb_offset_world(
     return road_widths.get(road_class, regular_road_width) * 0.5
 
 
+def pavement_asset_for_block(block: dict) -> str:
+    """Choose one coherent surface treatment for an entire pavement block."""
+    block_id = str(block.get("block_id", block.get("zone_id", "block")))
+    stable = sum((index + 1) * ord(char) for index, char in enumerate(block_id))
+    district = str(block.get("district", ""))
+    if district == "morningside" and stable % 3 == 0:
+        family = "pavement_plaza"
+    elif stable % 5 == 0:
+        family = "pavement_patched"
+    else:
+        family = "pavement_standard"
+    return f"{family}_variant_{stable % 4}"
+
+
 def watched_paths() -> list[Path]:
     files = [
-        GRID_DATA_DIR / "ground_grid.json",
-        GRID_DATA_DIR / "roof_grid.generated.json",
-        GRID_DATA_DIR / "ground_generated_objects.json",
         ROOT / "assets" / "grid_v100" / "tile_catalog.json",
         ROOT / "assets" / "grid_v100" / "building_tiles.json",
         GENERATED_BUILDING_CATALOG,
         GENERATED_ART_CATALOG,
         GENERATED_SURFACE_CATALOG,
         GENERATED_TRANSITION_CATALOG,
-        ROOT / "grid_renderer.py",
-        ROOT / "grid_runtime.py",
     ]
     files.extend(V4_LAYOUT_DIR.glob("*.csv"))
     if CITY_BLOCK_DIR.is_dir():
@@ -135,7 +143,7 @@ class Camera:
 
 
 class MapWorkbench:
-    def __init__(self, *, start_mode: str = "layout", size: tuple[int, int] = (1440, 900)) -> None:
+    def __init__(self, *, size: tuple[int, int] = (1440, 900)) -> None:
         pygame.init()
         pygame.display.set_caption("Open Night — Standalone Map Workbench")
         self.screen = pygame.display.set_mode(size, pygame.RESIZABLE)
@@ -143,7 +151,6 @@ class MapWorkbench:
         self.font = pygame.font.SysFont("segoeui", 17)
         self.small = pygame.font.SysFont("segoeui", 14)
         self.title_font = pygame.font.SysFont("segoeui", 25, bold=True)
-        self.mode = start_mode
         self.layer = "ground"
         self.camera = Camera()
         self.dragging = False
@@ -165,8 +172,6 @@ class MapWorkbench:
         self.status_until = 0.0
         self.last_watch = 0.0
         self._fingerprint = fingerprint()
-        self.world = None
-        self.renderer = None
         self.layout: dict[str, list[dict[str, str]]] = {}
         self.layout_contract: dict[str, str] = {}
         self.catalog_tiles: dict[str, dict] = {}
@@ -221,8 +226,6 @@ class MapWorkbench:
 
     @property
     def world_size(self) -> tuple[float, float]:
-        if self.mode == "city" and self.world is not None:
-            return float(self.world.world_w), float(self.world.world_h)
         return (
             float(self.layout_contract.get("world_width", 16384)),
             float(self.layout_contract.get("world_height", 10240)),
@@ -233,15 +236,6 @@ class MapWorkbench:
         self.status_color = color
         self.status_until = time.monotonic() + seconds
         print(f"[Map Workbench] {message}")
-
-    def load_city(self) -> None:
-        from grid_runtime import load_ground_grid, load_roof_grid
-        from grid_renderer import GridRenderer
-
-        load_ground_grid.cache_clear()
-        load_roof_grid.cache_clear()
-        self.world = load_ground_grid() if self.layer == "ground" else load_roof_grid()
-        self.renderer = GridRenderer(self.world)
 
     def load_layout(self) -> None:
         if not (V4_LAYOUT_DIR / "streets.csv").is_file():
@@ -285,8 +279,6 @@ class MapWorkbench:
             self._pivot_art_cache.clear()
             self._clean_curb_sources.clear()
             self.load_layout()
-            if self.mode == "city":
-                self.load_city()
             self._fingerprint = fingerprint()
             if reset_camera:
                 self.fit_world()
@@ -342,19 +334,10 @@ class MapWorkbench:
         self.camera.center_x += before[0] - after[0]
         self.camera.center_y += before[1] - after[1]
 
-    def set_mode(self, mode: str) -> None:
-        if mode == self.mode:
-            return
-        self.mode = mode
-        self.reload(reset_camera=True)
-        self.set_status("City Block runtime view" if mode == "city" else "Approved v4 layout view")
-
     def set_layer(self, layer: str) -> None:
         if layer == self.layer:
             return
         self.layer = layer
-        if self.mode == "city":
-            self.reload()
         self.set_status(f"Showing {layer.title()} layer")
 
     def handle_event(self, event: pygame.event.Event) -> bool:
@@ -363,11 +346,7 @@ class MapWorkbench:
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_ESCAPE, pygame.K_q):
                 return False
-            if event.key == pygame.K_1:
-                self.set_mode("layout")
-            elif event.key == pygame.K_2:
-                self.set_mode("city")
-            elif event.key == pygame.K_g:
+            if event.key == pygame.K_g:
                 self.set_layer("ground")
             elif event.key == pygame.K_r and not (event.mod & pygame.KMOD_CTRL):
                 self.set_layer("roof")
@@ -436,78 +415,6 @@ class MapWorkbench:
             current = fingerprint()
             if current != self._fingerprint:
                 self.reload()
-
-    def draw_city(self, target: pygame.Surface) -> None:
-        if self.world is None or self.renderer is None:
-            return
-        self.draw_frontier(target)
-        world = self.world
-        renderer = self.renderer
-        zoom = self.camera.zoom
-        cam_x, cam_y = self.camera_origin()
-        view_world_w = self.canvas_rect.width / zoom
-        view_world_h = self.canvas_rect.height / zoom
-        tile_px = max(1, int(round(world.cell_px * zoom)))
-
-        for gx, gy in world.visible_cells(cam_x, cam_y, math.ceil(view_world_w), math.ceil(view_world_h)):
-            tile_id = world.tile_id(self.layer, gx, gy)
-            if tile_id == "void" and self.layer == "roof":
-                continue
-            image = renderer._tile_surface_scaled(renderer._visual_tile_id(tile_id, gx, gy), tile_px)
-            sx = int(round((gx * world.cell_px - cam_x) * zoom))
-            sy = int(round((gy * world.cell_px - cam_y) * zoom))
-            target.blit(image, (sx, sy))
-
-        object_layers = (self.layer,)
-        if self.layer == "ground" and "roof" in world.layers:
-            for gx, gy in world.visible_cells(cam_x, cam_y, math.ceil(view_world_w), math.ceil(view_world_h)):
-                tile_id = world.tile_id("roof", gx, gy)
-                if tile_id == "void":
-                    continue
-                image = renderer._tile_surface_scaled(renderer._visual_tile_id(tile_id, gx, gy), tile_px)
-                sx = int(round((gx * world.cell_px - cam_x) * zoom))
-                sy = int(round((gy * world.cell_px - cam_y) * zoom))
-                target.blit(image, (sx, sy))
-            object_layers = ("ground", "roof")
-
-        for _z, asset_id, item, wx, wy, width, height in renderer._visible_objects_for_layers(
-            (cam_x, cam_y), math.ceil(view_world_w), math.ceil(view_world_h), object_layers
-        ):
-            image = renderer._object_surface(asset_id, width, height, float(item.get("rotation", 0.0)))
-            size = (max(1, int(round(image.get_width() * zoom))), max(1, int(round(image.get_height() * zoom))))
-            image = pygame.transform.scale(image, size)
-            target.blit(image, (int(round((wx - cam_x) * zoom)), int(round((wy - cam_y) * zoom))))
-
-        if self.show_collision:
-            overlay = pygame.Surface(target.get_size(), pygame.SRCALPHA)
-            for gx, gy in world.visible_cells(cam_x, cam_y, math.ceil(view_world_w), math.ceil(view_world_h)):
-                collision = world.tile(self.layer, gx, gy).collision
-                color = COLLISION_COLORS.get(collision)
-                if color:
-                    x = int(round((gx * world.cell_px - cam_x) * zoom))
-                    y = int(round((gy * world.cell_px - cam_y) * zoom))
-                    pygame.draw.rect(overlay, color, (x, y, tile_px, tile_px))
-            target.blit(overlay, (0, 0))
-
-        if self.show_grid and tile_px >= 5:
-            color = (235, 242, 247, 50)
-            overlay = pygame.Surface(target.get_size(), pygame.SRCALPHA)
-            for gx, gy in world.visible_cells(cam_x, cam_y, math.ceil(view_world_w), math.ceil(view_world_h)):
-                x = int(round((gx * world.cell_px - cam_x) * zoom))
-                y = int(round((gy * world.cell_px - cam_y) * zoom))
-                pygame.draw.rect(overlay, color, (x, y, tile_px, tile_px), 1)
-            target.blit(overlay, (0, 0))
-
-        if self.show_objects:
-            for item in world.objects:
-                if str(item.get("layer", "ground")) not in object_layers:
-                    continue
-                wx = int(item.get("gx", 0)) * world.cell_px + float(item.get("offset_x_px", 0))
-                wy = int(item.get("gy", 0)) * world.cell_px + float(item.get("offset_y_px", 0))
-                w = float(item.get("width_px", world.cell_px))
-                h = float(item.get("height_px", world.cell_px))
-                rect = pygame.Rect(self.world_to_screen((wx, wy)), (max(1, int(w * zoom)), max(1, int(h * zoom))))
-                pygame.draw.rect(target, (255, 94, 201), rect, 1)
 
     def _repo_art(self, relative: str, size: tuple[int, int], rotation: int = 0) -> pygame.Surface:
         """Load and scale one repository sprite with a screen-size cache."""
@@ -950,7 +857,7 @@ class MapWorkbench:
         image = self._catalog_art("entrance_buzzer", size)
         target.blit(image, image.get_rect(midbottom=point))
 
-    def _draw_street_features(self, target: pygame.Surface, *, signals_only: bool = False) -> None:
+    def _draw_street_features(self, target: pygame.Surface, *, fixture_pass: str = "base") -> None:
         if not self.show_street_detail:
             return
         regular_road_width = float(self.layout_contract.get("regular_road_width", 420))
@@ -964,7 +871,11 @@ class MapWorkbench:
         road_by_id = {str(road.get("street_id", "")): road for road in self.layout.get("streets", [])}
         for row in self.layout.get("street_features", []):
             kind = row.get("kind", "")
-            if signals_only != (kind == "traffic_signal"):
+            if fixture_pass == "base" and kind in {"street_tree", "traffic_signal"}:
+                continue
+            if fixture_pass == "trees" and kind != "street_tree":
+                continue
+            if fixture_pass == "signals" and kind != "traffic_signal":
                 continue
             p = self.world_to_screen((number(row, "x"), number(row, "y")))
             rotation = int(number(row, "rotation"))
@@ -1118,9 +1029,17 @@ class MapWorkbench:
             if not asset_id:
                 continue
             size = self._catalog_object_size(asset_id, world_height)
-            image = self._catalog_art(asset_id, size, int(number(row, "rotation")))
-            image_rect = image.get_rect()
-            setattr(image_rect, anchor, p)
+            if kind in {"player_house_door", "public_door"}:
+                # The approved door's catalog pivot sits at the base of its
+                # frame. Anchoring that pivot to the footprint edge lets the
+                # final few pixels extend outside the roof instead of leaving
+                # the frame visibly inset from the facade.
+                image = self._catalog_art_at_pivot(asset_id, size, int(number(row, "rotation")))
+                image_rect = image.get_rect(center=p)
+            else:
+                image = self._catalog_art(asset_id, size, int(number(row, "rotation")))
+                image_rect = image.get_rect()
+                setattr(image_rect, anchor, p)
             target.blit(image, image_rect)
 
     def _draw_underground(self, target: pygame.Surface) -> None:
@@ -1205,15 +1124,12 @@ class MapWorkbench:
             )
             pavement_overlap = max(1, int(20 * self.camera.zoom))
             block_rect.inflate_ip(pavement_overlap * 2, pavement_overlap * 2)
-            block_id = str(block.get("block_id", block.get("zone_id", "block")))
-            stable = sum((index + 1) * ord(char) for index, char in enumerate(block_id))
-            if "columbia" in block_id and stable % 3 == 0:
-                family = tuple(f"pavement_plaza_variant_{index}" for index in range(4))
-            elif stable % 5 == 0:
-                family = tuple(f"pavement_patched_variant_{index}" for index in range(4))
-            else:
-                family = tuple(f"pavement_standard_variant_{index}" for index in range(4))
-            self._tile_catalog_region(target, family, block_rect, seed=stable)
+            # A block may be standard, patched, or plaza pavement, but it must
+            # not switch between visibly different source variants every 128
+            # world units. One deterministic seamless tile now governs the
+            # whole parcel and preserves coherent wear and joint direction.
+            asset_id = pavement_asset_for_block(block)
+            self._tile_catalog_region(target, (asset_id,), block_rect)
 
         if self.layer == "roof":
             roof_context = pygame.Surface(target.get_size(), pygame.SRCALPHA)
@@ -1350,13 +1266,17 @@ class MapWorkbench:
 
         self._draw_access(target)
         if self.layer == "ground":
+            # Tree trunks and canopies belong in the foreground fixture pass;
+            # drawing them before buildings caused rectangular pieces of their
+            # crowns to disappear behind later parcel artwork.
+            self._draw_street_features(target, fixture_pass="trees")
             self._draw_transport(target)
         self._draw_population(target)
         if self.layer == "ground":
             # Signals use tall pivoted artwork. Draw them as a final fixture
             # pass so later buildings, trees, vehicles, or debug markers cannot
             # cut pieces out of the mast after it has been placed.
-            self._draw_street_features(target, signals_only=True)
+            self._draw_street_features(target, fixture_pass="signals")
 
         if self.show_labels:
             for zone in self.layout.get("zones", []):
@@ -1399,23 +1319,17 @@ class MapWorkbench:
             return []
         wx, wy = self.screen_to_world(mouse)
         lines = [f"World: {wx:,.0f}, {wy:,.0f}"]
-        if self.mode == "city" and self.world is not None:
-            gx, gy = self.world.world_to_cell(wx, wy)
-            tile_id = self.world.tile_id(self.layer, gx, gy)
-            collision = self.world.tile(self.layer, gx, gy).collision
-            lines.extend([f"Cell: {gx}, {gy}", f"Tile: {tile_id}", f"Collision: {collision}"])
+        for house in self.layout.get("houses", []):
+            x, y, w, h = (number(house, key) for key in ("x", "y", "w", "h"))
+            if x <= wx <= x + w and y <= wy <= y + h:
+                lines.extend([f"House: {house.get('housing_id')}", f"Zone: {house.get('zone_id')}"])
+                break
         else:
-            for house in self.layout.get("houses", []):
-                x, y, w, h = (number(house, key) for key in ("x", "y", "w", "h"))
+            for slot in self.layout.get("slots", []):
+                x, y, w, h = (number(slot, key) for key in ("x", "y", "w", "h"))
                 if x <= wx <= x + w and y <= wy <= y + h:
-                    lines.extend([f"House: {house.get('housing_id')}", f"Zone: {house.get('zone_id')}"])
+                    lines.extend([f"Slot: {slot.get('slot_id')}", f"Role: {slot.get('sprite_role')}"])
                     break
-            else:
-                for slot in self.layout.get("slots", []):
-                    x, y, w, h = (number(slot, key) for key in ("x", "y", "w", "h"))
-                    if x <= wx <= x + w and y <= wy <= y + h:
-                        lines.extend([f"Slot: {slot.get('slot_id')}", f"Role: {slot.get('sprite_role')}"])
-                        break
         return lines
 
     def draw_panel(self) -> None:
@@ -1423,12 +1337,11 @@ class MapWorkbench:
         pygame.draw.rect(self.screen, PANEL, (x, 0, PANEL_W, self.screen.get_height()))
         pygame.draw.line(self.screen, PANEL_EDGE, (x, 0), (x, self.screen.get_height()), 1)
         self.screen.blit(self.title_font.render("MAP WORKBENCH", True, TEXT), (x + 20, 18))
-        mode_name = "LEGACY GRID RUNTIME" if self.mode == "city" else "GWB NEXT-MAP WORKBENCH"
-        self.screen.blit(self.small.render(mode_name, True, ACCENT), (x + 21, 54))
+        self.screen.blit(self.small.render("GWB NEXT-MAP WORKBENCH", True, ACCENT), (x + 21, 54))
 
         y = 88
         sections = [
-            ("VIEW", ["1  New v4 map", "2  Legacy runtime", "G  Ground", "R  Roof", "U  Underground", "F  Fit whole map"]),
+            ("VIEW", ["G  Ground", "R  Roof", "U  Underground", "F  Fit whole map"]),
             ("LAYERS", ["T  Traffic + parking", "Y  Debug population markers", "Ctrl+D  Street detail", "B  Doors + roof access"]),
             ("INSPECT", ["Mouse wheel  Zoom", "Drag / WASD  Pan", "I  Cell/grid overlay", "C  Collision overlay", "O  Object bounds", "L  Labels", "N  Static frontier"]),
             ("WORKFLOW", ["F5  Reload files", "H  Toggle hot reload", "Ctrl+R  Regenerate layers", "P  Save screenshot", "Q / Esc  Close"]),
@@ -1463,10 +1376,7 @@ class MapWorkbench:
 
     def draw(self) -> None:
         canvas = self.screen.subsurface(self.canvas_rect)
-        if self.mode == "city":
-            self.draw_city(canvas)
-        else:
-            self.draw_layout(canvas)
+        self.draw_layout(canvas)
         self.draw_panel()
         pygame.display.flip()
 
@@ -1474,7 +1384,7 @@ class MapWorkbench:
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         if path is None:
             stamp = time.strftime("%Y%m%d_%H%M%S")
-            path = SCREENSHOT_DIR / f"{self.mode}_{self.layer}_{stamp}.png"
+            path = SCREENSHOT_DIR / f"gwb_{self.layer}_{stamp}.png"
         path = path.resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         self.draw()
@@ -1495,8 +1405,7 @@ class MapWorkbench:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Standalone Open Night city_block/v4 map workbench")
-    parser.add_argument("--mode", choices=("city", "layout"), default="layout")
+    parser = argparse.ArgumentParser(description="Standalone Open Night GWB map workbench")
     parser.add_argument("--layer", choices=("ground", "roof", "underground"), default="ground")
     parser.add_argument("--screenshot", type=Path, help="render once to this PNG and exit")
     parser.add_argument("--map-only", action="store_true", help="omit the workbench panel from a screenshot")
@@ -1510,7 +1419,7 @@ def main() -> int:
         width, height = (int(value) for value in args.size.lower().split("x", 1))
     except (TypeError, ValueError):
         raise SystemExit("--size must look like 1440x900")
-    app = MapWorkbench(start_mode=args.mode, size=(width, height))
+    app = MapWorkbench(size=(width, height))
     app.set_layer(args.layer)
     app.fit_world()
     if args.screenshot:

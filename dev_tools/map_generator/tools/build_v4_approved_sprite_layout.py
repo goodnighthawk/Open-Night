@@ -363,11 +363,27 @@ def build_street_features(streets: list[dict]) -> list[dict]:
             # of nearly on top of one another at a 34x34 diagonal offset.
             hsignal = round(hhalf + 35)
             vsignal = round(vhalf + 35)
+            # Keep the pole base and its pivoted signal head beyond the zebra
+            # envelope.  This is a small outward move along each approach,
+            # while retaining two separately readable directions per corner.
+            signal_crossing_clearance = 90
             signal_specs = {
-                "north": ((ix - vsignal, iy - hclear, 0), (ix + vsignal, iy - hclear, 0)),
-                "south": ((ix - vsignal, iy + hclear, 180), (ix + vsignal, iy + hclear, 180)),
-                "west": ((ix - vclear, iy - hsignal, 270), (ix - vclear, iy + hsignal, 270)),
-                "east": ((ix + vclear, iy - hsignal, 90), (ix + vclear, iy + hsignal, 90)),
+                "north": (
+                    (ix - vsignal, iy - hclear - signal_crossing_clearance, 0),
+                    (ix + vsignal, iy - hclear - signal_crossing_clearance, 0),
+                ),
+                "south": (
+                    (ix - vsignal, iy + hclear + signal_crossing_clearance, 180),
+                    (ix + vsignal, iy + hclear + signal_crossing_clearance, 180),
+                ),
+                "west": (
+                    (ix - vclear - signal_crossing_clearance, iy - hsignal, 270),
+                    (ix - vclear - signal_crossing_clearance, iy + hsignal, 270),
+                ),
+                "east": (
+                    (ix + vclear + signal_crossing_clearance, iy - hsignal, 90),
+                    (ix + vclear + signal_crossing_clearance, iy + hsignal, 90),
+                ),
             }
             crossing_arms = dict(arms)
             if vroad["street_id"] == "fl_hudson_terrace" and not arms["east"]:

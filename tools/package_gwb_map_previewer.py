@@ -16,9 +16,6 @@ CORE_FILES = (
     "MAP_WORKBENCH.bat",
     "MAP_WORKBENCH.md",
     "map_workbench.py",
-    "grid_runtime.py",
-    "grid_renderer.py",
-    "grid_world.py",
     "building_morphology.py",
     "road_morphology.py",
     "procedural_block_props.py",
@@ -26,7 +23,6 @@ CORE_FILES = (
 
 CORE_TREES = (
     "dev_tools/map_generator/working_cosmetics/approved_v4_layout",
-    "mapfiles/data/map_001_gwb_corridor/grid_v100",
     "assets/source_packs/city_block",
     "assets/source_packs/free_assets/Grass/Grass_04",
     "assets/source_packs/gen_vehicles",
@@ -95,10 +91,7 @@ def build(output: Path, *, include_previews: bool = True) -> dict[str, object]:
     previews = (
         "artifacts/map_workbench/gwb_full_updated_map.png",
         "artifacts/map_workbench/gwb_full_updated_roof.png",
-        "artifacts/map_workbench/gwb_approved_transition_area.png",
-        "artifacts/map_workbench/gwb_approved_transition_roof.png",
-        "artifacts/map_workbench/gwb_junction_signal_curb_fix.png",
-        "artifacts/map_workbench/gwb_columbia_field_contained.png",
+        "artifacts/map_workbench/gwb_junction_signal_tree_pavement_door_fix.png",
     )
     if include_previews:
         for relative in previews:
