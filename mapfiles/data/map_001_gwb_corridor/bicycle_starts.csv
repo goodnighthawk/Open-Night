@@ -1,5 +1,1 @@
-﻿spawn_id,route_id,start_fraction,asset_index,appearance_index,speed_scale
-bicycle_01_01,bike_fort_lee,0.0,0,0,1.0
-bicycle_01_02,bike_fort_lee,0.5,1,1,1.0
-bicycle_02_01,bike_heights,0.0,3,3,1.0
-bicycle_02_02,bike_heights,0.5,4,4,1.0
+spawn_id,route_id,start_fraction,asset_index,appearance_index,speed_scale

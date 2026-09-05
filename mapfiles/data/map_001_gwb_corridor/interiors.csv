@@ -1,25 +1,33 @@
 id,name,kind,entry_x,entry_y,building_id,door_hint
-starter_apartment,Starter Apartment,apartment,62.8,2386.42,block_building_0001,west_collision_frontage
-corner_shop,Bridge Corner Store,shop,717.93,2413.62,block_building_0002,west_collision_frontage
-night_diner,Open Night Diner,diner,1451.62,2400.0,block_building_0003,west_collision_frontage
-pharmacy,Hudson Pharmacy,shop,10961.73,2412.71,block_building_0004,west_collision_frontage
-laundromat,24 Hour Laundromat,shop,12139.63,2385.73,block_building_0005,west_collision_frontage
-pawn_shop,Pawn & Exchange,shop,12555.6,6602.46,block_building_0049,west_collision_frontage
-garage,Riverside Garage,garage,13277.2,6596.06,block_building_0050,west_collision_frontage
-nightclub,After Hours Club,club,13968.48,6646.32,block_building_0051,west_collision_frontage
-warehouse_office,Warehouse Office,office,14862.14,6593.25,block_building_0052,west_collision_frontage
-rooftop_loft,Washington Heights Loft,apartment,15758.38,6599.12,block_building_0053,west_collision_frontage
-blank_house_01,Empty House,blank_house,70.81,3371.07,block_building_0013,west_collision_frontage
-blank_house_02,Empty House,blank_house,719.21,4208.24,block_building_0020,west_collision_frontage
-blank_house_03,Empty House,blank_house,83.2,5730.4,block_building_0032,west_collision_frontage
-blank_house_04,Empty House,blank_house,716.87,6607.01,block_building_0044,west_collision_frontage
-blank_house_05,Empty House,blank_house,70.84,7562.4,block_building_0062,west_collision_frontage
-blank_house_06,Empty House,blank_house,718.0,8589.62,block_building_0074,west_collision_frontage
-blank_house_07,Empty House,blank_house,72.93,9664.51,block_building_0085,west_collision_frontage
-blank_house_08,Empty House,blank_house,10892.42,4079.6,block_building_0019,west_collision_frontage
-blank_house_09,Empty House,blank_house,14157.33,5055.22,block_building_0029,west_collision_frontage
-blank_house_10,Empty House,blank_house,10955.6,6602.46,block_building_0048,west_collision_frontage
-blank_house_11,Empty House,blank_house,10958.0,7323.24,block_building_0054,west_collision_frontage
-blank_house_12,Empty House,blank_house,11657.52,8076.48,block_building_0069,west_collision_frontage
-blank_house_13,Empty House,blank_house,14005.32,8736.79,block_building_0083,west_collision_frontage
-blank_house_14,Empty House,blank_house,10927.82,9709.59,block_building_0091,west_collision_frontage
+house_01,Empty House,blank_house,1400,952,house_01,south
+house_02,Empty House,blank_house,1400,2075,house_02,south
+house_03,Empty House,blank_house,1400,5024,house_03,south
+house_04,Empty House,blank_house,1400,7044,house_04,south
+house_05,Empty House,blank_house,1400,9280,house_05,south
+house_06,Empty House,blank_house,2600,1491,house_06,south
+house_07,Empty House,blank_house,2600,2704,house_07,south
+house_08,Empty House,blank_house,2600,5604,house_08,south
+house_09,Empty House,blank_house,2600,8117,house_09,south
+house_10,Empty House,blank_house,2600,9854,house_10,south
+house_11,Empty House,blank_house,4000,2075,house_11,south
+house_12,Empty House,blank_house,4000,3989,house_12,south
+house_13,Empty House,blank_house,4000,7039,house_13,south
+house_14,Empty House,blank_house,4000,8651,house_14,south
+house_15,Empty House,blank_house,5400,952,house_15,south
+house_16,Empty House,blank_house,5400,2704,house_16,south
+house_17,Empty House,blank_house,5400,5604,house_17,south
+house_18,Empty House,blank_house,5400,8651,house_18,south
+house_19,Empty House,blank_house,11125,896,house_19,south
+house_20,Empty House,blank_house,11125,3869,house_20,south
+house_21,Empty House,blank_house,12577,1504,house_21,south
+house_22,Empty House,blank_house,12577,4404,house_22,south
+house_23,Empty House,blank_house,13700,2819,house_23,south
+house_24,Empty House,blank_house,13700,5814,house_24,south
+house_25,Empty House,blank_house,15721,1504,house_25,south
+house_26,Empty House,blank_house,15058,4389,house_26,south
+house_27,Empty House,blank_house,15081,5784,house_27,south
+house_28,Empty House,blank_house,11125,8519,house_28,south
+house_29,Empty House,blank_house,12600,7194,house_29,south
+house_30,Empty House,blank_house,13700,7189,house_30,south
+house_31,Empty House,blank_house,15081,6611,house_31,south
+house_32,Empty House,blank_house,15103,8519,house_32,south

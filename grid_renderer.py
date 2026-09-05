@@ -16,7 +16,7 @@ CITY_BLOCK_DIR = ROOT / "assets" / "source_packs" / "city_block"
 
 
 class GridRenderer:
-    """Direct renderer for the authoritative 256 px grid.
+    """Direct renderer for the authoritative map grid.
 
     Ground/exterior rendering automatically composites the registered Roof layer
     over building cells using the exact same grid coordinates and camera transform.
@@ -292,6 +292,13 @@ class GridRenderer:
             image = pygame.transform.rotate(image, -float(rotation))
         return image
 
+    @staticmethod
+    def _object_visual_rotation(asset_id: str, item: dict) -> float:
+        """Keep perspective-bearing art south-facing; rotate geometry only."""
+        if bool(item.get("geometry_rotation", False)) or str(asset_id).startswith("mark_"):
+            return float(item.get("rotation", 0.0))
+        return 0.0
+
     def catalog_object_at_pivot(
         self,
         asset_id: str,
@@ -442,7 +449,7 @@ class GridRenderer:
         ):
             if bool(item.get("overhead", False)):
                 continue
-            rotation = float(item.get("rotation", 0.0))
+            rotation = self._object_visual_rotation(asset_id, item)
             image = self._object_surface(asset_id, width, height, rotation)
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
 
@@ -481,7 +488,7 @@ class GridRenderer:
         ):
             if bool(item.get("overhead", False)):
                 continue
-            rotation = float(item.get("rotation", 0.0))
+            rotation = self._object_visual_rotation(asset_id, item)
             image = self._object_surface(asset_id, width, height, rotation)
             roof.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
 
@@ -506,7 +513,7 @@ class GridRenderer:
         ):
             if not bool(item.get("overhead", False)):
                 continue
-            rotation = float(item.get("rotation", 0.0))
+            rotation = self._object_visual_rotation(asset_id, item)
             image = self._object_surface(asset_id, width, height, rotation)
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
             count += 1
@@ -545,7 +552,7 @@ class GridRenderer:
         for _z, asset_id, item, world_x, world_y, width, height in self._visible_objects_for_layers(
             (0.0, 0.0), self.world.world_w, self.world.world_h, object_layers
         ):
-            rotation = float(item.get("rotation", 0.0))
+            rotation = self._object_visual_rotation(asset_id, item)
             image = self._object_surface(asset_id, width, height, rotation)
             sw = max(1, int(round(image.get_width() * scale)))
             sh = max(1, int(round(image.get_height() * scale)))

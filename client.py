@@ -2780,16 +2780,13 @@ class Game:
             "traffic_green_not_clear" if green else "traffic_red_clear",
         )
         if self.grid_renderer is not None:
-            orientation_rotation = {
-                "north": 0.0, "n": 0.0, "nw": 0.0, "ne": 0.0,
-                "east": 90.0, "e": 90.0,
-                "south": 180.0, "s": 180.0, "se": 180.0, "sw": 180.0,
-                "west": 270.0, "w": 270.0,
-            }
-            rotation = float(signal.get(
-                "rotation", orientation_rotation.get(str(signal.get("orientation", "north")).lower(), 0.0)
-            ))
-            approved = self.grid_renderer.catalog_object_at_pivot(state, rotation=rotation)
+            # Approved props contain a small south-facing exposed face. Rotating
+            # that perspective around junctions makes identical fixtures look
+            # tilted in four incompatible directions. Semantic approach data is
+            # retained on the signal, while its artwork stays south-facing.
+            approved = self.grid_renderer.catalog_object_at_pivot(
+                state, width=70, height=96, rotation=0.0
+            )
             if approved is not None:
                 image, pivot = approved
                 self.screen.blit(image, (int(sx - pivot[0]), int(sy - pivot[1])))

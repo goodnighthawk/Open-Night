@@ -1,4 +1,6 @@
-﻿name,x,y
-FORT LEE,2400,5600
-GEORGE WASHINGTON BRIDGE,7680,6144
-WASHINGTON HEIGHTS,13200,5600
+name,x,y
+Fort Lee North,330.0,380.0
+Fort Lee South,330.0,4530.0
+Washington Heights,9910.0,330.0
+Morningside Heights,9910.0,6030.0
+Columbia University,11180.0,7280.0

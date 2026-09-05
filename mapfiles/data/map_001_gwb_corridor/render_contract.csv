@@ -1,6 +1,5 @@
-﻿key,value,type
+key,value,type
 camera_projection,orthographic_topdown,str
 outdoor_perspective_skew,0,float
-baked_composition,true,bool
-render_pass,25,int
-approved_visual_checkpoint,pass25,str
+baked_composition,false,bool
+approved_visual_checkpoint,gwb_workbench_v4,str

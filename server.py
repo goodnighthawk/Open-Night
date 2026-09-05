@@ -96,7 +96,7 @@ from game_modes import DEFAULT_GAME_MODE_ID, GAME_MODES, get_game_mode
 
 HOST = "0.0.0.0"
 PORT = 8765
-SERVER_NAME = "Open Night v3.0"
+SERVER_NAME = "Open Night v4.0"
 # v4.0's authoritative networking and stress-test contract targets 64 players.
 # Housing remains intentionally smaller and uses the explicit outdoor overflow flow.
 MAX_PLAYERS = 64

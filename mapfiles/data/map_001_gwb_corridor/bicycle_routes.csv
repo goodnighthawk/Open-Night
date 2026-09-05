@@ -1,3 +1,1 @@
-﻿route_id,name,speed,loop,lane_offset,turn_radius,axis,direction
-bike_fort_lee,Fort Lee neighborhood loop,48,true,0,42,mixed,loop
-bike_heights,Washington Heights neighborhood loop,48,true,0,42,mixed,loop
+route_id,name,speed,loop,lane_offset,turn_radius,axis,direction

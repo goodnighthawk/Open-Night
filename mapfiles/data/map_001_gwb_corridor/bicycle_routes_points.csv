@@ -1,15 +1,1 @@
-﻿route_id,point_order,x,y
-bike_fort_lee,0,576,7040
-bike_fort_lee,1,1472,6976
-bike_fort_lee,2,2368,7040
-bike_fort_lee,3,2368,8128
-bike_fort_lee,4,1472,8192
-bike_fort_lee,5,512,8128
-bike_fort_lee,6,576,7040
-bike_heights,0,10752,6912
-bike_heights,1,12352,6912
-bike_heights,2,13824,6912
-bike_heights,3,13888,7680
-bike_heights,4,12416,7680
-bike_heights,5,10816,7680
-bike_heights,6,10752,6912
+route_id,point_order,x,y

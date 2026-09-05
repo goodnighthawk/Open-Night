@@ -26,7 +26,7 @@ OUT = ROOT / "artifacts/next_map_generated_art"
 def _draw_signals(target: pygame.Surface, renderer: GridRenderer, camera: tuple[float, float], server_time: float) -> None:
     for signal in renderer.world.data.get("traffic_signals", []):
         state = traffic_signal_state(signal, server_time)
-        approved = renderer.catalog_object_at_pivot(state, rotation=float(signal.get("rotation", 0)))
+        approved = renderer.catalog_object_at_pivot(state, width=70, height=96, rotation=0)
         if approved is None:
             continue
         image, pivot = approved
@@ -45,7 +45,7 @@ def _draw_overview_signals(
     ox, oy = origin
     for signal in renderer.world.data.get("traffic_signals", []):
         state = traffic_signal_state(signal, server_time)
-        approved = renderer.catalog_object_at_pivot(state, rotation=float(signal.get("rotation", 0)))
+        approved = renderer.catalog_object_at_pivot(state, width=70, height=96, rotation=0)
         if approved is None:
             continue
         image, pivot = approved

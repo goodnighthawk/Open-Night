@@ -706,6 +706,10 @@ def _load_roof_data(data: dict, rows: list[list[str]], buildings: list[dict]) ->
 @lru_cache(maxsize=1)
 def load_ground_grid() -> GridWorld:
     data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
+    if bool((data.get("runtime") or {}).get("workbench_layout_authority", False)):
+        # The promoted v4 map is already a complete Ground/Roof composition.
+        # Do not rebuild the superseded 64x48 demonstration grammar over it.
+        return GridWorld(data, TileCatalog.load(GRID_CATALOG_PATH))
     ground_rows, buildings = _synthesize_ground_runtime(data)
     ground_rows, buildings = _double_playable_area(data, ground_rows, buildings)
 
@@ -788,6 +792,8 @@ def load_ground_grid() -> GridWorld:
 @lru_cache(maxsize=1)
 def load_roof_grid() -> GridWorld:
     ground_data = json.loads(GRID_MAP_PATH.read_text(encoding="utf-8"))
+    if bool((ground_data.get("runtime") or {}).get("workbench_layout_authority", False)):
+        return GridWorld(ground_data, TileCatalog.load(GRID_CATALOG_PATH))
     ground_rows, buildings = _synthesize_ground_runtime(ground_data)
     ground_rows, buildings = _double_playable_area(ground_data, ground_rows, buildings)
     roof_data = _load_roof_data(ground_data, ground_rows, buildings)

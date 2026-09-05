@@ -1,4 +1,4 @@
-﻿route_id,name,speed_limit,loop,lane_offset,turn_radius,axis,direction
-traffic_fort_lee,Fort Lee block loop,86,true,0,42,mixed,loop
-traffic_heights,Washington Heights block loop,82,true,0,42,mixed,loop
-traffic_gwb,GWB two-way shuttle,94,true,0,42,mixed,loop
+route_id,name,speed_limit,loop,lane_offset,turn_radius,axis,direction
+traffic_fort_lee,Traffic Fort Lee,82,true,0,90,mixed,loop
+traffic_heights,Traffic Heights,82,true,0,90,mixed,loop
+traffic_gwb,Traffic Gwb,94,true,0,90,mixed,loop

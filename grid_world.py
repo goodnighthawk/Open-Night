@@ -137,7 +137,7 @@ class TileCatalog:
 
 
 class GridWorld:
-    """Authoritative 256 px tile world shared by rendering and gameplay.
+    """Authoritative tile world shared by rendering and gameplay.
 
     The map may store layers either as explicit tile-id matrices or compact ASCII
     rows plus a legend. Large visual objects are anchored to grid cells but never
@@ -155,10 +155,17 @@ class GridWorld:
         self.layers = self._decode_layers(data)
         self.objects: list[dict[str, Any]] = list(data.get("objects", []))
         self.login_spawns: list[list[float]] = list(data.get("login_spawns", []))
-        if self.cell_px != GRID_CELL_PX:
-            raise ValueError(f"v1.0 grid requires {GRID_CELL_PX}px cells, got {self.cell_px}")
-        if self.width != GRID_W or self.height != GRID_H:
-            raise ValueError(f"v1.0 grid requires {GRID_W}x{GRID_H} cells, got {self.width}x{self.height}")
+        if self.cell_px <= 0:
+            raise ValueError(f"grid cell size must be positive, got {self.cell_px}")
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError(f"grid dimensions must be positive, got {self.width}x{self.height}")
+        stored_world_w = int(data.get("world_w", self.world_w))
+        stored_world_h = int(data.get("world_h", self.world_h))
+        if stored_world_w != self.world_w or stored_world_h != self.world_h:
+            raise ValueError(
+                "grid world dimensions do not match its cell geometry: "
+                f"stored={stored_world_w}x{stored_world_h}, calculated={self.world_w}x{self.world_h}"
+            )
         for name, rows in self.layers.items():
             if len(rows) != self.height or any(len(row) != self.width for row in rows):
                 raise ValueError(f"layer {name!r} is not {self.width}x{self.height}")

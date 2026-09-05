@@ -932,7 +932,7 @@ class MapWorkbench:
                 group_seed = sum((index + 1) * ord(char) for index, char in enumerate(str(row.get("group", ""))))
                 asset_id = states[(pygame.time.get_ticks() // 800 + group_seed) % len(states)]
                 size = self._catalog_object_size(asset_id, 96)
-                image = self._catalog_art_at_pivot(asset_id, size, rotation)
+                image = self._catalog_art_at_pivot(asset_id, size, 0)
                 target.blit(image, image.get_rect(center=p))
                 continue
             paths = {
@@ -951,7 +951,7 @@ class MapWorkbench:
             native_h = max(1.0, float(definition.get("native_height_px", 1)))
             height = max(4, int(world_size * self.camera.zoom))
             width = max(4, int(height * native_w / native_h)) if definition else height
-            image = self._catalog_art(path, (width, height), rotation) if source_kind == "catalog" else self._repo_art(path, (width, height), rotation)
+            image = self._catalog_art(path, (width, height), 0) if source_kind == "catalog" else self._repo_art(path, (width, height), 0)
             target.blit(image, image.get_rect(center=p))
 
     def _draw_transport(self, target: pygame.Surface) -> None:
@@ -1034,10 +1034,10 @@ class MapWorkbench:
                 # frame. Anchoring that pivot to the footprint edge lets the
                 # final few pixels extend outside the roof instead of leaving
                 # the frame visibly inset from the facade.
-                image = self._catalog_art_at_pivot(asset_id, size, int(number(row, "rotation")))
+                image = self._catalog_art_at_pivot(asset_id, size, 0)
                 image_rect = image.get_rect(center=p)
             else:
-                image = self._catalog_art(asset_id, size, int(number(row, "rotation")))
+                image = self._catalog_art(asset_id, size, 0)
                 image_rect = image.get_rect()
                 setattr(image_rect, anchor, p)
             target.blit(image, image_rect)
