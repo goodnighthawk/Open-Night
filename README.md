@@ -1,4 +1,8 @@
-# Open Night — v0.8.1
+# Open Night — v4.0 GWB Playtest
+
+The current GWB map is the default playable world on `main`, including the approved modular artwork, open bridge approaches and barriers, connected first/second-floor shells, visible city surroundings from rooftops, and underground manhole pipes.
+
+Run **`PLAYTEST_V4.bat`** for a local game, or **`MAP_WORKBENCH.bat`** for the standalone map preview. Double-click these launchers; do not run `.bat` files through Python. In the workbench, press **F** for the full map, **G/R/1/2/U** for ground/roof/floors/pipes, and **Y** for population markers that can be inspected under the cursor. See [the playtest guide](V4_GWB_PLAYTEST.md) for details and current limitations.
 
 ## Start
 
@@ -8,7 +12,7 @@
 
 When this folder is a GitHub clone on the `main` branch, the launcher checks GitHub before setup and applies only a safe fast-forward update. It continues normally when offline, when Git is unavailable, or when local tracked edits would be affected. Set `OPEN_NIGHT_SKIP_UPDATE=1` to disable the check. Friends using extracted ZIP copies can run `UPDATE_FRIEND_BUILD.bat` to download GitHub `main` or import a ZIP without deleting their local environment, logs, or Friends list.
 
-The default playable world is now the accepted screenshot-derived full-region map. Night with authored street lamps is the default visual mode; the outdoor projection remains strict GTA2-style top-down while the 10 enterable rooms/stores retain the isometric interior system.
+The default playable world is the approved Fort Lee / GWB / Washington Heights workbench map. The client and server share its generated geometry and five connected layers. The two new floor layers are unfurnished playtest shells; existing private interiors remain separate.
 
 The desktop client now automatically probes `wss://open-night-production.up.railway.app`. When the server is online it appears first in `AVAILABLE SERVERS`, is selected automatically, and can be joined without entering an address. LAN discovery and Direct Connect remain available.
 
@@ -54,7 +58,7 @@ Movement transitions now trigger an automatic jump that renders at 1.35× scale 
 
 ## Map and camera
 
-Map 001 is a 16×12 grid of 1024px chunks (192 chunks, preserving the prior total area while fitting the globally orthogonalized reference extent). The screenshot-derived world is release-authoritative. Geometry is authored from the five bundled reference-image layers and explicit trace CSVs; no live map service is queried.
+Map 001 is the 16,384 × 10,240 GWB corridor: a 128 × 80 gameplay grid with 128px cells, compiled into 160 chunks. The approved workbench layout is authoritative for ground, roofs, both floor shells, and underground pipes; no live map service is queried. Earlier version notes above describe historical releases, not the current map.
 
 On-foot WASD is camera-relative. Vehicle throttle/steering remains vehicle-relative. Space jumps, C crouches, T enters/drives/rides/exits vehicles, E interacts/trades/enters rooms, Enter chats, `/sms FriendName message` sends persistent friend SMS, F2 opens Messages, `/bug description` submits a pending human-review report, Ctrl+A/C/X/V edits text, middle-mouse rotates the camera, and the mouse wheel zooms. Esc opens the scrollable Settings and Friends pages.
 
