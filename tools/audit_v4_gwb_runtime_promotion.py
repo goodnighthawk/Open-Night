@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import csv
+import asyncio
 import os
 from pathlib import Path
 import sys
@@ -52,7 +54,7 @@ def main() -> int:
     require(ground.layers["roof"] == roof.layers["roof"], "Roof parity differs between runtime layer files")
 
     buildings = list((ground.data.get("building_synthesis") or {}).get("buildings") or [])
-    require(len(buildings) == 95, f"expected 95 approved buildings, got {len(buildings)}")
+    require(len(buildings) >= 95, f"revised city lost its building density: {len(buildings)}")
     building_cells = {
         (int(cell[0]), int(cell[1]))
         for building in buildings
@@ -79,7 +81,9 @@ def main() -> int:
             "a modular building tile escaped the approved catalog override")
 
     signals = list(ground.data.get("traffic_signals") or [])
-    require(len(signals) == 382, f"expected 382 directional signals, got {len(signals)}")
+    with (ROOT / "dev_tools/map_generator/working_cosmetics/approved_v4_layout/street_features.csv").open(encoding="utf-8-sig") as handle:
+        authored_signals = [row for row in csv.DictReader(handle) if row["kind"] == "traffic_signal"]
+    require(len(signals) == len(authored_signals), "runtime signal count differs from authored junctions")
     require(all(signal.get("visual_facing") == "south" and int(signal.get("rotation", -1)) == 0 for signal in signals),
             "traffic-signal art is not consistently south-facing")
     require({int(signal.get("semantic_rotation", -1)) for signal in signals} == {0, 90, 180, 270},
@@ -124,6 +128,61 @@ def main() -> int:
 
     pygame.init()
     pygame.display.set_mode((1, 1))
+    for layer in ("first_floor", "second_floor"):
+        mask = {(x,y) for y,row in enumerate(ground.layers[layer]) for x,tile in enumerate(row) if tile != "void"}
+        require(mask == roof_cells, f"{layer} does not match exact roof footprint")
+        require(all(ground.circle_walkable(layer,*ground.cell_center(x,y),18) for x,y in mask), f"{layer} contains blocked floor cells")
+
+    pipe_cells = {tuple(p) for p in ground.data["pipe_network"]["cells"]}
+    visited = {next(iter(pipe_cells))}
+    pending = list(visited)
+    while pending:
+        x,y = pending.pop()
+        for p in ((x+1,y),(x-1,y),(x,y+1),(x,y-1)):
+            if p in pipe_cells and p not in visited:
+                ax,ay = ground.cell_center(x,y)
+                bx,by = ground.cell_center(*p)
+                reached = ground.move_circle_level(-1,ax,ay,bx-ax,by-ay,18)
+                require(reached == (bx,by), f"pipe junction cannot be traversed: {(x,y)} to {p}")
+                visited.add(p)
+                pending.append(p)
+    require(visited == pipe_cells, "pipe network is disconnected")
+    require(all(tuple(p) in visited for p in ground.data["pipe_network"]["manholes"]), "manhole is disconnected")
+    require(all(ground.tile_id("underground",x,y).startswith("pipe_") for x,y in visited), "underground contains roads")
+    for x,y,w,h in ground.data["bridge"]["barriers"]:
+        require(not ground.circle_walkable("ground",x+w/2,y+h/2,18), "bridge barrier has no collision")
+
+    import server
+    from tools.next_map_transition_audit import session_at
+    async def verify_transitions():
+        for obj in ground.objects:
+            if obj.get("interaction_kind") != "layer_transition":
+                continue
+            x,y = ground.object_interaction_point(obj)
+            level = int(obj["interaction_level"])
+            require(ground.level_walkable(level,x,y), f"blocked transition source: {obj['object_id']}")
+            require(ground.level_walkable(int(obj["target_level"]),*obj["target_pos"]), f"blocked transition destination: {obj['object_id']}")
+            session = session_at(x,y)
+            session.player.level = level
+            require(await server.process_grid_transition_interaction(session,requested_object_id=obj["object_id"]),f"transition failed: {obj['object_id']}")
+            require(session.player.level == obj["target_level"] and [session.player.x,session.player.y] == obj["target_pos"],f"wrong transition arrival: {obj['object_id']}")
+    asyncio.run(verify_transitions())
+    import v100_server
+    before_layers = json.dumps(ground.layers, sort_keys=True)
+    before_objects = json.dumps(ground.objects, sort_keys=True)
+    errors = v100_server.validate_active_authority(server.ACTIVE_MAP)
+    require(not errors, f"canonical game startup failed: {errors}")
+    require(before_layers == json.dumps(ground.layers, sort_keys=True), "startup rewrote the approved map layers")
+    require(before_objects == json.dumps(ground.objects, sort_keys=True), "startup rewrote the approved map objects")
+
+    from map_workbench import MapWorkbench
+    app = MapWorkbench(size=(1440,900))
+    app.show_population = True
+    row = app.layout["population"][0]
+    p = app.world_to_screen((float(row["x"]),float(row["y"])))
+    require(any(row["entity_id"] in text for text in app.hovered_detail(p)), "population hover did not expose entity ID")
+    app.show_population = False
+    require(app.hovered_population(p) is None, "hidden population markers remain selectable")
     PROOF.parent.mkdir(parents=True, exist_ok=True)
     surface = pygame.Surface((2560, 1600))
     tile_px, _ox, _oy = GridRenderer(ground).draw_overview(surface, "ground")

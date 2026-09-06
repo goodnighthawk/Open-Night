@@ -2,7 +2,7 @@ name: GWB Map Workbench Preview
 
 on:
   push:
-    branches: [map-preview]
+    branches: [map-preview, v4.0]
   workflow_dispatch:
 
 permissions:
@@ -22,20 +22,21 @@ jobs:
           python-version: '3.12'
 
       - name: Install preview dependencies
-        run: python -m pip install 'pygame-ce==2.5.8' 'Pillow>=10,<13'
+        run: python -m pip install 'pygame-ce==2.5.8' 'Pillow>=10,<13' 'websockets>=16,<18' 'mysql-connector-python>=9,<10'
 
       - name: Rebuild authored GWB preview data and modular art
         run: |
           python tools/build_v4_modular_building_tiles.py
           python dev_tools/map_generator/tools/build_v4_approved_sprite_layout.py
+          python tools/promote_gwb_workbench_to_v4.py
 
       - name: Verify catalogs, transparency, geometry, and interactions
         run: |
           python -m py_compile map_workbench.py tools/package_gwb_map_previewer.py
           python tools/v4_map_workbench_audit.py
-          python tools/next_map_generated_art_audit.py
-          python tools/next_map_transition_audit.py
-          python tools/next_map_surface_audit.py
+          python tools/audit_v4_gwb_runtime_promotion.py
+          python verify_v4_server_contract.py
+          python tools/v4_prediction_audit.py
 
       - name: Render complete Ground and Roof maps
         env:
@@ -44,6 +45,9 @@ jobs:
         run: |
           python map_workbench.py --layer ground --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_map.png
           python map_workbench.py --layer roof --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_full_updated_roof.png
+          python map_workbench.py --layer first_floor --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_first_floor.png
+          python map_workbench.py --layer second_floor --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_second_floor.png
+          python map_workbench.py --layer underground --size 2730x1500 --map-only --screenshot artifacts/map_workbench/gwb_pipe_network.png
 
       - name: Assemble portable previewer
         run: python tools/package_gwb_map_previewer.py --output build/gwb_map_previewer
@@ -53,7 +57,10 @@ jobs:
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
-        run: python map_workbench.py --layer ground --size 1440x900 --map-only --screenshot packaged_smoke.png
+        run: |
+          python map_workbench.py --layer ground --size 1440x900 --map-only --screenshot packaged_smoke.png
+          python map_workbench.py --layer first_floor --size 1440x900 --map-only --screenshot packaged_floor_smoke.png
+          python map_workbench.py --layer underground --size 1440x900 --map-only --screenshot packaged_pipes_smoke.png
 
       - name: Upload downloadable GWB map previewer
         uses: actions/upload-artifact@v4

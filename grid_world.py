@@ -85,6 +85,7 @@ class TileCatalog:
             "generated_building_tiles.json",
             "generated_surface_tiles.json",
             "generated_transition_objects.json",
+            "gwb_layer_tiles.json",
         ):
             extra_path = path.with_name(extra_name)
             if extra_path.is_file():
@@ -243,6 +244,13 @@ class GridWorld:
         return self.collision_at("ground", x, y) == "road"
 
     def circle_walkable(self, layer: str, x: float, y: float, radius: float) -> bool:
+        for collider in self.data.get("collision_rects", []):
+            if collider.get("layer") != layer:
+                continue
+            rx, ry, rw, rh = map(float, collider["rect"])
+            cx, cy = max(rx, min(x, rx+rw)), max(ry, min(y, ry+rh))
+            if (x-cx)**2 + (y-cy)**2 <= radius**2:
+                return False
         radius = max(0.0, float(radius))
         margin = 0.5
         if x - radius < margin or y - radius < margin or x + radius >= self.world_w - margin or y + radius >= self.world_h - margin:
@@ -403,6 +411,21 @@ class GridWorld:
     def roof_walkable_at(self, x: float, y: float) -> bool:
         gx, gy = self.world_to_cell(x, y)
         return self.in_bounds(gx, gy) and self.tile_id("roof", gx, gy).startswith("bld_")
+
+    def layer_for_level(self, level: int) -> str | None:
+        return (self.data.get("level_layers") or {"0": "ground", "1": "roof"}).get(str(level))
+
+    def level_walkable(self, level: int, x: float, y: float, radius: float = 18.0) -> bool:
+        layer = self.layer_for_level(level)
+        if layer == "roof":
+            return self.circle_roof_walkable(x, y, radius)
+        return bool(layer and self.circle_walkable(layer, x, y, radius))
+
+    def move_circle_level(self, level: int, x: float, y: float, dx: float, dy: float, radius: float) -> tuple[float, float]:
+        layer = self.layer_for_level(level)
+        if layer == "roof":
+            return self.move_circle_roof(x, y, dx, dy, radius)
+        return self.move_circle(layer, x, y, dx, dy, radius) if layer else (x, y)
 
     def circle_roof_walkable(self, x: float, y: float, radius: float) -> bool:
         radius = max(0.0, float(radius))

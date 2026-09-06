@@ -19,9 +19,16 @@ CORE_FILES = (
     "building_morphology.py",
     "road_morphology.py",
     "procedural_block_props.py",
+    "gwb_layers.py",
+    "grid_world.py",
+    "grid_renderer.py",
+    "grid_runtime.py",
+    "tools/promote_gwb_workbench_to_v4.py",
+    "dev_tools/map_generator/tools/build_v4_approved_sprite_layout.py",
 )
 
 CORE_TREES = (
+    "mapfiles/data/map_001_gwb_corridor/grid_v100",
     "dev_tools/map_generator/working_cosmetics/approved_v4_layout",
     "assets/source_packs/city_block",
     "assets/source_packs/free_assets/Grass/Grass_04",
@@ -89,9 +96,12 @@ def build(output: Path, *, include_previews: bool = True) -> dict[str, object]:
             copy_file(relative, output)
 
     previews = (
+        "artifacts/map_workbench/gwb_bridge_corrected_full.png",
+        "artifacts/map_workbench/gwb_first_floor.png",
+        "artifacts/map_workbench/gwb_second_floor.png",
+        "artifacts/map_workbench/gwb_pipe_network.png",
         "artifacts/map_workbench/gwb_full_updated_map.png",
         "artifacts/map_workbench/gwb_full_updated_roof.png",
-        "artifacts/map_workbench/gwb_junction_signal_tree_pavement_door_fix.png",
     )
     if include_previews:
         for relative in previews:
@@ -100,7 +110,7 @@ def build(output: Path, *, include_previews: bool = True) -> dict[str, object]:
 
     notice = (
         "OPEN NIGHT — GWB NEXT-MAP PREVIEW\n\n"
-        "Double-click MAP_WORKBENCH.bat. Press G for Ground, R for Roof, and F "
+        "Double-click MAP_WORKBENCH.bat. Press G for Ground, R for Roof, 1/2 for floors, U for pipes, Y for population markers (hover to inspect), and F "
         "to fit the complete GWB/Hudson map. This is an art/map preview and does "
         "not change the game v4.0 release marker.\n"
     )

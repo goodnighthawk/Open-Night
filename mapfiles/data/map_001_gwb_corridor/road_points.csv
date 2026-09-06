@@ -20,15 +20,11 @@ fl_center_cross,1,6100,7350
 ny_riverside,0,10250,0
 ny_riverside,1,10250,10240
 ny_broadway,0,11600,0
-ny_broadway,1,12050,10240
+ny_broadway,1,11600,10240
 ny_fort_washington,0,13100,0
 ny_fort_washington,1,13100,10240
-ny_cabrini,0,14300,0
-ny_cabrini,1,14300,10240
 ny_amsterdam,0,14500,0
 ny_amsterdam,1,14500,10240
-ny_claremont,0,10650,0
-ny_claremont,1,10650,10240
 ny_w181,0,10250,1800
 ny_w181,1,16384,1800
 ny_w178,0,10250,3100

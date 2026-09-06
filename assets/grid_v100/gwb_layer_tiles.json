@@ -1,0 +1,116 @@
+{
+  "objects": {
+    "gwb_truss": {"image": "cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_truss_02_night.png", "layer": "ground", "kind": "bridge", "z": 145, "native_width_px": 128, "native_height_px": 96},
+    "gwb_tower": {"image": "cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_tower_01_night.png", "layer": "ground", "kind": "bridge", "z": 146, "native_width_px": 128, "native_height_px": 256}
+  },
+  "tiles": {
+    "first_floor": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_0.png",
+      "collision": "interior",
+      "kind": "floor",
+      "layer": "first_floor"
+    },
+    "second_floor": {
+      "image": "assets/generated_v4_surfaces/pavement/plaza_2.png",
+      "collision": "interior",
+      "kind": "floor",
+      "layer": "second_floor"
+    },
+    "pipe_0": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_1": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_2": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_3": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_4": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_5": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_6": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_7": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_8": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_9": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_10": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_11": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_12": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_13": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_14": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    },
+    "pipe_15": {
+      "image": "",
+      "collision": "walk",
+      "kind": "service_pipe",
+      "layer": "underground"
+    }
+  }
+}

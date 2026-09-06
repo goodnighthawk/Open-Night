@@ -10,7 +10,17 @@ Read this file before starting a development session. Update it whenever a v4.0 
 - Playable world: `map_001_gwb_corridor` only
 - Default game mode: **Glorious Car Hijacker** (`glorious_car_hijacker`)
 - Map corridor: Fort Lee / GWB approaches / George Washington Bridge / Washington Heights
-- Current public version marker remains **3.0** until the v4.0 release gate passes.
+- Current version marker is **4.0** for the requested GWB playtest. Production deployment remains a separate release gate.
+
+## GWB playtest update — 2026-09-05
+
+- The canonical client and server now preserve the authored 128×80, 128-unit GWB grid at startup.
+- Nineteen roads, 103 buildings, 32 residential entries, 302 signal assemblies; overlapping Manhattan avenues removed and Broadway made cardinal.
+- Bridge approaches are open, paired trusses and enlarged towers frame the deck, and continuous bridge rails have pedestrian/vehicle collision.
+- First- and second-floor shells match every roof cell. Paired interactions connect street, both floors, roof, and the connected manhole pipe network.
+- Workbench keys: G ground, R roof, 1/2 floors, U pipes; Y debug population markers with cursor inspection.
+- Verified: all new transition endpoints through server handlers, all pipe junction movement, exact floor/roof masks, canonical server population initialization, prediction, server privacy contract, and two-client reconnect/visibility/SMS.
+- Historical 14-house proofs below describe the earlier map. Current authored capacity is 32. Floor shells have no furnishing pass yet; production Railway deployment and broad human playtesting are still pending.
 
 ## v4.0 objective
 

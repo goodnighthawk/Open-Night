@@ -514,6 +514,8 @@ def _grid_vehicle_blocked(world, car, x: float, y: float, angle: float) -> bool:
         allowed.update({"walk", "sidewalk"})
     if any(world.collision_at("ground", px, py) not in allowed for px, py in probes):
         return True
+    if any(not world.circle_walkable("ground", px, py, 1.0) for px, py in probes):
+        return True
     # Street props intentionally stay out of deterministic ambient lanes, but a
     # player-driven vehicle must respect their authored cones/tree collision.
     return player_controlled and any(world.object_collision_at(px, py, 4.0) for px, py in probes)
@@ -537,7 +539,8 @@ def install(server_module, world) -> None:
 def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     """Derive GridWorld routes and populate the mature server AI systems."""
     install(server_module, world)
-    enterable_buildings = _install_enterable_buildings(server_module, map_config, world)
+    promoted = bool((world.data.get("runtime") or {}).get("workbench_layout_authority"))
+    enterable_buildings = len(map_config.get("interiors", [])) if promoted else _install_enterable_buildings(server_module, map_config, world)
     traffic_routes = _build_traffic_routes(world)
     pedestrian_routes = _build_pedestrian_routes(world)
     if not traffic_routes:
@@ -548,7 +551,7 @@ def prepare_and_initialize(server_module, map_config: dict, world) -> dict:
     traffic_count = max(0, int(getattr(server_module, "TRAFFIC_COUNT", 0)))
     map_config["traffic_routes"] = traffic_routes
     map_config["traffic_starts"] = _traffic_starts(traffic_routes, traffic_count)
-    map_config["traffic_signals"] = _build_traffic_signals(world)
+    map_config["traffic_signals"] = list(world.data.get("traffic_signals", [])) if promoted else _build_traffic_signals(world)
     map_config["traffic_junctions"] = _build_traffic_junctions(world)
     map_config["parking_spots"] = _build_parking_spots(world, map_config["traffic_signals"])
     map_config["npc_routes"] = pedestrian_routes

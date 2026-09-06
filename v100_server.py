@@ -45,9 +45,12 @@ def validate_active_authority(map_config: dict) -> list[str]:
         errors.append(
             f"grid: expected {v100_scale_normalization.TARGET_CELL_PX}px normalized cells, got {world.cell_px}"
         )
-    if world.width != 128 or world.height != 48:
+    promoted = bool((world.data.get("runtime") or {}).get("workbench_layout_authority"))
+    if promoted and (world.width, world.height) != (128, 80):
+        errors.append("grid: GWB geometry must be 128x80 cells")
+    if not promoted and (world.width != 128 or world.height != 48):
         errors.append(f"grid: expected doubled 128x48 cells, got {world.width}x{world.height}")
-    if world.width * world.height != 2 * 64 * 48:
+    if not promoted and world.width * world.height != 2 * 64 * 48:
         errors.append("grid: playable map area is not exactly 2x the approved baseline")
     if world.world_w != world.width * world.cell_px:
         errors.append("grid: world_w does not match width * cell_px")

@@ -275,6 +275,7 @@ class MapWorkbench:
 
     def reload(self, *, reset_camera: bool = False) -> None:
         try:
+            self._floor_renderer = None
             self._art_cache.clear()
             self._pivot_art_cache.clear()
             self._clean_curb_sources.clear()
@@ -287,16 +288,16 @@ class MapWorkbench:
             self.set_status(f"Reload failed: {exc}", (255, 112, 112), 10.0)
 
     def regenerate(self) -> None:
-        self.set_status("Regenerating Ground and Roof from city_block…", YELLOW, 30.0)
+        self.set_status("Regenerating GWB map and all five layers…", YELLOW, 30.0)
         pygame.display.flip()
         try:
             from dev_tools.map_generator.tools.build_v4_approved_sprite_layout import build as build_v4_layout
-            from tools.generate_v100_ground_roof_layers import main as generate_layers
+            from tools.promote_gwb_workbench_to_v4 import main as generate_layers
 
             build_v4_layout()
             generate_layers()
             self.reload()
-            self.set_status("Regenerated Ground and Roof successfully")
+            self.set_status("Regenerated all five GWB layers")
         except Exception as exc:
             self.set_status(f"Regeneration failed: {exc}", (255, 112, 112), 12.0)
 
@@ -354,6 +355,10 @@ class MapWorkbench:
                 self.regenerate()
             elif event.key == pygame.K_u:
                 self.set_layer("underground")
+            elif event.key == pygame.K_1:
+                self.set_layer("first_floor")
+            elif event.key == pygame.K_2:
+                self.set_layer("second_floor")
             elif event.key == pygame.K_F5:
                 self.reload()
             elif event.key == pygame.K_f:
@@ -627,7 +632,7 @@ class MapWorkbench:
                     sides = ((-1, "curb_top", angle), (1, "curb_bottom", angle))
                 for sign, asset, rotation in sides:
                     blocked = False
-                    for other in land_roads:
+                    for other in roads:
                         if other is road or self._distance_to_segment(px, py, other) > road_widths.get(str(other.get("road_class")), 235) * 0.5 + tile_world * 0.25:
                             continue
                         if road.get("orientation") == "horizontal" and other.get("orientation") == "vertical":
@@ -640,6 +645,13 @@ class MapWorkbench:
                             blocked = True
                         if blocked:
                             break
+                    # A curb tile has area: suppress any part of it that could
+                    # close the bridge mouth, including its half-tile overhang.
+                    cx, cy = px + nx * half * sign, py + ny * half * sign
+                    if any(other.get("road_class") == "bridge" and
+                           self._distance_to_segment(cx, cy, other) < road_widths["bridge"] / 2 + tile_world / 2
+                           for other in roads):
+                        blocked = True
                     if blocked:
                         continue
                     center = self.world_to_screen((px + nx * half * sign, py + ny * half * sign))
@@ -878,6 +890,8 @@ class MapWorkbench:
             if fixture_pass == "signals" and kind != "traffic_signal":
                 continue
             p = self.world_to_screen((number(row, "x"), number(row, "y")))
+            if kind == "manhole":
+                p = self.world_to_screen(((int(number(row,"x")//128)+0.5)*128,(int(number(row,"y")//128)+0.5)*128))
             rotation = int(number(row, "rotation"))
             if kind == "crosswalk":
                 # `rotation` is the pedestrian crossing axis. Zebra bars run
@@ -995,6 +1009,11 @@ class MapWorkbench:
                 color = (255, 210, 105) if kind == "dog_walker" else (103, 210, 232)
                 pygame.draw.circle(target, color, p, max(2, int(22 * self.camera.zoom)))
 
+        hovered = self.hovered_population()
+        if hovered is not None:
+            p = self.world_to_screen((number(hovered, "x"), number(hovered, "y")))
+            pygame.draw.circle(target, (255, 255, 225), p, self.population_marker_radius(hovered) + 3, 1)
+
         # Leashes make the three one-to-one pairs explicit at overview scale.
         pairs: dict[str, list[tuple[int, int]]] = {}
         for row in self.layout.get("population", []):
@@ -1042,6 +1061,32 @@ class MapWorkbench:
                 setattr(image_rect, anchor, p)
             target.blit(image, image_rect)
 
+    def _draw_floor_layer(self, target: pygame.Surface) -> None:
+        from grid_renderer import GridRenderer
+        from grid_runtime import load_ground_grid
+        if getattr(self, "_floor_renderer", None) is None:
+            load_ground_grid.cache_clear()
+            self._floor_renderer = GridRenderer(load_ground_grid())
+        renderer = self._floor_renderer
+        world = renderer.world
+        self.draw_frontier(target)
+        for gy, row in enumerate(world.layers[self.layer]):
+            for gx, tile_id in enumerate(row):
+                if tile_id == "void":
+                    continue
+                a = self.world_to_screen((gx*world.cell_px,gy*world.cell_px))
+                b = self.world_to_screen(((gx+1)*world.cell_px,(gy+1)*world.cell_px))
+                rect = pygame.Rect(a,(max(1,b[0]-a[0]),max(1,b[1]-a[1])))
+                if target.get_rect().colliderect(rect):
+                    image = renderer._tile_surface(tile_id)
+                    target.blit(pygame.transform.scale(image,rect.size),rect)
+        for obj in world.objects:
+            if obj.get("layer") != self.layer:
+                continue
+            x,y = world.object_interaction_point(obj)
+            p = self.world_to_screen((x,y))
+            pygame.draw.circle(target,(226,193,116),p,max(2,round(20*self.camera.zoom)))
+
     def _draw_underground(self, target: pygame.Surface) -> None:
         self.draw_frontier(target)
         ww, wh = self.world_size
@@ -1049,20 +1094,22 @@ class MapWorkbench:
         br = self.world_to_screen((ww, wh))
         world_rect = pygame.Rect(tl, (br[0] - tl[0], br[1] - tl[1]))
         pygame.draw.rect(target, (21, 23, 27), world_rect)
-        for road in self.layout.get("streets", []):
-            if road.get("road_class") not in {"primary", "secondary", "bridge"}:
-                continue
-            a = self.world_to_screen((number(road, "x1"), number(road, "y1")))
-            b = self.world_to_screen((number(road, "x2"), number(road, "y2")))
-            outer = max(4, int(250 * self.camera.zoom))
-            inner = max(2, int(150 * self.camera.zoom))
-            pygame.draw.line(target, (82, 79, 72), a, b, outer)
-            pygame.draw.line(target, (35, 37, 40), a, b, inner)
-            pygame.draw.line(target, (182, 149, 72), a, b, 1)
+        from gwb_layers import pipe_network
+        network = pipe_network(self.layout.get("street_features", []))
+        # All access chambers belong to this connected service network; roads
+        # play no role in its layout or its junction placement.
+        for start, end in network["segments"]:
+            a = self.world_to_screen(((start[0]+0.5)*128, (start[1]+0.5)*128))
+            b = self.world_to_screen(((end[0]+0.5)*128, (end[1]+0.5)*128))
+            pygame.draw.line(target, (112, 108, 86), a, b, max(4, round(128*self.camera.zoom)))
+        for start, end in network["segments"]:
+            a = self.world_to_screen(((start[0]+0.5)*128, (start[1]+0.5)*128))
+            b = self.world_to_screen(((end[0]+0.5)*128, (end[1]+0.5)*128))
+            pygame.draw.line(target, (46, 48, 43), a, b, max(2, round(104*self.camera.zoom)))
         for row in self.layout.get("street_features", []):
             if row.get("kind") != "manhole":
                 continue
-            p = self.world_to_screen((number(row, "x"), number(row, "y")))
+            p = self.world_to_screen(((int(number(row,"x")//128)+0.5)*128,(int(number(row,"y")//128)+0.5)*128))
             radius = max(4, int(90 * self.camera.zoom))
             pygame.draw.circle(target, (115, 101, 73), p, radius)
             pygame.draw.circle(target, (226, 191, 93), p, radius, 1)
@@ -1073,6 +1120,9 @@ class MapWorkbench:
         """Render the new art-first v4 preview from authored data and city_block."""
         if self.layer == "underground":
             self._draw_underground(target)
+            return
+        if self.layer in {"first_floor", "second_floor"}:
+            self._draw_floor_layer(target)
             return
         self.draw_frontier(target)
         ww, wh = self.world_size
@@ -1217,14 +1267,25 @@ class MapWorkbench:
         self._draw_tiled_curbs(target, roads, road_widths)
         self._draw_lane_markings(target, roads, road_widths)
 
-        # Nine approved truss pieces restore the recognizable v3 GWB landmark.
+        # Keep the deck open at both shoreline junctions. Curbs are drawn after
+        # asphalt, so explicitly restamp the bridge footprint before its rails.
+        self._draw_textured_roads(target, [row for row in road_draws if row[0] == "bridge"])
+        self._draw_lane_markings(target, [road for road in roads if road.get("road_class") == "bridge"], road_widths)
         bridge_y = number(next((row for row in roads if row.get("road_class") == "bridge"), {}), "y1", 3560)
+        # Truss assemblies run along both deck edges, leaving the nine lanes
+        # visible. The previous single 190-unit strip floated down the centre.
         for index in range(9):
-            wx = 6460 + index * 410
-            p = self.world_to_screen((wx, bridge_y))
-            size = (max(8, int(410 * self.camera.zoom)), max(6, int(190 * self.camera.zoom)))
-            image = self._repo_art("cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_truss_02_night.png", size)
-            target.blit(image, image.get_rect(center=p))
+            wx = 6553 + (index + 0.5) * (3277 / 9)
+            for side in (-1, 1):
+                p = self.world_to_screen((wx, bridge_y + side * (bridge_road_width / 2 + 65)))
+                size = (max(8, int(380 * self.camera.zoom)), max(6, int(340 * self.camera.zoom)))
+                image = self._repo_art("cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_truss_02_night.png", size)
+                target.blit(image, image.get_rect(center=p))
+        for side in (-1, 1):
+            rail_y = bridge_y + side * (bridge_road_width / 2 + 65)
+            a, b = self.world_to_screen((6553, rail_y)), self.world_to_screen((9830, rail_y))
+            pygame.draw.line(target, (30, 35, 39), a, b, max(3, round(28 * self.camera.zoom)))
+            pygame.draw.line(target, (137, 145, 143), a, b, max(1, round(8 * self.camera.zoom)))
 
         if self.layer == "ground":
             self._draw_street_features(target)
@@ -1253,6 +1314,8 @@ class MapWorkbench:
                 pygame.draw.circle(target, (190, 202, 176), field.center, max(2, int(75 * self.camera.zoom)), line_width)
             elif role == "bridge_tower":
                 x, y, w, h = (number(slot, key) for key in ("x", "y", "w", "h"))
+                y, h = bridge_y - bridge_road_width / 2 - 140, bridge_road_width + 280
+                x, w = x - 70, w + 140
                 rect = pygame.Rect(self.world_to_screen((x, y)), (max(3, int(w * self.camera.zoom)), max(3, int(h * self.camera.zoom))))
                 image = self._repo_art("cosmetic_packs/nyc_gta2_callback/sprites/lan_gwb_tower_01_night.png", rect.size)
                 target.blit(image, rect)
@@ -1313,12 +1376,38 @@ class MapWorkbench:
             for y in range(0, int(wh) + 1, step):
                 pygame.draw.line(target, (78, 91, 92), self.world_to_screen((0, y)), self.world_to_screen((ww, y)), 1)
 
-    def hovered_detail(self) -> list[str]:
-        mouse = pygame.mouse.get_pos()
+    def population_marker_radius(self, row: dict) -> int:
+        if row.get("kind") in {"supplier", "buyer"}:
+            return max(4, int(55 * self.camera.zoom))
+        return max(2, int((26 if row.get("kind") == "dog" else 22) * self.camera.zoom))
+
+    def hovered_population(self, mouse: tuple[int, int] | None = None) -> dict | None:
+        mouse = pygame.mouse.get_pos() if mouse is None else mouse
+        if not self.show_population or self.layer not in {"ground", "roof"} or not self.canvas_rect.collidepoint(mouse):
+            return None
+        candidates = []
+        for index, row in enumerate(self.layout.get("population", [])):
+            if self.layer == "roof" and int(number(row, "level")) != 1:
+                continue
+            px, py = self.world_to_screen((number(row, "x"), number(row, "y")))
+            distance = math.hypot(mouse[0] - px, mouse[1] - py)
+            if distance <= self.population_marker_radius(row) + 4:
+                candidates.append((distance, -index, row))
+        return min(candidates, key=lambda item: item[:2])[2] if candidates else None
+
+    def hovered_detail(self, mouse: tuple[int, int] | None = None) -> list[str]:
+        mouse = pygame.mouse.get_pos() if mouse is None else mouse
         if not self.canvas_rect.collidepoint(mouse):
             return []
         wx, wy = self.screen_to_world(mouse)
         lines = [f"World: {wx:,.0f}, {wy:,.0f}"]
+        population = self.hovered_population(mouse)
+        if population is not None:
+            lines.extend([f"Entity: {population.get('entity_id', '?')}",
+                          f"Kind: {population.get('kind', '?')}",
+                          f"Role: {population.get('role', '?')}",
+                          f"Level: {population.get('level', '0')}"])
+            return lines
         for house in self.layout.get("houses", []):
             x, y, w, h = (number(house, key) for key in ("x", "y", "w", "h"))
             if x <= wx <= x + w and y <= wy <= y + h:
@@ -1341,7 +1430,7 @@ class MapWorkbench:
 
         y = 88
         sections = [
-            ("VIEW", ["G  Ground", "R  Roof", "U  Underground", "F  Fit whole map"]),
+            ("VIEW", ["G Ground / R Roof", "1 First floor / 2 Second floor", "U  Underground", "F  Fit whole map"]),
             ("LAYERS", ["T  Traffic + parking", "Y  Debug population markers", "Ctrl+D  Street detail", "B  Doors + roof access"]),
             ("INSPECT", ["Mouse wheel  Zoom", "Drag / WASD  Pan", "I  Cell/grid overlay", "C  Collision overlay", "O  Object bounds", "L  Labels", "N  Static frontier"]),
             ("WORKFLOW", ["F5  Reload files", "H  Toggle hot reload", "Ctrl+R  Regenerate layers", "P  Save screenshot", "Q / Esc  Close"]),
@@ -1351,7 +1440,7 @@ class MapWorkbench:
             y += 25
             for row in rows:
                 self.screen.blit(self.small.render(row, True, TEXT), (x + 25, y))
-                y += 23
+                y += 20
             y += 13
 
         y += 4
@@ -1406,7 +1495,7 @@ class MapWorkbench:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Standalone Open Night GWB map workbench")
-    parser.add_argument("--layer", choices=("ground", "roof", "underground"), default="ground")
+    parser.add_argument("--layer", choices=("ground", "roof", "underground", "first_floor", "second_floor"), default="ground")
     parser.add_argument("--screenshot", type=Path, help="render once to this PNG and exit")
     parser.add_argument("--map-only", action="store_true", help="omit the workbench panel from a screenshot")
     parser.add_argument("--size", default="1440x900", help="window or screenshot size, e.g. 1440x900")

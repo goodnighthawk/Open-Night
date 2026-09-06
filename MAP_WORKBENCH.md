@@ -5,6 +5,19 @@ server, networking, NPCs, or gameplay simulation.
 
 ## What works now
 
+- `Y` shows population debug markers. Hover a visible marker to see its entity
+  ID, kind, role, floor, and coordinates in **Under cursor**.
+- `1` / `2` show the new first- and second-floor shells. Their playable masks
+  match the rooftop footprints exactly. In the game, entrance/stair triggers
+  connect Ground → 1st Floor → 2nd Floor → Roof and back.
+- `U` shows a connected pipe network between manholes, including junctions and
+  paired climb-down/climb-up triggers. It is independent of the street layout.
+- Rooftops retain a clear view of the streets and river outside the building.
+- The GWB approaches remain open through the shoreline curb; larger towers,
+  trusses along both sides, and continuous physical deck barriers frame the bridge.
+- The two overlapping Manhattan avenues are removed and Broadway is cardinal.
+  Shore piers meet the shoreline consistently and leave the bridge approaches clear.
+
 - The current Fort Lee / Hudson / Manhattan GWB map, with the approved generated
   building, surface, rooftop, street, and transition catalogs layered onto its
   existing authored geometry. This is not a second replacement map.

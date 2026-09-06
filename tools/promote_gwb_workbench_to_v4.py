@@ -5,10 +5,13 @@ from __future__ import annotations
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from gwb_layers import add_playable_layers
 LAYOUT = ROOT / "dev_tools" / "map_generator" / "working_cosmetics" / "approved_v4_layout"
 MAP = ROOT / "mapfiles" / "data" / "map_001_gwb_corridor"
 GRID = MAP / "grid_v100"
@@ -213,7 +216,7 @@ def build_runtime() -> tuple[dict, list[dict], list[dict]]:
     }
     for row in features:
         kind = str(row.get("kind", ""))
-        if kind in feature_assets:
+        if kind in feature_assets and kind != "manhole":
             asset, height = feature_assets[kind]
             objects.append(centered_object(defs, asset, number(row, "x"), number(row, "y"), height,
                                            overhead=(kind == "street_tree"), decorative_only=True))
@@ -385,7 +388,9 @@ def write_mapfiles(data: dict, buildings: list[dict], crossings: list[dict]) -> 
     write_csv(MAP / "building_sprites.csv", ("building_id","district","building_kind","atlas","cell","world_units_per_source_pixel","render_scale_ratio","scale_status"), [])
     write_csv(MAP / "building_layers.csv", ("building_id","level_id","layer_kind","z_order","walkable","visual_role","transition_policy"), [])
     write_csv(MAP / "building_stairwells.csv", ("stairwell_id","building_id","kind","side","x","y","from_level","intermediate_level","to_level","interaction_keys","transition_mode"), [])
-    interiors = [{"id": house["housing_id"], "name": "Empty House", "kind": "blank_house", "entry_x": house["buzzer_x"], "entry_y": house["buzzer_y"], "building_id": house["housing_id"], "door_hint": "south"} for house in houses]
+    exterior_entries = {obj["building_id"]: ((obj["gx"]+0.5)*CELL,(obj["gy"]+0.5)*CELL)
+                        for obj in data["objects"] if obj.get("interaction_kind") == "layer_transition" and obj.get("interaction_level") == 0 and obj.get("building_id")}
+    interiors = [{"id": house["housing_id"], "name": "Empty House", "kind": "blank_house", "entry_x": exterior_entries[house["housing_id"]][0], "entry_y": exterior_entries[house["housing_id"]][1], "building_id": house["housing_id"], "door_hint": "south"} for house in houses]
     write_csv(MAP / "interiors.csv", ("id","name","kind","entry_x","entry_y","building_id","door_hint"), interiors)
     points = []
     for index, spawn in enumerate(data["login_spawns"]):
@@ -405,7 +410,7 @@ def write_mapfiles(data: dict, buildings: list[dict], crossings: list[dict]) -> 
     write_csv(MAP / "crosswalks.csv", ("id","road_id","x","y","angle","length","width","stripe_width","stripe_gap","curb_cut_depth","stop_bar_gap","priority"), cross_rows)
     write_csv(MAP / "traffic_signals.csv", ("id","x","y","phase","orientation","rotation","signal_cycle_all_six","signal_cycle_seconds","signal_cycle_offset"), [])
     write_csv(MAP / "street_props.csv", ("id","kind","x","y","scale","rotation"), [])
-    write_csv(MAP / "levels.csv", ("level_id","name","z_order","walkable"), [{"level_id":0,"name":"Ground","z_order":0,"walkable":"true"},{"level_id":2,"name":"Roof","z_order":2,"walkable":"true"}])
+    write_csv(MAP / "levels.csv", ("level_id","name","z_order","walkable"), [{"level_id":level,"name":name,"z_order":z,"walkable":"true"} for level,name,z in ((-1,"Service pipes",-1),(0,"Ground",0),(2,"1st Floor",1),(3,"2nd Floor",2),(1,"Roof",3))])
     write_csv(MAP / "level_connectors.csv", ("connector_id","kind","from_level","to_level","x0","y0","x1","y1","width"), [])
     write_csv(MAP / "landmarks.csv", ("id","name","kind","x","y"), [{"id":"gwb","name":"George Washington Bridge","kind":"bridge","x":8192,"y":3560}])
 
@@ -440,10 +445,11 @@ def write_mapfiles(data: dict, buildings: list[dict], crossings: list[dict]) -> 
 
 def main() -> int:
     data, buildings, crossings = build_runtime()
+    add_playable_layers(data, read_csv("street_features.csv"), read_csv("streets.csv"))
     GRID.mkdir(parents=True, exist_ok=True)
     (GRID / "ground_grid.json").write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
     roof_data = {key: value for key, value in data.items() if key not in {"traffic_signals", "interiors", "upper_interiors"}}
-    roof_data["layers"] = {"ground": data["layers"]["ground"], "roof": data["layers"]["roof"]}
+    roof_data["layers"] = data["layers"]
     (GRID / "roof_grid.generated.json").write_text(json.dumps(roof_data, separators=(",", ":")) + "\n", encoding="utf-8")
     (GRID / "ground_generated_objects.json").write_text(json.dumps({"format":"open-night-gwb-v4-promoted","objects":[]}, separators=(",", ":")) + "\n", encoding="utf-8")
     write_mapfiles(data, buildings, crossings)

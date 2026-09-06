@@ -223,6 +223,20 @@ class GridRenderer:
     @lru_cache(maxsize=256)
     def _tile_surface(self, tile_id: str) -> pygame.Surface:
         tile = self.world.catalog[tile_id]
+        if tile.kind == "service_pipe":
+            size = self.world.cell_px
+            image = pygame.Surface((size, size)).convert()
+            image.fill((46, 48, 43))
+            mask = int(tile_id.rsplit("_", 1)[1])
+            # Open neighbouring edges join without end caps. Closed edges carry
+            # the pipe wall and rim; crossings become walkable junction chambers.
+            for bit, a, b in ((1,(0,0),(size,0)),(2,(size-1,0),(size-1,size)),
+                              (4,(0,size-1),(size,size-1)),(8,(0,0),(0,size))):
+                if not mask & bit:
+                    pygame.draw.line(image,(17,23,24),a,b,16)
+                    pygame.draw.line(image,(103,99,76),a,b,3)
+            pygame.draw.circle(image,(65,69,57),(size//2,size//2),max(2,size//28),1)
+            return image
         if not tile.image:
             surf = pygame.Surface((self.world.cell_px, self.world.cell_px)).convert()
             surf.fill((12, 12, 14))
@@ -454,6 +468,7 @@ class GridRenderer:
             target.blit(image, (int(world_x - cam_x), int(world_y - cam_y)))
 
         if layer == "ground":
+            self._draw_bridge_barriers(target, (cam_x, cam_y))
             self._apply_ground_night_grade(target)
             self._draw_ground_light_pools(target, (cam_x, cam_y))
         self._draw_proof_compass(target)
@@ -470,16 +485,19 @@ class GridRenderer:
         pygame.transform.smoothscale(collapsed, (width, height), target)
         target.fill(cls.ROOFTOP_BACKGROUND_MULTIPLY, special_flags=pygame.BLEND_RGB_MULT)
 
+    def _draw_bridge_barriers(self, target, camera=(0,0), scale=1.0, origin=(0,0)):
+        for x,y,w,h in (self.world.data.get("bridge") or {}).get("barriers", []):
+            rect = pygame.Rect(round(origin[0]+(x-camera[0])*scale),round(origin[1]+(y-camera[1])*scale),
+                               max(1,round(w*scale)),max(2,round(h*scale)))
+            pygame.draw.rect(target,(30,35,39),rect)
+            pygame.draw.line(target,(137,145,143),rect.midleft,rect.midright,max(1,round(8*scale)))
+
     def draw_rooftop_view(self, target: pygame.Surface, camera: tuple[float, float]) -> None:
-        """Draw crisp Roof cells over an unreadable, strongly blurred city context."""
+        """Keep the surrounding streets and river visible from the rooftop."""
         cam_x, cam_y = map(float, camera)
 
-        # Start with the same authoritative city composition visible from Ground,
-        # then destroy its street-scale information.  This is deliberately not a
-        # translucent tint: the severe down/upscale prevents roof players from
-        # inspecting Ground traffic or pedestrians.
+        # Preserve street-scale context while collision stays on the roof mask.
         self.draw_view(target, (cam_x, cam_y), "ground")
-        self._apply_rooftop_background_blur(target)
 
         roof = pygame.Surface(target.get_size(), pygame.SRCALPHA)
         self._draw_cells(roof, (cam_x, cam_y), "roof", skip_void=True)
@@ -562,6 +580,7 @@ class GridRenderer:
             target.blit(image, (sx, sy))
 
         if layer == "ground":
+            self._draw_bridge_barriers(target, scale=scale, origin=(ox,oy))
             self._apply_ground_night_grade(target, pygame.Rect(ox, oy, map_w, map_h))
             self._draw_ground_light_pools(
                 target, (0.0, 0.0), scale=scale, origin=(ox, oy),

@@ -1,3 +1,6 @@
 level_id,name,z_order,walkable
+-1,Service pipes,-1,true
 0,Ground,0,true
-2,Roof,2,true
+2,1st Floor,1,true
+3,2nd Floor,2,true
+1,Roof,3,true

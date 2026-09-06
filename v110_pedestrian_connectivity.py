@@ -353,8 +353,9 @@ def apply(world) -> dict:
     world._v110_crosswalk_cells = {
         cell for crossing in crossings for cell in crossing.road_cells()
     }
-    sidewalk_aprons = _add_sidewalk_aprons(world, horizontal, vertical)
-    zebra_stripes = _add_midblock_zebra_art(world, crossings)
+    promoted = bool((world.data.get("runtime") or {}).get("workbench_layout_authority"))
+    sidewalk_aprons = 0 if promoted else _add_sidewalk_aprons(world, horizontal, vertical)
+    zebra_stripes = 0 if promoted else _add_midblock_zebra_art(world, crossings)
     audit = {
         "pedestrian_crosswalk_count": len(crossings),
         "pedestrian_intersection_crosswalk_count": sum(c.kind == "intersection" for c in crossings),

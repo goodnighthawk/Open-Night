@@ -2068,14 +2068,8 @@ class Game:
         dx = input_x * walk_speed * sprint_multiplier * dt
         dy = input_y * walk_speed * sprint_multiplier * dt
 
-        if self.grid_world is not None and level in {0, 1}:
-            if level == 1:
-                return self.grid_world.move_circle_roof(
-                    start_x, start_y, dx, dy, PLAYER_RADIUS
-                )
-            return self.grid_world.move_circle(
-                "ground", start_x, start_y, dx, dy, PLAYER_RADIUS
-            )
+        if self.grid_world is not None and self.grid_world.layer_for_level(level):
+            return self.grid_world.move_circle_level(level, start_x, start_y, dx, dy, PLAYER_RADIUS)
 
         probe_x, probe_y = start_x + dx, start_y + dy
         wading = level == 0 and (
@@ -2916,7 +2910,7 @@ class Game:
         if self.grid_world is not None and local is not None:
             grid_trigger = self.grid_world.nearest_interaction(
                 local.render_x, local.render_y, int(getattr(local, "level", 0)),
-                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition", "layer_transition"},
             )
             if grid_trigger is not None and grid_trigger.get("interaction_kind") != "entrance_door":
                 # Let the general interaction request reach the buzzer/elevator/
@@ -3016,6 +3010,8 @@ class Game:
             self.grid_renderer.draw_view(self.screen, self.camera(), "ground")
         elif active_world_level == 1 and self.grid_renderer is not None:
             self.grid_renderer.draw_rooftop_view(self.screen, self.camera())
+        elif self.grid_renderer is not None and self.grid_world.layer_for_level(active_world_level):
+            self.grid_renderer.draw_view(self.screen, self.camera(), self.grid_world.layer_for_level(active_world_level))
         else:
             self.environment.set_active_level(active_world_level)
             self.environment.draw_view(self.screen, self.camera())
@@ -4741,7 +4737,7 @@ class Game:
                 fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
             trigger = self.grid_world.nearest_interaction(
                 local.render_x, local.render_y, int(getattr(local, "level", 0)),
-                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+                kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition", "layer_transition"},
             )
             if trigger is not None:
                 grid_interaction_target = str(trigger.get("interaction_prompt", "USE TRANSITION"))
@@ -4892,7 +4888,7 @@ class Game:
                     fire_escape_target = "CLIMB FIRE ESCAPE" if int(transition[0]) == 1 else "DESCEND FIRE ESCAPE"
                 trigger = self.grid_world.nearest_interaction(
                     local.render_x, local.render_y, int(getattr(local, "level", 0)),
-                    kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+                    kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition", "layer_transition"},
                 )
                 if trigger is not None:
                     grid_interaction_target = str(trigger.get("interaction_prompt", "USE TRANSITION"))

@@ -8,7 +8,7 @@ traffic_06,moving_vehicle,1372,2938,90,5,fl_bridge_plaza_n,true
 traffic_07,moving_vehicle,2428,4362,90,6,fl_main,true
 traffic_08,moving_vehicle,3483,5838,90,7,fl_bruce_reynolds,true
 traffic_09,moving_vehicle,10188,7619,180,8,ny_riverside,true
-traffic_10,moving_vehicle,11733,1605,177,9,ny_broadway,true
+traffic_10,moving_vehicle,11662,1608,180,9,ny_broadway,true
 traffic_11,moving_vehicle,13038,3379,180,10,ny_fort_washington,true
 traffic_12,moving_vehicle,14562,5151,180,11,ny_amsterdam,true
 traffic_13,moving_vehicle,14397,1862,90,12,ny_w181,true
@@ -26,7 +26,7 @@ traffic_24,moving_vehicle,1824,2938,90,23,fl_bridge_plaza_n,true
 traffic_25,moving_vehicle,2879,4362,90,24,fl_main,true
 traffic_26,moving_vehicle,3934,5838,90,25,fl_bruce_reynolds,true
 traffic_27,moving_vehicle,10188,8376,180,26,ny_riverside,true
-traffic_28,moving_vehicle,11766,2363,177,27,ny_broadway,true
+traffic_28,moving_vehicle,11662,2365,180,27,ny_broadway,true
 parking_01,parking_space,732,3145,90,0,fl_bridge_plaza_n,false
 parking_02,parked_vehicle,1934,4155,90,3,fl_main,true
 parking_03,parked_vehicle,3135,6045,90,6,fl_bruce_reynolds,true

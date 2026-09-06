@@ -1,10 +1,10 @@
 ﻿key,value
 grid_version,2
-cell_size,32
+cell_size,128
 chunk_size,1024
-cells_per_chunk,32
-grid_cols,512
-grid_rows,384
+cells_per_chunk,8
+grid_cols,128
+grid_rows,80
 chunk_cols,16
-chunk_rows,12
-source_fingerprint,c2bc6b7098609787a608247d6b1bf4dccc1eceb21fc4bfeff146d7657de08bac
+chunk_rows,10
+source_fingerprint,4644ae17fb0268d0454b8ffa727f7bea0c7ce9710d93034ec749b3e6f360d315

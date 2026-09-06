@@ -196,7 +196,7 @@ def main() -> int:
     info = server.server_info_payload("Test", 8765, server.MAX_PLAYERS, server.ACTIVE_MAP)
     assert info["game_mode_id"] == DEFAULT_GAME_MODE_ID
     assert info["game_mode_name"] == "Glorious Car Hijacker"
-    assert info["housing_capacity"] == 14
+    assert info["housing_capacity"] == 32
     assert info["max_players"] == 64
     assert info["server_metrics"]["server_tick_configured_rate_hz"] == 60
     assert info["network_zone_size"] == 3072

@@ -561,12 +561,23 @@ async def process_grid_transition_interaction(
     elif not player.interior_id:
         item = GRID_WORLD.nearest_interaction(
             player.x, player.y, int(player.level),
-            kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition"},
+            kinds={"entrance_door", "entrance_buzzer", "roof_access_door", "elevator_transition", "layer_transition"},
         )
     if item is None:
         return False
 
     kind = str(item.get("interaction_kind", ""))
+    if kind == "layer_transition":
+        if player.interior_id or int(item.get("interaction_level", 0)) != int(player.level):
+            return False
+        level = int(item["target_level"])
+        x, y = map(float, item["target_pos"])
+        if not GRID_WORLD.level_walkable(level, x, y, PLAYER_RADIUS):
+            return False
+        player.level, player.x, player.y = level, x, y
+        reset_on_foot_actions(session)
+        await send_json(session.websocket, {"type": "notice", "text": str(item.get("interaction_prompt", "Changed floor"))})
+        return True
     if kind == "entrance_door":
         target = str(item.get("target_interior_id", ""))
         if _interior_info(target) is None:
@@ -4375,13 +4386,8 @@ async def simulation_loop() -> None:
                 dy *= WATER_WALK_SPEED_MULTIPLIER
                 session.boost = False
             movement_start_x, movement_start_y = p.x, p.y
-            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and current_level in {0, 1}:
-                if current_level == 1:
-                    p.x, p.y = GRID_WORLD.move_circle_roof(p.x, p.y, dx, dy, PLAYER_RADIUS)
-                else:
-                    p.x, p.y = GRID_WORLD.move_circle(
-                        "ground", p.x, p.y, dx, dy, PLAYER_RADIUS
-                    )
+            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and GRID_WORLD.layer_for_level(current_level):
+                p.x, p.y = GRID_WORLD.move_circle_level(current_level, p.x, p.y, dx, dy, PLAYER_RADIUS)
             else:
                 p.x, p.y = move_with_collisions(
                     p.x, p.y, dx, dy, ACTIVE_MAP, level=current_level, allow_water=True
@@ -4395,7 +4401,7 @@ async def simulation_loop() -> None:
                 previous_x=movement_start_x,
                 previous_y=movement_start_y,
             )
-            if GRID_RUNTIME_ACTIVE and previous_level in {0, 1}:
+            if GRID_RUNTIME_ACTIVE and GRID_WORLD is not None and GRID_WORLD.layer_for_level(previous_level):
                 # Grid Ground and roofs own their fire-escape transitions. Do not
                 # let the retired vector connector table switch levels under them.
                 next_level = previous_level

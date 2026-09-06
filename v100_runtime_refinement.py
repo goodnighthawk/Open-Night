@@ -594,6 +594,8 @@ def _lamp_anchor_geometry(rotation: int, source_w: int, source_h: int) -> tuple[
 
 
 def apply_world_refinement(world):
+    if (world.data.get("runtime") or {}).get("workbench_layout_authority"):
+        return world
     if getattr(world, "_v100_layout_refined", False):
         return world
     rows = world.layers.get("ground")

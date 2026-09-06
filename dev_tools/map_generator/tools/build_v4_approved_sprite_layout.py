@@ -81,11 +81,9 @@ def build_streets() -> list[dict]:
         street("fl_center_cross", "Center Ave Connector", "west", "horizontal", 0, 7350, 6100, 7350, "residential"),
         # Manhattan north/south routes
         street("ny_riverside", "Riverside Dr", "east", "vertical", 10250, 0, 10250, WORLD_H, "secondary"),
-        street("ny_broadway", "Broadway", "east", "vertical", 11600, 0, 12050, WORLD_H, "primary"),
+        street("ny_broadway", "Broadway", "east", "vertical", 11600, 0, 11600, WORLD_H, "primary"),
         street("ny_fort_washington", "Fort Washington Ave", "east", "vertical", 13100, 0, 13100, WORLD_H, "secondary"),
-        street("ny_cabrini", "Cabrini Blvd", "east", "vertical", 14300, 0, 14300, WORLD_H, "residential"),
         street("ny_amsterdam", "Amsterdam Ave", "east", "vertical", 14500, 0, 14500, WORLD_H, "secondary"),
-        street("ny_claremont", "Claremont Ave", "east", "vertical", 10650, 0, 10650, WORLD_H, "residential"),
         # Washington Heights / Columbia cross streets
         street("ny_w181", "W 181st St", "east", "horizontal", 10250, 1800, WORLD_W, 1800, "primary"),
         street("ny_w178", "W 178th St", "east", "horizontal", 10250, 3100, WORLD_W, 3100, "primary"),
@@ -563,7 +561,7 @@ def build_legal_buildings(streets: list[dict]) -> list[dict]:
     shapes = ("rectangle", "notch_ne", "rectangle", "notch_sw", "courtyard", "notch_nw", "rectangle", "notch_se")
     for district, bounds, vertical_ids, horizontal_ids in specs:
         bx0, by0, bx1, by1 = bounds
-        xs = _legal_intervals(bx0, bx1, [by_id[name] for name in vertical_ids], "x")
+        xs = _legal_intervals(bx0, bx1, [by_id[name] for name in vertical_ids if name in by_id], "x")
         ys = _legal_intervals(by0, by1, [by_id[name] for name in horizontal_ids], "y")
         for raw_x in xs:
             for raw_y in ys:
@@ -631,7 +629,7 @@ def build_pavement_blocks(streets: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for district, bounds, vertical_ids, horizontal_ids in specs:
         bx0, by0, bx1, by1 = bounds
-        xs = _legal_intervals(bx0, bx1, [by_id[name] for name in vertical_ids], "x")
+        xs = _legal_intervals(bx0, bx1, [by_id[name] for name in vertical_ids if name in by_id], "x")
         ys = _legal_intervals(by0, by1, [by_id[name] for name in horizontal_ids], "y")
         for xa, xb in xs:
             for ya, yb in ys:
@@ -706,8 +704,10 @@ def bind_legal_buildings(buildings: list[dict]) -> tuple[list[dict], list[dict]]
         ("columbia_field", "athletic_field", *COLUMBIA_FIELD, "columbia"),
     ):
         slots.append({"slot_id": sid, "sprite_role": role, "x": x, "y": y, "w": w, "h": h, "shape": "rectangle", "rotation": 0, "zone_id": zone, "collision": "semantic", "lot_id": "landmark", "lot_x": x, "lot_y": y, "lot_w": w, "lot_h": h, "parcel_occupancy": 1.0, "ground_roof_registration": "exact"})
-    for side, x, rotation in (("west", RIVER_X0 - 180, 0), ("east", RIVER_X1 + 80, 180)):
+    for side, x, rotation in (("west", RIVER_X0 - 60, 0), ("east", RIVER_X1 - 200, 0)):
         for index, y in enumerate(range(900, 9500, 1050), 1):
+            if abs(y - BRIDGE_Y) < GWB_ROAD_WIDTH / 2 + 240:
+                continue
             slots.append({"slot_id": f"{side}_pier_{index:02d}", "sprite_role": "small_pier", "x": x, "y": y, "w": 260, "h": 100, "shape": "rectangle", "rotation": rotation, "zone_id": "hudson", "collision": "waterfront", "lot_id": "waterfront", "lot_x": x, "lot_y": y, "lot_w": 260, "lot_h": 100, "parcel_occupancy": 1.0, "ground_roof_registration": "exact"})
     return houses, slots
 
