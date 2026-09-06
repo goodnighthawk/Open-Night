@@ -25,8 +25,13 @@ def _port_open() -> bool:
 def _start_server() -> subprocess.Popen:
     proc = subprocess.Popen(
         [
+<<<<<<< Updated upstream
             sys.executable, str(ROOT / "server.py"), "--memory-db", "--no-discovery",
             "--port", str(PORT), "--traffic", "0", "--map", "map_001_gwb_corridor",
+=======
+            sys.executable, str(ROOT / "v100_server.py"), "--memory-db", "--no-discovery",
+            "--port", str(port), "--traffic", "0", "--map", "map_001_gwb_corridor",
+>>>>>>> Stashed changes
         ],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
