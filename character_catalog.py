@@ -8,7 +8,9 @@ from pathlib import Path
 from portable_paths import APP_DIR
 
 
-BUNDLED_ROOT = APP_DIR / "assets" / "characters" / "grunge_topdown"
+# Keep saved appearance IDs compatible, but load the approved v4 art directly.
+# Do not silently fall back to the retired character pack.
+BUNDLED_ROOT = APP_DIR / "assets" / "characters" / "gunner_alpha_v1"
 PART_SLOTS = ("hat", "head", "body")
 CUSTOM_SLOTS = PART_SLOTS
 DEFAULT_PROFILE = "grunge_01"

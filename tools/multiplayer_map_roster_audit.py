@@ -33,7 +33,7 @@ def _port_open(port: int) -> bool:
 def _start_server(port: int) -> subprocess.Popen:
     proc = subprocess.Popen(
         [
-            sys.executable, str(ROOT / "server.py"), "--memory-db", "--no-discovery",
+            sys.executable, str(ROOT / "v100_server.py"), "--memory-db", "--no-discovery",
             "--port", str(port), "--traffic", "0", "--map", "map_001_gwb_corridor",
         ],
         cwd=ROOT,

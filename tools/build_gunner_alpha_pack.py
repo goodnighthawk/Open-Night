@@ -19,7 +19,6 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from PIL import Image
-import numpy as np
 
 OUT = ROOT / "assets/characters/gunner_alpha_v1"
 REVIEW = ROOT / "art_review/modular_gunner_2026-09-05"
@@ -39,18 +38,23 @@ def visible(image: Image.Image) -> tuple[int, int, int, int]:
 
 def neck_socket(image: Image.Image) -> tuple[float, float]:
     """Locate the dark neck opening near upper center, recording it for review."""
-    a = np.asarray(image)
-    h, w = a.shape[:2]
-    dark = ((a[:, :, :3].max(axis=2) < 65) & (a[:, :, 3] > 32)).astype(float)
+    w, h = image.size
+    pixels = image.load()
     # Neck holes are broad dark patches. Search only upper-middle torso, away
     # from hands and lower dark trousers. Integral windows avoid outline noise.
     r = max(3, round(w * .055))
-    integral = np.pad(dark, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    integral = [[0]*(w+1) for _ in range(h+1)]
+    for y in range(h):
+        row_sum = 0
+        for x in range(w):
+            color = pixels[x, y]
+            row_sum += int(max(color[:3]) < 65 and color[3] > 32)
+            integral[y+1][x+1] = integral[y][x+1] + row_sum
     best = None
     for y in range(max(r, int(h * .06)), min(h-r, int(h * .39))):
         for x in range(max(r, int(w * .30)), min(w-r, int(w * .70))):
-            score = (integral[y+r+1, x+r+1] - integral[y-r, x+r+1]
-                     - integral[y+r+1, x-r] + integral[y-r, x-r]) / (2*r+1)**2
+            score = (integral[y+r+1][x+r+1] - integral[y-r][x+r+1]
+                     - integral[y+r+1][x-r] + integral[y-r][x-r]) / (2*r+1)**2
             score -= .10 * abs(x/w - .5) + .06 * abs(y/h - .16)
             if best is None or score > best[0]:
                 best = (score, x, y)
@@ -60,14 +64,47 @@ def neck_socket(image: Image.Image) -> tuple[float, float]:
 
 
 def extract(path: Path):
+    import pygame
+    import character_art
+    if not pygame.display.get_surface():
+        pygame.init()
+        pygame.display.set_mode((1, 1))
     image = Image.open(path)
     if image.mode != "RGBA" or image.getchannel("A").getextrema()[0] != 0:
         raise ValueError(f"Requires actual RGBA transparency, got {image.mode}: {path}")
+    alpha = image.getchannel("A")
+    def gutters(axis):
+        length = image.width if axis == 0 else image.height
+        other = image.height if axis == 0 else image.width
+        counts = []
+        for i in range(length):
+            strip = alpha.crop((i, 0, i+1, other) if axis == 0 else (0, i, other, i+1))
+            counts.append(sum(strip.histogram()[33:]))
+        cuts = [0]
+        for fraction in (1/3, 2/3):
+            start, stop = int(length*(fraction-.09)), int(length*(fraction+.09))
+            best, run = (0, 0), None
+            for i in range(start, stop+1):
+                empty = i < stop and counts[i] <= max(5, other//100)
+                if empty and run is None:
+                    run = i
+                elif not empty and run is not None:
+                    if i-run > best[1]-best[0]:
+                        best = (run, i)
+                    run = None
+            if best[1]-best[0] < 4:
+                raise ValueError(f"No safe sprite gutter: {path}, axis {axis}")
+            cuts.append(sum(best)//2)
+        return cuts+[length]
+    xs, ys = gutters(0), gutters(1)
     items = []
     for index in range(9):
         col, row = index % 3, index // 3
-        cell = image.crop((round(col*image.width/3), round(row*image.height/3),
-                           round((col+1)*image.width/3), round((row+1)*image.height/3)))
+        cell = image.crop((xs[col], ys[row], xs[col+1], ys[row+1]))
+        # Use the game's existing fringe/component sanitation on source cells.
+        surface = pygame.image.frombytes(cell.tobytes(), cell.size, "RGBA")
+        surface = character_art._sanitize_part(surface)
+        cell = Image.frombytes("RGBA", surface.get_size(), pygame.image.tobytes(surface, "RGBA"))
         box = visible(cell)
         # Blank margins are necessary to avoid inadvertently including another
         # cell's artwork. Reject cut-off source silhouettes instead of clipping.

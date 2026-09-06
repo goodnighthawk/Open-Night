@@ -1,0 +1,21 @@
+{
+  "result": "pass",
+  "layers_checked": 80,
+  "render_cases": 2112,
+  "unique_outfits": 3,
+  "unique_heads": 3,
+  "body_states": [
+    "idle",
+    "walk_left",
+    "walk_right",
+    "run_left",
+    "run_right",
+    "jump",
+    "crouch",
+    "prone"
+  ],
+  "master_matches_layers": true,
+  "rgba_verified": true,
+  "preview_uses_current_renderer": true,
+  "live_pack_modified": false
+}
