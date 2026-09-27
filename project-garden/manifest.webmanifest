@@ -1,0 +1,9 @@
+{
+  "name": "Project Garden — Research Control",
+  "short_name": "Project Garden",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f2e9",
+  "theme_color": "#18331d",
+  "description": "Mobile project-control garden for research, builds, papers, funding and ventures."
+}
