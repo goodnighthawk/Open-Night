@@ -116,10 +116,26 @@ async def one_review(key,name,remit,text):
     schema="Return one JSON object with exactly these fields: verdict (short string), severity (info|advisory|needs-attention|critical), confidence (0 to 1), summary (2-5 sentences), major_issues (array), minor_issues (array), required_checks (array), evidence (array of objects with location, quote, claim)."
     prompt=f'''You are the {name} component of an AI pre-submission scientific review panel.\nROLE: {remit}\n{schema}\nRules:\n- Do not recommend accept/reject and do not impersonate human peer review.\n- Every important criticism must be tied to manuscript evidence or explicitly marked as a requested check.\n- Never claim to have recomputed, browsed, run code, or inspected supplementary files unless the supplied manuscript text itself demonstrates it.\n- Use brief quotes only when useful and keep each quote under 25 words.\n- Distinguish a detected flaw from something the manuscript merely fails to document.\n- Prioritize technically consequential issues over writing/style.\n- If evidence is insufficient, lower confidence rather than inventing a problem.\n\nMANUSCRIPT TEXT:\n{manuscript}'''
     timeout=float(os.getenv('LLM_TIMEOUT_SECONDS','150'))
-    payload={'model':model,'messages':[{'role':'system','content':'Rigorous, skeptical scientific manuscript reviewer. Output strict JSON only.'},{'role':'user','content':prompt}],'temperature':0.1}
+    style=os.getenv('LLM_API_STYLE','').strip().lower() or ('responses' if url.rstrip('/').endswith('/responses') else 'chat-completions')
+    headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'}
     async with httpx.AsyncClient(timeout=timeout) as client:
-        r=await client.post(url,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'},json=payload); r.raise_for_status()
-    raw=r.json()['choices'][0]['message']['content'].strip(); raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I|re.S)
+        if style=='responses':
+            payload={'model':model,'instructions':'Rigorous, skeptical scientific manuscript reviewer. Output strict JSON only.','input':prompt}
+            r=await client.post(url,headers=headers,json=payload); r.raise_for_status(); data=r.json()
+            raw=str(data.get('output_text','') or '')
+            if not raw:
+                parts=[]
+                for item in data.get('output',[]):
+                    if isinstance(item,dict):
+                        for part in item.get('content',[]):
+                            if isinstance(part,dict) and part.get('type') in {'output_text','text'}: parts.append(str(part.get('text','')))
+                raw='\n'.join(parts)
+        else:
+            payload={'model':model,'messages':[{'role':'system','content':'Rigorous, skeptical scientific manuscript reviewer. Output strict JSON only.'},{'role':'user','content':prompt}],'temperature':0.1}
+            r=await client.post(url,headers=headers,json=payload); r.raise_for_status(); data=r.json()
+            raw=data['choices'][0]['message']['content']
+    raw=str(raw).strip(); raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I|re.S)
+    if not raw: raise ValueError('Model returned no text')
     return _normalize_live(key,name,json.loads(raw))
 
 async def run_reviews(text):
