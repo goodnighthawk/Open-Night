@@ -10,6 +10,8 @@ DB=Path(os.getenv('DATABASE_PATH','data/preprintforge.db')); DB.parent.mkdir(par
 UPLOAD=Path(os.getenv('UPLOAD_DIR','data/uploads')); UPLOAD.mkdir(parents=True,exist_ok=True)
 BASE_URL=os.getenv('BASE_URL','http://localhost:8000').rstrip('/')
 MAX_MB=int(os.getenv('MAX_UPLOAD_MB','25'))
+MAX_REVIEW_CHARS=int(os.getenv('MAX_REVIEW_CHARS','45000'))
+REVIEW_CONCURRENCY=max(1,int(os.getenv('REVIEW_CONCURRENCY','3')))
 app=FastAPI(title=APP_NAME)
 
 REVIEWERS=[
@@ -29,6 +31,9 @@ def con():
 def init_db():
     with con() as c:
         c.executescript('''CREATE TABLE IF NOT EXISTS preprints(id INTEGER PRIMARY KEY,slug TEXT UNIQUE,title TEXT,authors TEXT,abstract TEXT,email TEXT,filename TEXT,stored_path TEXT,extracted_text TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS reviews(id INTEGER PRIMARY KEY,preprint_id INTEGER,reviewer_key TEXT,reviewer_name TEXT,verdict TEXT,severity TEXT,summary TEXT,findings TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);''')
+        cols={r[1] for r in c.execute('PRAGMA table_info(reviews)').fetchall()}
+        for name,decl in [('review_mode',"TEXT DEFAULT 'fallback'"),('confidence','REAL DEFAULT 0.0'),('report_json',"TEXT DEFAULT '{}'")]:
+            if name not in cols: c.execute(f'ALTER TABLE reviews ADD COLUMN {name} {decl}')
 init_db()
 
 def esc(x): return html.escape(str(x or ''))
@@ -45,88 +50,116 @@ def pdf_text(path):
         except Exception: pass
     return '\n'.join(out)
 
+def _lists(d,key,limit=8):
+    v=d.get(key,[])
+    if not isinstance(v,list): return []
+    return [str(x)[:1800] for x in v if str(x).strip()][:limit]
+
+def _normalize_live(key,name,d):
+    severity=str(d.get('severity','advisory')).lower().strip()
+    if severity not in {'info','advisory','needs-attention','critical'}: severity='advisory'
+    try: confidence=max(0.0,min(1.0,float(d.get('confidence',0.5))))
+    except Exception: confidence=0.5
+    evidence=[]
+    for x in d.get('evidence',[]) if isinstance(d.get('evidence',[]),list) else []:
+        if isinstance(x,dict):
+            evidence.append({'location':str(x.get('location',''))[:160],'quote':str(x.get('quote',''))[:420],'claim':str(x.get('claim',''))[:700]})
+    report={'major_issues':_lists(d,'major_issues',6),'minor_issues':_lists(d,'minor_issues',6),'required_checks':_lists(d,'required_checks',6),'evidence':evidence[:6]}
+    flat=[]
+    for label,k in [('Major','major_issues'),('Minor','minor_issues'),('Check','required_checks')]: flat.extend([f'{label}: {x}' for x in report[k]])
+    if not flat: flat=['No concrete issue list was returned; inspect the summary and evidence before relying on this review.']
+    return {'reviewer_key':key,'reviewer_name':name,'verdict':str(d.get('verdict','Scientific assessment returned'))[:140],'severity':severity,'summary':str(d.get('summary',''))[:2600],'findings':flat[:12],'review_mode':'live-ai','confidence':confidence,'report_json':report}
+
 def heuristic(key,name,text):
-    low=text.lower()
-    words=len(re.findall(r"\b\w+\b", text))
+    low=text.lower(); words=len(re.findall(r"\b\w+\b", text))
     def n(*terms): return sum(low.count(t) for t in terms)
-    signals={
-        'uncertainty':n('uncert','error bar','standard deviation','confidence interval','systematic error','statistical error'),
-        'calibration':n('calibrat','control experiment','control sample','benchmark','reference measurement'),
-        'methods':n('methods','experimental setup','apparatus','procedure','protocol','sample preparation'),
-        'equations':len(re.findall(r'\([0-9]{1,3}\)', text)),
-        'units':len(re.findall(r'\b(?:hz|khz|mhz|ghz|ev|mev|kev|gev|nm|um|µm|ms|ns|tesla|gauss|kelvin|\bk\b)\b', low)),
-        'data':n('data availability','data are available','dataset','repository','zenodo','figshare'),
-        'code':n('code availability','source code','github','gitlab','software repository'),
-        'supplement':n('supplementary','supplemental','appendix'),
-        'claims':n('we show','we demonstrate','we find','we report','we observe','we conclude'),
-    }
-    findings=[]
+    signals={'uncertainty':n('uncert','error bar','standard deviation','confidence interval','systematic error','statistical error'),'calibration':n('calibrat','control experiment','control sample','benchmark','reference measurement'),'methods':n('methods','experimental setup','apparatus','procedure','protocol','sample preparation'),'equations':len(re.findall(r'\([0-9]{1,3}\)', text)),'units':len(re.findall(r'\b(?:hz|khz|mhz|ghz|ev|mev|kev|gev|nm|um|µm|ms|ns|tesla|gauss|kelvin)\b', low)),'data':n('data availability','data are available','dataset','repository','zenodo','figshare'),'code':n('code availability','source code','github','gitlab','software repository'),'supplement':n('supplementary','supplemental','appendix'),'claims':n('we show','we demonstrate','we find','we report','we observe','we conclude')}
+    major=[]; minor=[]; checks=[]
     if key=='physics':
-        findings.append(f"Screened about {words:,} extracted words; detected {signals['claims']} explicit result/claim phrases and {signals['units']} unit-bearing tokens.")
-        findings.append(f"Found {signals['calibration']} calibration/control/benchmark markers and {signals['uncertainty']} uncertainty/error markers.")
-        verdict='No obvious structural physics red flag' if words>3000 and signals['claims'] else 'Physics structure needs inspection'
-        severity='info' if words>3000 and signals['claims'] else 'advisory'
+        summary=f"Screened about {words:,} extracted words, {signals['claims']} explicit claim phrases, {signals['units']} physical-unit tokens, and {signals['uncertainty']} uncertainty/error markers."
+        verdict='No obvious structural physics red flag' if words>3000 and signals['claims'] else 'Physics structure needs inspection'; severity='info' if words>3000 and signals['claims'] else 'advisory'
+        checks=['Verify dimensions and limiting cases for the central equations.','Check whether each central conclusion is directly supported by a stated measurement or calculation.']
     elif key=='methods':
-        findings.append(f"Detected {signals['methods']} methods/apparatus/procedure markers and {signals['calibration']} calibration/control/benchmark markers.")
-        if signals['methods']==0: findings.append('No strong methods-section markers were detected in extracted text; confirm that the experimental/computational procedure is explicit.')
-        verdict='Methods signals detected' if signals['methods'] else 'Methods detail not clearly detected'
-        severity='info' if signals['methods'] else 'needs-attention'
+        summary=f"Detected {signals['methods']} methods/apparatus/procedure markers and {signals['calibration']} calibration/control/benchmark markers."
+        verdict='Methods signals detected' if signals['methods'] else 'Methods detail not clearly detected'; severity='info' if signals['methods'] else 'needs-attention'
+        if not signals['methods']: major=['No strong methods-section markers were detected in extracted text.']
+        checks=['Confirm enough procedural detail exists for an independent group to reproduce the central result.']
     elif key=='math':
-        findings.append(f"Detected approximately {signals['equations']} equation-number-like labels and {signals['units']} physical-unit tokens in the extracted PDF text.")
-        findings.append('This fallback screen does not yet symbolically re-derive equations or recompute numerical results.')
-        verdict='Equation audit pending' if signals['equations'] else 'Few equation markers detected'
-        severity='advisory'
+        summary=f"Detected about {signals['equations']} equation-number-like labels and {signals['units']} physical-unit tokens."
+        verdict='Equation audit pending' if signals['equations'] else 'Few equation markers detected'; severity='advisory'; checks=['Symbolic re-derivation and numerical recomputation are not performed by fallback mode.']
     elif key=='stats':
-        findings.append(f"Detected {signals['uncertainty']} uncertainty/error/statistical markers in the manuscript text.")
-        if signals['uncertainty']==0: findings.append('No explicit uncertainty language was detected; check whether uncertainties and systematics are quantified where required.')
-        verdict='Uncertainty treatment detected' if signals['uncertainty'] else 'Uncertainty treatment not detected'
-        severity='info' if signals['uncertainty'] else 'needs-attention'
+        summary=f"Detected {signals['uncertainty']} uncertainty/error/statistical markers."
+        verdict='Uncertainty treatment detected' if signals['uncertainty'] else 'Uncertainty treatment not detected'; severity='info' if signals['uncertainty'] else 'needs-attention'
+        if not signals['uncertainty']: major=['No explicit uncertainty language was detected.']
+        checks=['Verify systematics, uncertainty propagation, and statistical assumptions against the primary claims.']
     elif key=='repro':
-        findings.append(f"Detected data-sharing markers: {signals['data']}; code-sharing markers: {signals['code']}; supplementary/appendix markers: {signals['supplement']}.")
-        missing=[]
-        if not signals['data']: missing.append('data availability')
-        if not signals['code']: missing.append('code/software availability')
-        if missing: findings.append('Not clearly detected: '+', '.join(missing)+'. This may be appropriate for some experiments, but should be stated explicitly when relevant.')
+        summary=f"Data markers: {signals['data']}; code markers: {signals['code']}; supplementary/appendix markers: {signals['supplement']}."
         if signals['data'] and signals['code']: verdict='Reproducibility resources detected'; severity='info'
         elif signals['data'] or signals['code'] or signals['supplement']: verdict='Partial reproducibility information detected'; severity='advisory'
         else: verdict='Reproducibility statement not detected'; severity='needs-attention'
+        if not signals['data']: minor.append('Data-availability statement not clearly detected.')
+        if not signals['code']: minor.append('Code/software-availability statement not clearly detected.')
+        checks=['Confirm all parameters, software versions, calibration inputs, and analysis steps needed for reproduction are specified.']
     else:
-        findings.append(f"Detected {signals['claims']} explicit claim phrases. An adversarial review should target the central claim with a competing explanation or null test.")
-        if signals['calibration']==0: findings.append('No calibration/control/benchmark marker was detected by the fallback screen; a targeted control test is a priority check.')
-        else: findings.append(f"Detected {signals['calibration']} calibration/control/benchmark markers that can be examined as possible falsification tests.")
-        verdict='Adversarial test identified' if signals['claims'] else 'Central claim needs explicit falsification test'
-        severity='advisory'
-    summary='Structured manuscript screening completed. This is a deterministic fallback analysis; manuscript-specific LLM review is not connected yet.'
-    return {'reviewer_key':key,'reviewer_name':name,'verdict':verdict,'severity':severity,'summary':summary,'findings':findings}
+        summary=f"Detected {signals['claims']} explicit claim phrases and {signals['calibration']} calibration/control/benchmark markers."
+        verdict='Adversarial test identified' if signals['claims'] else 'Central claim needs explicit falsification test'; severity='advisory'
+        checks=['State the strongest plausible alternative explanation and a measurement or calculation that would distinguish it from the preferred interpretation.']
+        if not signals['calibration']: minor=['No calibration/control/benchmark marker was detected by fallback screening.']
+    report={'major_issues':major,'minor_issues':minor,'required_checks':checks,'evidence':[]}
+    flat=[*(f'Major: {x}' for x in major),*(f'Minor: {x}' for x in minor),*(f'Check: {x}' for x in checks)]
+    return {'reviewer_key':key,'reviewer_name':name,'verdict':verdict,'severity':severity,'summary':summary+' Deterministic fallback screen only; no manuscript-specific LLM reasoning was used.','findings':flat or ['No structural issue triggered by fallback rules.'],'review_mode':'fallback-screen','confidence':0.35,'report_json':report}
 
 async def one_review(key,name,remit,text):
     url=os.getenv('LLM_API_URL','').strip(); token=os.getenv('LLM_API_KEY','').strip(); model=os.getenv('LLM_MODEL','').strip()
     if not(url and token and model): return heuristic(key,name,text)
-    prompt=f'''You are one component of a transparent machine-review system. Role: {name}. Remit: {remit}. Do not decide publication acceptance and do not fabricate checks. Return JSON only with verdict, severity, summary, findings. severity must be info, advisory, needs-attention, or critical. Findings must be concrete. MANUSCRIPT:\n{text[:70000]}'''
-    async with httpx.AsyncClient(timeout=120) as client:
-        r=await client.post(url,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'},json={'model':model,'messages':[{'role':'system','content':'Rigorous scientific reviewer. Output strict JSON.'},{'role':'user','content':prompt}],'temperature':0.2}); r.raise_for_status()
-    raw=r.json()['choices'][0]['message']['content'].strip(); raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I|re.S); d=json.loads(raw)
-    return {'reviewer_key':key,'reviewer_name':name,'verdict':str(d.get('verdict','Scientific assessment returned'))[:120],'severity':str(d.get('severity','advisory'))[:40],'summary':str(d.get('summary',''))[:2000],'findings':[str(x)[:1500] for x in d.get('findings',[])][:8]}
+    manuscript=text[:MAX_REVIEW_CHARS]
+    schema="Return one JSON object with exactly these fields: verdict (short string), severity (info|advisory|needs-attention|critical), confidence (0 to 1), summary (2-5 sentences), major_issues (array), minor_issues (array), required_checks (array), evidence (array of objects with location, quote, claim)."
+    prompt=f'''You are the {name} component of an AI pre-submission scientific review panel.\nROLE: {remit}\n{schema}\nRules:\n- Do not recommend accept/reject and do not impersonate human peer review.\n- Every important criticism must be tied to manuscript evidence or explicitly marked as a requested check.\n- Never claim to have recomputed, browsed, run code, or inspected supplementary files unless the supplied manuscript text itself demonstrates it.\n- Use brief quotes only when useful and keep each quote under 25 words.\n- Distinguish a detected flaw from something the manuscript merely fails to document.\n- Prioritize technically consequential issues over writing/style.\n- If evidence is insufficient, lower confidence rather than inventing a problem.\n\nMANUSCRIPT TEXT:\n{manuscript}'''
+    timeout=float(os.getenv('LLM_TIMEOUT_SECONDS','150'))
+    payload={'model':model,'messages':[{'role':'system','content':'Rigorous, skeptical scientific manuscript reviewer. Output strict JSON only.'},{'role':'user','content':prompt}],'temperature':0.1}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r=await client.post(url,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'},json=payload); r.raise_for_status()
+    raw=r.json()['choices'][0]['message']['content'].strip(); raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I|re.S)
+    return _normalize_live(key,name,json.loads(raw))
 
 async def run_reviews(text):
-    out=[]
-    for key,name,remit in REVIEWERS:
-        try: out.append(await one_review(key,name,remit,text))
-        except Exception as e:
-            x=heuristic(key,name,text); x['summary']+=f' Live-review provider error: {type(e).__name__}.'; out.append(x)
-    return out
+    sem=asyncio.Semaphore(REVIEW_CONCURRENCY)
+    async def wrapped(spec):
+        key,name,remit=spec
+        async with sem:
+            try: return await one_review(key,name,remit,text)
+            except Exception as e:
+                x=heuristic(key,name,text); x['summary']+=f' Live-review provider error: {type(e).__name__}; fallback result shown.'; return x
+    return await asyncio.gather(*(wrapped(x) for x in REVIEWERS))
 
 def review_html(rows):
     if not rows:return '<div class="card">Machine review has not been run for this version.</div>'
     blocks=[]
     for r in rows:
+        mode=(r['review_mode'] if 'review_mode' in r.keys() and r['review_mode'] else 'fallback-screen')
+        conf=float(r['confidence'] or 0) if 'confidence' in r.keys() else 0
+        try: report=json.loads(r['report_json'] or '{}') if 'report_json' in r.keys() else {}
+        except Exception: report={}
         findings=json.loads(r['findings']) if isinstance(r['findings'],str) else r['findings']
-        lis=''.join(f'<li>{esc(x)}</li>' for x in findings)
-        blocks.append(f'''<article class="review"><span class="tag">{esc(r['reviewer_name'])} · {esc(r['severity'])}</span><h2>{esc(r['verdict'])}</h2><p>{esc(r['summary'])}</p><ul>{lis}</ul></article>''')
+        badge='LIVE AI REVIEW' if mode=='live-ai' else 'FALLBACK SCREEN'
+        sections=[]
+        for title,k in [('Major issues','major_issues'),('Minor issues','minor_issues'),('Required checks','required_checks')]:
+            vals=report.get(k,[]) if isinstance(report,dict) else []
+            if vals: sections.append(f'<h3>{title}</h3><ul>'+''.join(f'<li>{esc(x)}</li>' for x in vals)+'</ul>')
+        ev=report.get('evidence',[]) if isinstance(report,dict) else []
+        if ev:
+            items=[]
+            for x in ev:
+                if isinstance(x,dict): items.append(f"<li><b>{esc(x.get('location','Manuscript'))}</b>: {esc(x.get('claim',''))}"+(f"<br><small>Evidence: “{esc(x.get('quote',''))}”</small>" if x.get('quote') else '')+'</li>')
+            if items: sections.append('<h3>Evidence trace</h3><ul>'+''.join(items)+'</ul>')
+        if not sections: sections=['<ul>'+''.join(f'<li>{esc(x)}</li>' for x in findings)+'</ul>']
+        blocks.append(f'''<article class="review"><span class="tag">{esc(badge)} · {esc(r['reviewer_name'])} · {esc(r['severity'])}</span><h2>{esc(r['verdict'])}</h2><p>{esc(r['summary'])}</p><p class="meta">Reviewer confidence: {int(conf*100)}%</p>{''.join(sections)}</article>''')
     return ''.join(blocks)
 
 @app.get('/health')
-def health(): return {'ok':True,'service':APP_NAME}
+def health():
+    live=bool(os.getenv('LLM_API_URL','').strip() and os.getenv('LLM_API_KEY','').strip() and os.getenv('LLM_MODEL','').strip())
+    return {'ok':True,'service':APP_NAME,'live_ai_configured':live,'review_mode':'live-ai' if live else 'fallback-screen'}
 
 @app.get('/',response_class=HTMLResponse)
 def home():
@@ -167,7 +200,7 @@ async def review(pid:int):
     rows=await run_reviews(p['extracted_text'] or f"TITLE: {p['title']}\nABSTRACT: {p['abstract']}")
     with con() as c:
         c.execute('DELETE FROM reviews WHERE preprint_id=?',(pid,))
-        for r in rows:c.execute('INSERT INTO reviews(preprint_id,reviewer_key,reviewer_name,verdict,severity,summary,findings) VALUES(?,?,?,?,?,?,?)',(pid,r['reviewer_key'],r['reviewer_name'],r['verdict'],r['severity'],r['summary'],json.dumps(r['findings'])))
+        for r in rows:c.execute('INSERT INTO reviews(preprint_id,reviewer_key,reviewer_name,verdict,severity,summary,findings,review_mode,confidence,report_json) VALUES(?,?,?,?,?,?,?,?,?,?)',(pid,r['reviewer_key'],r['reviewer_name'],r['verdict'],r['severity'],r['summary'],json.dumps(r['findings']),r.get('review_mode','fallback-screen'),float(r.get('confidence',0)),json.dumps(r.get('report_json',{}))))
     return RedirectResponse(f'/dashboard/{pid}',303)
 
 @app.get('/p/{slug}',response_class=HTMLResponse)
@@ -175,7 +208,9 @@ def public(slug:str):
     with con() as c:
         p=c.execute('SELECT * FROM preprints WHERE slug=?',(slug,)).fetchone(); rows=c.execute('SELECT * FROM reviews WHERE preprint_id=? ORDER BY id',(p['id'],)).fetchall() if p else []
     if not p: raise HTTPException(404)
-    body=f'''<article class="hero"><span class="ey">Automated-screening preprint</span><h1>{esc(p['title'])}</h1><p><b>{esc(p['authors'])}</b></p><p>{esc(p['abstract'])}</p><a class="btn" href="/p/{esc(slug)}/pdf">Open PDF</a><p class="meta">Posted {esc(p['created_at'])} · Preprint record, not journal acceptance.</p></article><h2>Transparent machine review</h2>{review_html(rows)}'''
+    all_live=bool(rows) and all(('review_mode' in r.keys() and r['review_mode']=='live-ai') for r in rows)
+    public_label='AI-reviewed preprint' if all_live else 'Automated-screening preprint'
+    body=f'''<article class="hero"><span class="ey">{public_label}</span><h1>{esc(p['title'])}</h1><p><b>{esc(p['authors'])}</b></p><p>{esc(p['abstract'])}</p><a class="btn" href="/p/{esc(slug)}/pdf">Open PDF</a><p class="meta">Posted {esc(p['created_at'])} · Preprint record, not journal acceptance.</p></article><h2>Transparent machine review</h2>{review_html(rows)}'''
     return page(p['title'],body)
 
 @app.get('/p/{slug}/pdf')
