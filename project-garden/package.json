@@ -1,7 +1,8 @@
 {
   "name": "project-garden",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
+  "engines": {"node": ">=20"},
   "scripts": {"start": "serve -s . -l $PORT"},
   "dependencies": {"serve": "14.2.4"}
 }
