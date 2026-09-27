@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { Pool } = require('pg');
 
 const app = express();
@@ -81,12 +82,33 @@ app.post('/api/sync', auth, async (req, res) => {
   }
 });
 
-app.use(express.static(__dirname, { index: 'index.html', maxAge: '5m' }));
-app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-
-initDb()
-  .then(() => app.listen(port, '0.0.0.0', () => console.log(`Project Garden listening on ${port}`)))
-  .catch(err => {
-    console.error('Database initialization failed', err);
-    process.exit(1);
+function sendIndex(_req, res) {
+  fs.readFile(path.join(__dirname, 'index.html'), 'utf8', (err, html) => {
+    if (err) return res.status(500).send('Project Garden unavailable');
+    if (!html.includes('src="sync.js"')) html = html.replace('</body>', '<script src="sync.js"></script></body>');
+    res.type('html').send(html);
   });
+}
+
+app.get(['/', '/index.html'], sendIndex);
+app.use(express.static(__dirname, { index: false, maxAge: '5m' }));
+app.get('*', sendIndex);
+
+async function start() {
+  let lastError;
+  for (let i = 0; i < 40; i++) {
+    try {
+      await initDb();
+      app.listen(port, '0.0.0.0', () => console.log(`Project Garden listening on ${port}`));
+      return;
+    } catch (e) {
+      lastError = e;
+      console.log(`Waiting for database (${i + 1}/40)…`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  console.error('Database initialization failed', lastError);
+  process.exit(1);
+}
+
+start();
