@@ -24,6 +24,33 @@ async function initDb() {
   `);
 }
 
+function assistantUpdates() {
+  const allowed = new Set(['category', 'name', 'status', 'priority', 'next', 'star', 'notes']);
+  const out = [];
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GARDEN_UPDATE_') || !value) continue;
+    try {
+      const p = JSON.parse(value);
+      if (!p || typeof p.id !== 'string' || !p.id) continue;
+      const modifiedAt = Number(p.modifiedAt) || 0;
+      const patch = {};
+      for (const [k, v] of Object.entries(p)) if (allowed.has(k)) patch[k] = v;
+      if (modifiedAt > 0 && Object.keys(patch).length) out.push({ id: p.id, modifiedAt, patch });
+    } catch (_) {}
+  }
+  return out;
+}
+
+async function applyAssistantUpdates() {
+  for (const u of assistantUpdates()) {
+    await pool.query(`
+      UPDATE project_garden_projects
+      SET payload = payload || $2::jsonb, modified_at = $3, updated_at = NOW()
+      WHERE id = $1 AND modified_at < $3
+    `, [u.id, JSON.stringify(u.patch), Math.trunc(u.modifiedAt)]);
+  }
+}
+
 function auth(req, res, next) {
   if (!token) return res.status(503).json({ error: 'sync_not_configured' });
   if (req.get('authorization') !== `Bearer ${token}`) return res.status(401).json({ error: 'unauthorized' });
@@ -41,6 +68,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/projects', auth, async (_req, res) => {
   try {
+    await applyAssistantUpdates();
     const result = await pool.query('SELECT id, payload, modified_at FROM project_garden_projects ORDER BY id');
     res.json({ projects: result.rows.map(r => ({ ...r.payload, id: r.id, modifiedAt: Number(r.modified_at) })) });
   } catch (e) {
@@ -71,6 +99,7 @@ app.post('/api/sync', auth, async (req, res) => {
       `, [p.id, JSON.stringify(payload), modifiedAt]);
     }
     await client.query('COMMIT');
+    await applyAssistantUpdates();
     const result = await pool.query('SELECT id, payload, modified_at FROM project_garden_projects ORDER BY id');
     res.json({ ok: true, projects: result.rows.map(r => ({ ...r.payload, id: r.id, modifiedAt: Number(r.modified_at) })) });
   } catch (e) {
@@ -99,6 +128,7 @@ async function start() {
   for (let i = 0; i < 40; i++) {
     try {
       await initDb();
+      await applyAssistantUpdates();
       app.listen(port, '0.0.0.0', () => console.log(`Project Garden listening on ${port}`));
       return;
     } catch (e) {
