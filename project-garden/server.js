@@ -1,0 +1,92 @@
+const express = require('express');
+const path = require('path');
+const { Pool } = require('pg');
+
+const app = express();
+const port = process.env.PORT || 8080;
+const token = process.env.SYNC_TOKEN || '';
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway.internal') ? false : { rejectUnauthorized: false }
+});
+
+app.use(express.json({ limit: '2mb' }));
+
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_garden_projects (
+      id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL,
+      modified_at BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+function auth(req, res, next) {
+  if (!token) return res.status(503).json({ error: 'sync_not_configured' });
+  if (req.get('authorization') !== `Bearer ${token}`) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, storage: 'postgres' });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: 'database_unavailable' });
+  }
+});
+
+app.get('/api/projects', auth, async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT id, payload, modified_at FROM project_garden_projects ORDER BY id');
+    res.json({ projects: result.rows.map(r => ({ ...r.payload, id: r.id, modifiedAt: Number(r.modified_at) })) });
+  } catch (e) {
+    console.error('GET /api/projects', e);
+    res.status(500).json({ error: 'read_failed' });
+  }
+});
+
+app.post('/api/sync', auth, async (req, res) => {
+  const projects = Array.isArray(req.body && req.body.projects) ? req.body.projects : null;
+  if (!projects || projects.length > 500) return res.status(400).json({ error: 'invalid_projects' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const p of projects) {
+      if (!p || typeof p.id !== 'string' || !p.id || p.id.length > 180) continue;
+      const modifiedAt = Number.isFinite(Number(p.modifiedAt)) ? Math.max(0, Math.trunc(Number(p.modifiedAt))) : 0;
+      const payload = { ...p };
+      delete payload.modifiedAt;
+      await client.query(`
+        INSERT INTO project_garden_projects (id, payload, modified_at, updated_at)
+        VALUES ($1, $2::jsonb, $3, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          payload = EXCLUDED.payload,
+          modified_at = EXCLUDED.modified_at,
+          updated_at = NOW()
+        WHERE EXCLUDED.modified_at >= project_garden_projects.modified_at
+      `, [p.id, JSON.stringify(payload), modifiedAt]);
+    }
+    await client.query('COMMIT');
+    const result = await pool.query('SELECT id, payload, modified_at FROM project_garden_projects ORDER BY id');
+    res.json({ ok: true, projects: result.rows.map(r => ({ ...r.payload, id: r.id, modifiedAt: Number(r.modified_at) })) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/sync', e);
+    res.status(500).json({ error: 'sync_failed' });
+  } finally {
+    client.release();
+  }
+});
+
+app.use(express.static(__dirname, { index: 'index.html', maxAge: '5m' }));
+app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
+initDb()
+  .then(() => app.listen(port, '0.0.0.0', () => console.log(`Project Garden listening on ${port}`)))
+  .catch(err => {
+    console.error('Database initialization failed', err);
+    process.exit(1);
+  });
