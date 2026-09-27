@@ -46,15 +46,58 @@ def pdf_text(path):
     return '\n'.join(out)
 
 def heuristic(key,name,text):
-    low=text.lower(); f=[]
-    if len(text)<5000:f.append('Extracted manuscript text is short; verify that methods, assumptions and derivations are complete.')
-    if 'uncert' not in low and key in {'stats','physics','methods'}:f.append('No obvious uncertainty discussion detected; add explicit uncertainty sources and propagation where applicable.')
-    if key=='repro' and 'code' not in low:f.append('No obvious code-availability statement detected; provide code or a precise computational recipe.')
-    if key=='repro' and 'data' not in low:f.append('No obvious data-availability statement detected; identify the data needed for independent reproduction.')
-    if key=='adversary':f.append('State a test that could falsify the central claim and the expected result under the leading alternative.')
-    if key=='math':f.append('Demo mode does not independently recompute equations; configure a live model/tool-backed reviewer for numerical verification.')
-    if not f:f=['No high-confidence structural issue detected by demo screening; this is not substantive scientific validation.']
-    return {'reviewer_key':key,'reviewer_name':name,'verdict':'Revise / verify','severity':'needs-attention' if len(f)>=2 else 'advisory','summary':'Demo-mode screening completed. Configure a live model for manuscript-specific scientific analysis.','findings':f}
+    low=text.lower()
+    words=len(re.findall(r"\b\w+\b", text))
+    def n(*terms): return sum(low.count(t) for t in terms)
+    signals={
+        'uncertainty':n('uncert','error bar','standard deviation','confidence interval','systematic error','statistical error'),
+        'calibration':n('calibrat','control experiment','control sample','benchmark','reference measurement'),
+        'methods':n('methods','experimental setup','apparatus','procedure','protocol','sample preparation'),
+        'equations':len(re.findall(r'\([0-9]{1,3}\)', text)),
+        'units':len(re.findall(r'\b(?:hz|khz|mhz|ghz|ev|mev|kev|gev|nm|um|µm|ms|ns|tesla|gauss|kelvin|\bk\b)\b', low)),
+        'data':n('data availability','data are available','dataset','repository','zenodo','figshare'),
+        'code':n('code availability','source code','github','gitlab','software repository'),
+        'supplement':n('supplementary','supplemental','appendix'),
+        'claims':n('we show','we demonstrate','we find','we report','we observe','we conclude'),
+    }
+    findings=[]
+    if key=='physics':
+        findings.append(f"Screened about {words:,} extracted words; detected {signals['claims']} explicit result/claim phrases and {signals['units']} unit-bearing tokens.")
+        findings.append(f"Found {signals['calibration']} calibration/control/benchmark markers and {signals['uncertainty']} uncertainty/error markers.")
+        verdict='No obvious structural physics red flag' if words>3000 and signals['claims'] else 'Physics structure needs inspection'
+        severity='info' if words>3000 and signals['claims'] else 'advisory'
+    elif key=='methods':
+        findings.append(f"Detected {signals['methods']} methods/apparatus/procedure markers and {signals['calibration']} calibration/control/benchmark markers.")
+        if signals['methods']==0: findings.append('No strong methods-section markers were detected in extracted text; confirm that the experimental/computational procedure is explicit.')
+        verdict='Methods signals detected' if signals['methods'] else 'Methods detail not clearly detected'
+        severity='info' if signals['methods'] else 'needs-attention'
+    elif key=='math':
+        findings.append(f"Detected approximately {signals['equations']} equation-number-like labels and {signals['units']} physical-unit tokens in the extracted PDF text.")
+        findings.append('This fallback screen does not yet symbolically re-derive equations or recompute numerical results.')
+        verdict='Equation audit pending' if signals['equations'] else 'Few equation markers detected'
+        severity='advisory'
+    elif key=='stats':
+        findings.append(f"Detected {signals['uncertainty']} uncertainty/error/statistical markers in the manuscript text.")
+        if signals['uncertainty']==0: findings.append('No explicit uncertainty language was detected; check whether uncertainties and systematics are quantified where required.')
+        verdict='Uncertainty treatment detected' if signals['uncertainty'] else 'Uncertainty treatment not detected'
+        severity='info' if signals['uncertainty'] else 'needs-attention'
+    elif key=='repro':
+        findings.append(f"Detected data-sharing markers: {signals['data']}; code-sharing markers: {signals['code']}; supplementary/appendix markers: {signals['supplement']}.")
+        missing=[]
+        if not signals['data']: missing.append('data availability')
+        if not signals['code']: missing.append('code/software availability')
+        if missing: findings.append('Not clearly detected: '+', '.join(missing)+'. This may be appropriate for some experiments, but should be stated explicitly when relevant.')
+        if signals['data'] and signals['code']: verdict='Reproducibility resources detected'; severity='info'
+        elif signals['data'] or signals['code'] or signals['supplement']: verdict='Partial reproducibility information detected'; severity='advisory'
+        else: verdict='Reproducibility statement not detected'; severity='needs-attention'
+    else:
+        findings.append(f"Detected {signals['claims']} explicit claim phrases. An adversarial review should target the central claim with a competing explanation or null test.")
+        if signals['calibration']==0: findings.append('No calibration/control/benchmark marker was detected by the fallback screen; a targeted control test is a priority check.')
+        else: findings.append(f"Detected {signals['calibration']} calibration/control/benchmark markers that can be examined as possible falsification tests.")
+        verdict='Adversarial test identified' if signals['claims'] else 'Central claim needs explicit falsification test'
+        severity='advisory'
+    summary='Structured manuscript screening completed. This is a deterministic fallback analysis; manuscript-specific LLM review is not connected yet.'
+    return {'reviewer_key':key,'reviewer_name':name,'verdict':verdict,'severity':severity,'summary':summary,'findings':findings}
 
 async def one_review(key,name,remit,text):
     url=os.getenv('LLM_API_URL','').strip(); token=os.getenv('LLM_API_KEY','').strip(); model=os.getenv('LLM_MODEL','').strip()
@@ -63,7 +106,7 @@ async def one_review(key,name,remit,text):
     async with httpx.AsyncClient(timeout=120) as client:
         r=await client.post(url,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'},json={'model':model,'messages':[{'role':'system','content':'Rigorous scientific reviewer. Output strict JSON.'},{'role':'user','content':prompt}],'temperature':0.2}); r.raise_for_status()
     raw=r.json()['choices'][0]['message']['content'].strip(); raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I|re.S); d=json.loads(raw)
-    return {'reviewer_key':key,'reviewer_name':name,'verdict':str(d.get('verdict','Revise / verify'))[:120],'severity':str(d.get('severity','advisory'))[:40],'summary':str(d.get('summary',''))[:2000],'findings':[str(x)[:1500] for x in d.get('findings',[])][:8]}
+    return {'reviewer_key':key,'reviewer_name':name,'verdict':str(d.get('verdict','Scientific assessment returned'))[:120],'severity':str(d.get('severity','advisory'))[:40],'summary':str(d.get('summary',''))[:2000],'findings':[str(x)[:1500] for x in d.get('findings',[])][:8]}
 
 async def run_reviews(text):
     out=[]
@@ -94,7 +137,7 @@ def home():
 
 @app.get('/upload',response_class=HTMLResponse)
 def upload_page():
-    body='''<section class="hero"><span class="ey">Free preprint posting</span><h1>Upload manuscript</h1><p>This first public deployment uses local instance storage. Do not upload confidential work yet.</p><form class="form" method="post" enctype="multipart/form-data"><label>Title<input name="title" required></label><label>Authors<input name="authors" required></label><label>Abstract<textarea name="abstract" rows="7" required></textarea></label><label>Contact email<input name="email" type="email" required></label><label>PDF<input name="manuscript" type="file" accept="application/pdf,.pdf" required></label><button class="btn">Create preprint record</button></form></section>'''
+    body='''<section class="hero"><span class="ey">Free preprint posting</span><h1>Upload manuscript</h1><p>Uploaded PDFs and metadata are stored on persistent server storage. Do not upload confidential or embargoed work.</p><form class="form" method="post" enctype="multipart/form-data"><label>Title<input name="title" required></label><label>Authors<input name="authors" required></label><label>Abstract<textarea name="abstract" rows="7" required></textarea></label><label>Contact email<input name="email" type="email" required></label><label>PDF<input name="manuscript" type="file" accept="application/pdf,.pdf" required></label><button class="btn">Create preprint record</button></form></section>'''
     return page('Upload',body)
 
 @app.post('/upload')
@@ -132,7 +175,7 @@ def public(slug:str):
     with con() as c:
         p=c.execute('SELECT * FROM preprints WHERE slug=?',(slug,)).fetchone(); rows=c.execute('SELECT * FROM reviews WHERE preprint_id=? ORDER BY id',(p['id'],)).fetchall() if p else []
     if not p: raise HTTPException(404)
-    body=f'''<article class="hero"><span class="ey">Machine-reviewed preprint</span><h1>{esc(p['title'])}</h1><p><b>{esc(p['authors'])}</b></p><p>{esc(p['abstract'])}</p><a class="btn" href="/p/{esc(slug)}/pdf">Open PDF</a><p class="meta">Posted {esc(p['created_at'])} · Preprint record, not journal acceptance.</p></article><h2>Transparent machine review</h2>{review_html(rows)}'''
+    body=f'''<article class="hero"><span class="ey">Automated-screening preprint</span><h1>{esc(p['title'])}</h1><p><b>{esc(p['authors'])}</b></p><p>{esc(p['abstract'])}</p><a class="btn" href="/p/{esc(slug)}/pdf">Open PDF</a><p class="meta">Posted {esc(p['created_at'])} · Preprint record, not journal acceptance.</p></article><h2>Transparent machine review</h2>{review_html(rows)}'''
     return page(p['title'],body)
 
 @app.get('/p/{slug}/pdf')
